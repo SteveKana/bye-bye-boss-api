@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+from sqlmodel import Field
+
+from app.core.models import BaseModel
+
+# For soft-delete support: `from app.core.models import BaseModel, SoftDeleteMixin`
+# and inherit `({{CLASS}})(BaseModel, SoftDeleteMixin, table=True)`.
+
+
+class {{CLASS}}(BaseModel, table=True):
+    __tablename__ = "{{PLURAL}}"
+
+    name: str = Field(nullable=False)
+    description: str | None = Field(default=None)

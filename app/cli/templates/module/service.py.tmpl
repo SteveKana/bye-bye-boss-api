@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.pagination import Page, PageParams
+from app.modules.{{PLURAL}}.models import {{CLASS}}
+from app.modules.{{PLURAL}}.repository import {{CLASS}}Repository
+from app.modules.{{PLURAL}}.schemas import {{CLASS}}Create, {{CLASS}}Update
+
+
+class {{CLASS}}Service:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.repo = {{CLASS}}Repository(session)
+
+    async def create(self, data: {{CLASS}}Create) -> {{CLASS}}:
+        obj = await self.repo.create({{CLASS}}(**data.model_dump()))
+        await self.session.commit()
+        return obj
+
+    async def get(self, id: uuid.UUID) -> {{CLASS}}:
+        return await self.repo.get_or_404(id)
+
+    async def list(self, params: PageParams) -> Page[{{CLASS}}]:
+        return await self.repo.paginate(params, order_by={{CLASS}}.created_at.desc())
+
+    async def update(self, id: uuid.UUID, data: {{CLASS}}Update) -> {{CLASS}}:
+        obj = await self.get(id)
+        obj = await self.repo.update(obj, data.model_dump(exclude_unset=True))
+        await self.session.commit()
+        return obj
+
+    async def delete(self, id: uuid.UUID) -> None:
+        obj = await self.get(id)
+        await self.repo.delete(obj)
+        await self.session.commit()

@@ -1,0 +1,73 @@
+[project]
+name = "matchcareer-backend"
+version = "0.1.0"
+description = "MatchCareer backend — async FastAPI modular monolith (job matching)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlmodel>=0.0.22",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29",
+    "aiosqlite>=0.20",
+    "alembic>=1.13",
+    "pydantic[email]>=2.7",
+    "pydantic-settings>=2.3",
+    "pyjwt>=2.9",
+    "bcrypt>=4.2",
+    "httpx>=0.27",
+    "structlog>=24.4",
+    "redis>=5.0",
+    "apscheduler>=3.10",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "faker>=28.0",
+]
+
+[project.scripts]
+app = "app.cli.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = ["migrations/versions", "app/cli/templates"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "B008",   # FastAPI Depends() in defaults is idiomatic
+    "UP046",  # keep classic Generic[T] base for SQLModel/pydantic generic clarity
+    "UP047",
+]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+exclude = ["migrations/", "app/cli/templates/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/cli/templates/*", "migrations/*"]

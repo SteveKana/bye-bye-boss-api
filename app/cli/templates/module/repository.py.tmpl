@@ -1,0 +1,8 @@
+from __future__ import annotations
+
+from app.core.repository import BaseRepository
+from app.modules.{{PLURAL}}.models import {{CLASS}}
+
+
+class {{CLASS}}Repository(BaseRepository[{{CLASS}}]):
+    model = {{CLASS}}
