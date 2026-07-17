@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 65be8662e3fe
+Revision ID: d55d7f12fae8
 Revises:
-Create Date: 2026-07-01 09:57:12.430047
+Create Date: 2026-07-17 11:19:24.118695
 """
 
 from __future__ import annotations
@@ -13,9 +13,8 @@ import sqlalchemy as sa
 import sqlmodel
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
-revision: str = "65be8662e3fe"
+revision: str = "d55d7f12fae8"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -32,7 +31,9 @@ def upgrade() -> None:
         sa.Column("password_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("full_name", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("is_admin", sa.Boolean(), nullable=False),
+        sa.Column("isadmin", sa.Boolean(), nullable=False),
+        sa.Column("subscription", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("last_rescoring_time", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("users", schema=None) as batch_op:

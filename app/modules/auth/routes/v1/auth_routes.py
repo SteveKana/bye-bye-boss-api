@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
+from app.core.config import get_settings
 from app.core.dependencies import DBSession
 from app.core.ratelimit import RateLimiter
 from app.modules.auth.dependencies import CurrentUser
 from app.modules.auth.schemas import (
     LoginRequest,
+    MessageResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
     RefreshRequest,
     TokenPair,
     UserCreate,
@@ -20,6 +25,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 login_limit = RateLimiter(times=10, seconds=60, scope="auth:login")
 register_limit = RateLimiter(times=5, seconds=60, scope="auth:register")
 refresh_limit = RateLimiter(times=20, seconds=60, scope="auth:refresh")
+reset_limit = RateLimiter(times=5, seconds=60, scope="auth:reset")
 
 
 @router.post(
@@ -43,6 +49,35 @@ async def login(data: LoginRequest, session: DBSession) -> TokenPair:
 )
 async def refresh(data: RefreshRequest, session: DBSession) -> TokenPair:
     return await AuthService(session).refresh(data.refresh_token)
+
+
+@router.post(
+    "/reset-password/request",
+    response_model=PasswordResetRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(reset_limit)],
+)
+async def request_password_reset(
+    data: PasswordResetRequest, session: DBSession
+) -> PasswordResetRequestResponse:
+    # Always return 202 with the same body so callers can't enumerate accounts.
+    token = await AuthService(session).request_password_reset(data.email)
+    detail = "If the account exists, a reset link has been sent."
+    if get_settings().DEBUG:
+        return PasswordResetRequestResponse(detail=detail, reset_token=token)
+    return PasswordResetRequestResponse(detail=detail)
+
+
+@router.post(
+    "/reset-password/confirm",
+    response_model=MessageResponse,
+    dependencies=[Depends(reset_limit)],
+)
+async def confirm_password_reset(
+    data: PasswordResetConfirm, session: DBSession
+) -> MessageResponse:
+    await AuthService(session).confirm_password_reset(data.token, data.new_password)
+    return MessageResponse(detail="Password updated.")
 
 
 @router.get("/me", response_model=UserRead)

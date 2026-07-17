@@ -19,7 +19,7 @@ from app.core.exceptions import UnauthorizedError
 
 settings = get_settings()
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "reset"]
 
 
 # ---- Passwords -----------------------------------------------------------
@@ -67,6 +67,11 @@ def create_access_token(subject: str, claims: dict[str, Any] | None = None) -> s
 
 def create_refresh_token(subject: str) -> str:
     return _create_token(subject, "refresh", settings.REFRESH_TOKEN_TTL_MINUTES)
+
+
+def create_reset_token(subject: str) -> str:
+    # Short-lived, identity-free (like refresh): the subject is enough to reset.
+    return _create_token(subject, "reset", settings.RESET_TOKEN_TTL_MINUTES)
 
 
 def decode_token(

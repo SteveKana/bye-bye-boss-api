@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str | None = None
     ACCESS_TOKEN_TTL_MINUTES: int = 30
     REFRESH_TOKEN_TTL_MINUTES: int = 60 * 24 * 7  # 7 days
+    RESET_TOKEN_TTL_MINUTES: int = 30
     BCRYPT_ROUNDS: int = 12
 
     # Bootstrap admin, seeded at startup if both are set and absent in DB.

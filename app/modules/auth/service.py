@@ -10,6 +10,7 @@ from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    create_reset_token,
     decode_token,
     hash_password,
     verify_password,
@@ -30,7 +31,7 @@ class AuthService:
         self.session = session
         self.users = UserRepository(session)
 
-    async def register(self, data: UserCreate, *, is_admin: bool = False) -> User:
+    async def register(self, data: UserCreate, *, isadmin: bool = False) -> User:
         if await self.users.get_by_email(data.email):
             raise ConflictError("A user with this email already exists.")
         user = await self.users.create(
@@ -38,7 +39,7 @@ class AuthService:
                 email=data.email,
                 password_hash=hash_password(data.password),
                 full_name=data.full_name,
-                is_admin=is_admin,
+                isadmin=isadmin,
             )
         )
         await self.session.commit()
@@ -59,8 +60,7 @@ class AuthService:
     def issue_tokens(self, user: User) -> TokenPair:
         claims = {
             "email": user.email,
-            "is_admin": user.is_admin,
-            "role": "admin" if user.is_admin else "user",
+            "isadmin": user.isadmin,
         }
         return TokenPair(
             access_token=create_access_token(str(user.id), claims),
@@ -77,3 +77,26 @@ class AuthService:
         if not user or not user.is_active:
             raise UnauthorizedError("Invalid refresh token.")
         return self.issue_tokens(user)
+
+    async def request_password_reset(self, email: str) -> str | None:
+        """Return a short-lived reset token, or None if no eligible account.
+
+        The caller must not leak which case happened (no user enumeration).
+        Delivery (email) is out of scope; the token is surfaced by the route
+        only in debug and always logged.
+        """
+        user = await self.users.get_by_email(email)
+        if not user or not user.is_active:
+            return None
+        logger.info("password_reset_requested", user_id=str(user.id), email=user.email)
+        return create_reset_token(str(user.id))
+
+    async def confirm_password_reset(self, token: str, new_password: str) -> None:
+        payload = decode_token(token, expected_type="reset")
+        user = await self.users.get(uuid.UUID(payload["sub"]))
+        if not user or not user.is_active:
+            raise UnauthorizedError("Invalid reset token.")
+        user.password_hash = hash_password(new_password)
+        self.session.add(user)
+        await self.session.commit()
+        logger.info("password_reset_confirmed", user_id=str(user.id))

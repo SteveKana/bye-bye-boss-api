@@ -30,7 +30,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 async def get_current_admin(user: CurrentUser) -> User:
-    if not user.is_admin:
+    if not user.isadmin:
         raise ForbiddenError("Admin privileges required.")
     return user
 

@@ -25,6 +25,6 @@ async def seed_admin() -> None:
                 password=settings.ADMIN_PASSWORD,
                 full_name="Administrator",
             ),
-            is_admin=True,
+            isadmin=True,
         )
         logger.info("admin_seeded", email=settings.ADMIN_EMAIL)

@@ -10,8 +10,11 @@ async def test_register_and_login_and_me(client: AsyncClient) -> None:
     payload = {"email": "a@b.com", "password": "supersecret", "full_name": "A"}
     r = await client.post(REGISTER, json=payload)
     assert r.status_code == 201
-    assert r.json()["email"] == "a@b.com"
-    assert r.json()["is_admin"] is False
+    body = r.json()
+    assert body["email"] == "a@b.com"
+    assert body["isadmin"] is False
+    assert body["subscription"] == "standard"
+    assert body["last_rescoring_time"] is None
 
     r = await client.post(LOGIN, json={"email": "a@b.com", "password": "supersecret"})
     assert r.status_code == 200
@@ -62,4 +65,48 @@ async def test_refresh_token_rejected_as_access(client: AsyncClient) -> None:
 
 async def test_me_requires_auth(client: AsyncClient) -> None:
     r = await client.get("/api/v1/auth/me")
+    assert r.status_code == 401
+
+
+RESET_REQUEST = "/api/v1/auth/reset-password/request"
+RESET_CONFIRM = "/api/v1/auth/reset-password/confirm"
+
+
+async def test_password_reset_flow(client: AsyncClient) -> None:
+    await client.post(REGISTER, json={"email": "r@b.com", "password": "supersecret"})
+
+    r = await client.post(RESET_REQUEST, json={"email": "r@b.com"})
+    assert r.status_code == 202
+    token = r.json()["reset_token"]  # surfaced in debug (test env)
+    assert token
+
+    r = await client.post(
+        RESET_CONFIRM, json={"token": token, "new_password": "brandnewpass"}
+    )
+    assert r.status_code == 200
+
+    # Old password no longer works, new one does.
+    assert (
+        await client.post(LOGIN, json={"email": "r@b.com", "password": "supersecret"})
+    ).status_code == 401
+    assert (
+        await client.post(LOGIN, json={"email": "r@b.com", "password": "brandnewpass"})
+    ).status_code == 200
+
+
+async def test_password_reset_unknown_email_no_enumeration(client: AsyncClient) -> None:
+    r = await client.post(RESET_REQUEST, json={"email": "ghost@b.com"})
+    assert r.status_code == 202
+    assert r.json()["reset_token"] is None
+
+
+async def test_reset_token_rejected_as_access(client: AsyncClient) -> None:
+    await client.post(REGISTER, json={"email": "rt@b.com", "password": "supersecret"})
+    token = (
+        await client.post(RESET_REQUEST, json={"email": "rt@b.com"})
+    ).json()["reset_token"]
+    # A reset token must not authenticate normal endpoints.
+    r = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
     assert r.status_code == 401
