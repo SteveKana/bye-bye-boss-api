@@ -96,7 +96,7 @@ def _assert_acyclic(modules: list[Module]) -> None:
         path.append(node)
         for dep in graph.get(node, []):
             if color[dep] == GRAY:
-                cycle = " -> ".join(path[path.index(dep):] + [dep])
+                cycle = " -> ".join(path[path.index(dep) :] + [dep])
                 raise ModuleError(f"Circular module dependency detected: {cycle}")
             if color[dep] == WHITE:
                 visit(dep)

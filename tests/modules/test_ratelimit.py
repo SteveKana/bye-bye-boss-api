@@ -46,9 +46,7 @@ async def test_rate_limit_headers_present(
         "/api/v1/auth/register",
         json={"email": "h@h.com", "password": "supersecret"},
     )
-    r = await client.post(
-        LOGIN, json={"email": "h@h.com", "password": "supersecret"}
-    )
+    r = await client.post(LOGIN, json={"email": "h@h.com", "password": "supersecret"})
     assert r.status_code == 200
     assert r.headers["X-RateLimit-Limit"] == "10"
     assert r.headers["X-RateLimit-Remaining"] == "9"
