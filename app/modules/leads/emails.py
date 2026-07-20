@@ -1,36 +1,18 @@
-"""Acknowledgement mail sent when someone joins the waitlist."""
+"""Acknowledgement mail sent when someone joins the waitlist.
+
+The wording lives in `templates/mail/waitlist_ack/<locale>/` — edit those files
+to change the copy, no Python change needed.
+"""
 
 from __future__ import annotations
 
-BRAND = "Bye Bye Boss"
+from pathlib import Path
 
-_ACK = {
-    "fr": {
-        "subject": f"Bienvenue sur la liste d'attente {BRAND}",
-        "text": (
-            "Bonjour,\n\n"
-            f"Votre inscription à la liste d'attente {BRAND} est bien enregistrée.\n"
-            "Vous serez prévenu dès l'ouverture, et vous bénéficiez d'un accès "
-            "prioritaire au lancement.\n\n"
-            "Nous ne vous enverrons rien d'autre d'ici là.\n\n"
-            f"À très vite,\nL'équipe {BRAND}"
-        ),
-    },
-    "en": {
-        "subject": f"Welcome to the {BRAND} waitlist",
-        "text": (
-            "Hi,\n\n"
-            f"Your spot on the {BRAND} waitlist is confirmed.\n"
-            "We'll let you know as soon as we open, and you get priority access "
-            "at launch.\n\n"
-            "We won't send you anything else until then.\n\n"
-            f"See you soon,\nThe {BRAND} team"
-        ),
-    },
-}
+from app.modules.mailer import RenderedMail, render_mail
+
+TEMPLATES = Path(__file__).parent / "templates"
+TEMPLATE_NAME = "waitlist_ack"
 
 
-def build_ack_email(locale: str) -> tuple[str, str]:
-    """Return (subject, text) for the given locale, falling back to French."""
-    content = _ACK.get(locale, _ACK["fr"])
-    return content["subject"], content["text"]
+def build_ack_email(locale: str) -> RenderedMail:
+    return render_mail(TEMPLATES, TEMPLATE_NAME, locale)

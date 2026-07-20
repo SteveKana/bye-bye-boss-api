@@ -1,0 +1,10 @@
+Bonjour,
+
+Votre inscription à la liste d'attente {{ brand }} est bien enregistrée.
+Vous serez prévenu dès l'ouverture, et vous bénéficiez d'un accès prioritaire
+au lancement.
+
+Nous ne vous enverrons rien d'autre d'ici là.
+
+À très vite,
+L'équipe {{ brand }}

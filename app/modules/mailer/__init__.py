@@ -14,6 +14,7 @@ from app.modules.mailer import jobs as jobs  # noqa: F401
 from app.modules.mailer import models as models  # noqa: F401
 from app.modules.mailer.gateway import MailerGateway
 from app.modules.mailer.models import EmailStatus
+from app.modules.mailer.templating import RenderedMail, render_mail
 
 module = Module(
     name="mailer",
@@ -25,4 +26,6 @@ __all__ = [
     "module",
     "MailerGateway",
     "EmailStatus",
+    "RenderedMail",
+    "render_mail",
 ]

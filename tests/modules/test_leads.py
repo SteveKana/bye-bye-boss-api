@@ -30,6 +30,11 @@ async def test_capture_stores_lead_and_queues_ack(client: AsyncClient) -> None:
     assert queued[0].to_email == "lead@example.com"
     assert queued[0].status == EmailStatus.pending.value
     assert "liste d'attente" in queued[0].subject
+    # Rendered from templates: both parts, brand interpolated, layout applied.
+    assert "Bye Bye Boss" in queued[0].body_text
+    assert queued[0].body_html is not None
+    assert "<html" in queued[0].body_html
+    assert "accès prioritaire" in queued[0].body_html
 
 
 async def test_capture_is_idempotent(client: AsyncClient) -> None:
@@ -46,6 +51,14 @@ async def test_locale_drives_the_acknowledgement(client: AsyncClient) -> None:
     await client.post(LEADS, json={"email": "en@example.com", "locale": "en"})
     queued = await _rows(EmailMessage)
     assert "waitlist" in queued[0].subject.lower()
+    assert "priority access" in (queued[0].body_html or "")
+
+
+async def test_unknown_locale_falls_back_to_default() -> None:
+    from app.modules.leads.emails import build_ack_email
+
+    fallback = build_ack_email("de")
+    assert fallback.subject == build_ack_email("fr").subject
 
 
 async def test_invalid_email_is_rejected(client: AsyncClient) -> None:

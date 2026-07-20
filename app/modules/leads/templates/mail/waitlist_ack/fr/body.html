@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">
+  Bonjour,
+</p>
+
+<p style="margin:0 0 16px">
+  Votre inscription à la liste d'attente <strong>{{ brand }}</strong> est bien
+  enregistrée.
+</p>
+
+<p style="margin:0 0 20px">
+  Vous serez prévenu dès l'ouverture, et vous bénéficiez d'un
+  <strong style="color:#5B3FE8">accès prioritaire au lancement</strong>.
+</p>
+
+<p style="margin:0 0 20px;padding:12px 16px;background:#EEE9FF;border-radius:10px;font-size:14px;color:#5B3FE8">
+  Nous ne vous enverrons rien d'autre d'ici là.
+</p>
+
+<p style="margin:0">
+  À très vite,<br />
+  L'équipe {{ brand }}
+</p>
+{% endblock %}

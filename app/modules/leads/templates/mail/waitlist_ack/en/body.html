@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">
+  Hi,
+</p>
+
+<p style="margin:0 0 16px">
+  Your spot on the <strong>{{ brand }}</strong> waitlist is confirmed.
+</p>
+
+<p style="margin:0 0 20px">
+  We'll let you know as soon as we open, and you get
+  <strong style="color:#5B3FE8">priority access at launch</strong>.
+</p>
+
+<p style="margin:0 0 20px;padding:12px 16px;background:#EEE9FF;border-radius:10px;font-size:14px;color:#5B3FE8">
+  We won't send you anything else until then.
+</p>
+
+<p style="margin:0">
+  See you soon,<br />
+  The {{ brand }} team
+</p>
+{% endblock %}

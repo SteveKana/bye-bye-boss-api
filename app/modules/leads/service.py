@@ -39,9 +39,9 @@ class LeadService:
             Lead(email=email, locale=data.locale, source=data.source)
         )
 
-        subject, text = build_ack_email(data.locale)
+        ack = build_ack_email(data.locale)
         await MailerGateway(self.session).enqueue(
-            to_email=email, subject=subject, text=text
+            to_email=email, subject=ack.subject, text=ack.text, html=ack.html
         )
 
         await self.session.commit()
