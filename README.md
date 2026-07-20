@@ -1,7 +1,6 @@
-# MatchCareer — Backend
+# Bye Bye Boss — Backend
 
-Async FastAPI modular monolith. Architecture and domain rules: [CLAUDE.md](CLAUDE.md).
-
+Async FastAPI modular monolith. Architecture and domain rules:
 ## Prérequis
 
 - Python >= 3.12

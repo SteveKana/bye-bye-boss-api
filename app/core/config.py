@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     # ---- App -------------------------------------------------------------
-    APP_NAME: str = "matchcareer"
+    APP_NAME: str = "byebyeboss"
     APP_ENV: Literal["local", "test", "staging", "production"] = "local"
     DEBUG: bool = True
     API_VERSION: str = "v1"
@@ -68,6 +68,22 @@ class Settings(BaseSettings):
 
     # ---- Scheduler -------------------------------------------------------
     SCHEDULER_ENABLED: bool = True
+
+    # ---- Mail ------------------------------------------------------------
+    # Outgoing mail is queued in the `mailer` module and flushed by a scheduled
+    # worker. Without SMTP_HOST the transport only logs the message (dev mode),
+    # so the whole flow stays testable before credentials exist.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_STARTTLS: bool = True
+    SMTP_TIMEOUT_SECONDS: int = 15
+    EMAIL_FROM: str = "contact@byebyeboss.fr"
+    EMAIL_FROM_NAME: str = "Bye Bye Boss"
+    MAIL_QUEUE_INTERVAL_MINUTES: int = 1
+    MAIL_QUEUE_BATCH_SIZE: int = 20
+    MAIL_MAX_ATTEMPTS: int = 5
 
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"

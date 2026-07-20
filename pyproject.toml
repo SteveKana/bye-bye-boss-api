@@ -1,7 +1,7 @@
 [project]
-name = "matchcareer-backend"
+name = "byebyeboss-backend"
 version = "0.1.0"
-description = "MatchCareer backend — async FastAPI modular monolith (job matching)."
+description = "Bye Bye Boss backend — async FastAPI modular monolith (job matching)."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -21,6 +21,7 @@ dependencies = [
     "redis>=5.0",
     "apscheduler>=3.10",
     "python-multipart>=0.0.9",
+    "aiosmtplib>=3.0",
 ]
 
 [project.optional-dependencies]
