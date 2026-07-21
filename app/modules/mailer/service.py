@@ -7,7 +7,7 @@ from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.modules.mailer.models import EmailMessage, EmailStatus
 from app.modules.mailer.repository import EmailRepository
-from app.modules.mailer.transport import send_email
+from app.modules.mailer.transports import send_email
 
 logger = get_logger("mailer")
 

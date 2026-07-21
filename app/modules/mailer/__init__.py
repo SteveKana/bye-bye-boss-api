@@ -14,11 +14,14 @@ from app.modules.mailer import jobs as jobs  # noqa: F401
 from app.modules.mailer import models as models  # noqa: F401
 from app.modules.mailer.gateway import MailerGateway
 from app.modules.mailer.models import EmailStatus
+from app.modules.mailer.startup import log_mail_setup
 from app.modules.mailer.templating import RenderedMail, render_mail
+from app.modules.mailer.transports import active_provider
 
 module = Module(
     name="mailer",
     order=20,
+    on_startup=log_mail_setup,
     tags=["mailer"],
 )
 
@@ -28,4 +31,5 @@ __all__ = [
     "EmailStatus",
     "RenderedMail",
     "render_mail",
+    "active_provider",
 ]

@@ -71,8 +71,27 @@ class Settings(BaseSettings):
 
     # ---- Mail ------------------------------------------------------------
     # Outgoing mail is queued in the `mailer` module and flushed by a scheduled
-    # worker. Without SMTP_HOST the transport only logs the message (dev mode),
-    # so the whole flow stays testable before credentials exist.
+    # worker. The transport is pluggable: when the selected provider is not
+    # configured the message is only logged (dev mode), so the whole flow stays
+    # testable before credentials exist.
+    MAIL_PROVIDER: Literal["smtp", "mailgun"] = "smtp"
+
+    # -- Mailgun (HTTP API)
+    MAILGUN_SECRET: str | None = None
+    MAILGUN_DOMAIN: str | None = None
+    # Host or full URL. EU accounts: api.eu.mailgun.net
+    MAILGUN_ENDPOINT: str = "api.mailgun.net"
+    MAILGUN_TIMEOUT_SECONDS: int = 15
+
+    @property
+    def mailgun_base_url(self) -> str:
+        """Accept a bare host (`api.eu.mailgun.net`) as well as a full URL."""
+        endpoint = self.MAILGUN_ENDPOINT.strip().rstrip("/")
+        if endpoint.startswith(("http://", "https://")):
+            return endpoint
+        return f"https://{endpoint}"
+
+    # -- SMTP
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USER: str | None = None
