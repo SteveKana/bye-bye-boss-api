@@ -16,6 +16,12 @@ os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["DATABASE_AUTO_CREATE"] = "false"
 # Off by default in tests; the rate-limit test opts back in explicitly.
 os.environ["RATE_LIMIT_ENABLED"] = "false"
+# Never let a developer's .env (MailHog, Mailgun keys...) reach the suite:
+# with no provider configured the transport only logs, so tests stay hermetic.
+os.environ["MAIL_PROVIDER"] = "smtp"
+os.environ["SMTP_HOST"] = ""
+os.environ["MAILGUN_SECRET"] = ""
+os.environ["MAILGUN_DOMAIN"] = ""
 os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-characters-long")
 os.environ.pop("ADMIN_EMAIL", None)
 os.environ.pop("ADMIN_PASSWORD", None)

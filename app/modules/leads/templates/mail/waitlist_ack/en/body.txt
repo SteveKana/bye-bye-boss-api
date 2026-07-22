@@ -1,0 +1,9 @@
+Hi,
+
+Your spot on the {{ brand }} waitlist is confirmed.
+We'll let you know as soon as we open, and you get priority access at launch.
+
+We won't send you anything else until then.
+
+See you soon,
+The {{ brand }} team

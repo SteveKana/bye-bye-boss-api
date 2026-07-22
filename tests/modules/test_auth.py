@@ -102,9 +102,9 @@ async def test_password_reset_unknown_email_no_enumeration(client: AsyncClient) 
 
 async def test_reset_token_rejected_as_access(client: AsyncClient) -> None:
     await client.post(REGISTER, json={"email": "rt@b.com", "password": "supersecret"})
-    token = (
-        await client.post(RESET_REQUEST, json={"email": "rt@b.com"})
-    ).json()["reset_token"]
+    token = (await client.post(RESET_REQUEST, json={"email": "rt@b.com"})).json()[
+        "reset_token"
+    ]
     # A reset token must not authenticate normal endpoints.
     r = await client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}

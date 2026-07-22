@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     # ---- App -------------------------------------------------------------
-    APP_NAME: str = "matchcareer"
+    APP_NAME: str = "byebyeboss"
     APP_ENV: Literal["local", "test", "staging", "production"] = "local"
     DEBUG: bool = True
     API_VERSION: str = "v1"
@@ -68,6 +68,41 @@ class Settings(BaseSettings):
 
     # ---- Scheduler -------------------------------------------------------
     SCHEDULER_ENABLED: bool = True
+
+    # ---- Mail ------------------------------------------------------------
+    # Outgoing mail is queued in the `mailer` module and flushed by a scheduled
+    # worker. The transport is pluggable: when the selected provider is not
+    # configured the message is only logged (dev mode), so the whole flow stays
+    # testable before credentials exist.
+    MAIL_PROVIDER: Literal["smtp", "mailgun"] = "smtp"
+
+    # -- Mailgun (HTTP API)
+    MAILGUN_SECRET: str | None = None
+    MAILGUN_DOMAIN: str | None = None
+    # Host or full URL. EU accounts: api.eu.mailgun.net
+    MAILGUN_ENDPOINT: str = "api.mailgun.net"
+    MAILGUN_TIMEOUT_SECONDS: int = 15
+
+    @property
+    def mailgun_base_url(self) -> str:
+        """Accept a bare host (`api.eu.mailgun.net`) as well as a full URL."""
+        endpoint = self.MAILGUN_ENDPOINT.strip().rstrip("/")
+        if endpoint.startswith(("http://", "https://")):
+            return endpoint
+        return f"https://{endpoint}"
+
+    # -- SMTP
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_STARTTLS: bool = True
+    SMTP_TIMEOUT_SECONDS: int = 15
+    EMAIL_FROM: str = "contact@byebyeboss.fr"
+    EMAIL_FROM_NAME: str = "Bye Bye Boss"
+    MAIL_QUEUE_INTERVAL_MINUTES: int = 1
+    MAIL_QUEUE_BATCH_SIZE: int = 20
+    MAIL_MAX_ATTEMPTS: int = 5
 
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
