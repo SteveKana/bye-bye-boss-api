@@ -1,0 +1,11 @@
+Hi,
+
+You asked to reset your {{ brand }} password.
+Open this link to choose a new one:
+
+{{ link }}
+
+This link expires in {{ expires }} minutes.
+If you didn't request this, just ignore this email: your password stays unchanged.
+
+The {{ brand }} team

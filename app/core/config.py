@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_VERSION: str = "v1"
     API_PREFIX: str = "/api"  # final prefix becomes /api/v1
+    # Public base URL of the frontend, used to build links in emails.
+    APP_URL: str = "http://localhost:3000"
 
     # ---- Database --------------------------------------------------------
     # postgresql+asyncpg://user:pass@host:5432/dbname   (prod/dev)
@@ -47,6 +49,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_TTL_MINUTES: int = 30
     REFRESH_TOKEN_TTL_MINUTES: int = 60 * 24 * 7  # 7 days
     RESET_TOKEN_TTL_MINUTES: int = 30
+    VERIFY_TOKEN_TTL_MINUTES: int = 60 * 24  # 1 day
     BCRYPT_ROUNDS: int = 12
 
     # Bootstrap admin, seeded at startup if both are set and absent in DB.

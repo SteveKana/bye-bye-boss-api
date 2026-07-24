@@ -28,10 +28,11 @@ os.environ.pop("ADMIN_PASSWORD", None)
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlmodel import SQLModel  # noqa: E402
+from sqlmodel import SQLModel, select  # noqa: E402
 
-from app.core.database import engine  # noqa: E402
+from app.core.database import AsyncSessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.modules.auth.models import User  # noqa: E402
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -50,10 +51,30 @@ async def client() -> AsyncClient:
 
 
 @pytest_asyncio.fixture
-async def auth_headers(client: AsyncClient) -> dict[str, str]:
-    """Register + login a user, returning ready-to-use Authorization headers."""
-    payload = {"email": "user@example.com", "password": "supersecret", "full_name": "U"}
+def verify_user():
+    """Mark an account as email-verified (email delivery is out of band in tests,
+    and login is blocked until verification)."""
+
+    async def _verify(email: str) -> None:
+        async with AsyncSessionLocal() as session:
+            user = (await session.exec(select(User).where(User.email == email))).first()
+            user.is_verified = True
+            session.add(user)
+            await session.commit()
+
+    return _verify
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client: AsyncClient, verify_user) -> dict[str, str]:
+    """Register + verify + login a user, returning ready-to-use headers."""
+    payload = {
+        "email": "user@example.com",
+        "password": "supersecret",
+        "first_name": "U",
+    }
     await client.post("/api/v1/auth/register", json=payload)
+    await verify_user(payload["email"])
     resp = await client.post(
         "/api/v1/auth/login",
         json={"email": payload["email"], "password": payload["password"]},

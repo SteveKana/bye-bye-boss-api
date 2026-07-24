@@ -1,0 +1,12 @@
+Bonjour,
+
+Vous avez demandé à réinitialiser votre mot de passe {{ brand }}.
+Ouvrez ce lien pour en choisir un nouveau :
+
+{{ link }}
+
+Ce lien expire dans {{ expires }} minutes.
+Si vous n'êtes pas à l'origine de cette demande, ignorez cet email : votre mot
+de passe reste inchangé.
+
+L'équipe {{ brand }}

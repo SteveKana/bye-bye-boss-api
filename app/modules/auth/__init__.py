@@ -31,6 +31,7 @@ module = Module(
     name="auth",
     router=_router,
     order=10,
+    depends_on=["mailer"],
     on_startup=seed_admin,
     tags=["auth"],
 )

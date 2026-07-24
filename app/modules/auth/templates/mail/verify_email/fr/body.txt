@@ -1,0 +1,11 @@
+Bonjour,
+
+Merci de vous être inscrit sur {{ brand }}.
+Pour activer votre compte, confirmez votre adresse email en ouvrant ce lien :
+
+{{ link }}
+
+Ce lien expire dans 24 heures.
+Si vous n'êtes pas à l'origine de cette inscription, ignorez cet email.
+
+L'équipe {{ brand }}
