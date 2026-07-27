@@ -39,13 +39,14 @@ async def test_login_is_rate_limited(client: AsyncClient, rate_limiting_on) -> N
 
 
 async def test_rate_limit_headers_present(
-    client: AsyncClient, rate_limiting_on
+    client: AsyncClient, rate_limiting_on, verify_user
 ) -> None:
     # Headers ride on successful responses (2xx); a fresh login scope -> 9 left.
     await client.post(
         "/api/v1/auth/register",
         json={"email": "h@h.com", "password": "supersecret"},
     )
+    await verify_user("h@h.com")
     r = await client.post(LOGIN, json={"email": "h@h.com", "password": "supersecret"})
     assert r.status_code == 200
     assert r.headers["X-RateLimit-Limit"] == "10"

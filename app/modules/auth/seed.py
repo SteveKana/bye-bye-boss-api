@@ -23,8 +23,9 @@ async def seed_admin() -> None:
             UserCreate(
                 email=settings.ADMIN_EMAIL,
                 password=settings.ADMIN_PASSWORD,
-                full_name="Administrator",
+                first_name="Admin",
             ),
             isadmin=True,
+            auto_verify=True,
         )
         logger.info("admin_seeded", email=settings.ADMIN_EMAIL)

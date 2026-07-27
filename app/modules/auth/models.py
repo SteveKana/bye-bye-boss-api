@@ -19,8 +19,10 @@ class User(BaseModel, table=True):
 
     email: str = Field(index=True, unique=True, nullable=False)
     password_hash: str = Field(nullable=False)
-    full_name: str | None = Field(default=None)
+    first_name: str | None = Field(default=None)
+    last_name: str | None = Field(default=None)
     is_active: bool = Field(default=True, nullable=False)
+    is_verified: bool = Field(default=False, nullable=False)
     isadmin: bool = Field(default=False, nullable=False)
 
     # Subscription plan — gates the manual-rescore frequency bypass (spec §6).

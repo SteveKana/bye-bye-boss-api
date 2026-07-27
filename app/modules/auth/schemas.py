@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import EmailStr, Field
 
@@ -11,18 +12,33 @@ from app.core.schemas import BaseSchema
 class UserCreate(BaseSchema):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    full_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    # Locale for the verification email.
+    locale: Literal["fr", "en"] = "fr"
 
 
 class UserRead(BaseSchema):
     id: uuid.UUID
     email: EmailStr
-    full_name: str | None
+    first_name: str | None
+    last_name: str | None
     is_active: bool
+    is_verified: bool
     isadmin: bool
     subscription: str
     last_rescoring_time: datetime | None
     created_at: datetime
+
+
+class UserUpdate(BaseSchema):
+    first_name: str | None = Field(default=None, max_length=80)
+    last_name: str | None = Field(default=None, max_length=80)
+
+
+class ChangePasswordRequest(BaseSchema):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class LoginRequest(BaseSchema):
@@ -36,11 +52,21 @@ class RefreshRequest(BaseSchema):
 
 class PasswordResetRequest(BaseSchema):
     email: EmailStr
+    locale: Literal["fr", "en"] = "fr"
 
 
 class PasswordResetConfirm(BaseSchema):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class EmailVerifyRequest(BaseSchema):
+    token: str
+
+
+class ResendVerificationRequest(BaseSchema):
+    email: EmailStr
+    locale: Literal["fr", "en"] = "fr"
 
 
 class MessageResponse(BaseSchema):
@@ -64,4 +90,5 @@ class PublicUser(BaseSchema):
 
     id: uuid.UUID
     email: EmailStr
-    full_name: str | None
+    first_name: str | None
+    last_name: str | None
