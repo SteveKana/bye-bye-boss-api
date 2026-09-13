@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
@@ -34,6 +35,7 @@ class CertificationItem(BaseSchema):
 class CandidateProfileRead(BaseSchema):
     id: uuid.UUID
     status: str
+    updated_at: datetime
     first_name: str | None
     last_name: str | None
     email: str | None
