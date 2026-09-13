@@ -109,11 +109,12 @@ class Settings(BaseSettings):
 
     # ---- AI (CV parsing) ---------------------------------------------------
     # Used by the `cv` module to structure raw CV text into a candidate
-    # profile. No key configured -> upload endpoint returns a clear error
-    # instead of silently failing, so local dev without a key stays honest.
-    ANTHROPIC_API_KEY: str | None = None
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-5-20250929"
-    ANTHROPIC_TIMEOUT_SECONDS: int = 60
+    # profile. Same provider as `matchcareer_engine` (the standalone matching
+    # engine) so the whole project runs on one LLM vendor. No key configured
+    # -> upload endpoint returns a clear error instead of silently failing.
+    OPENAI_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-5"
+    OPENAI_TIMEOUT_SECONDS: int = 60
     CV_MAX_UPLOAD_MB: int = 5
 
     # ---- Logging ---------------------------------------------------------
