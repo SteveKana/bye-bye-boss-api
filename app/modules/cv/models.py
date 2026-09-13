@@ -4,6 +4,7 @@ import enum
 import uuid
 
 from sqlalchemy import JSON, Column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field
 
 from app.core.models import BaseModel
@@ -12,6 +13,11 @@ from app.core.models import BaseModel
 class ProfileStatus(enum.StrEnum):
     draft = "draft"  # CV imported and parsed, not yet confirmed by the user
     complete = "complete"  # user validated info + preferences (onboarding done)
+
+
+# JSONB on Postgres (compact, indexable); plain JSON elsewhere (e.g. SQLite
+# in tests) since JSONB has no SQLite equivalent.
+_JsonListColumn = JSON().with_variant(JSONB(), "postgresql")
 
 
 class CandidateProfile(BaseModel, table=True):
@@ -41,18 +47,24 @@ class CandidateProfile(BaseModel, table=True):
     # -- Expérience
     total_experience: str | None = Field(default=None)
     # list[{title, company, period, description, tools: list[str]}]
-    experiences: list = Field(default_factory=list, sa_column=Column(JSON))
-    skills: list = Field(default_factory=list, sa_column=Column(JSON))
+    experiences: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
+    skills: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
     # list[{title, school_period}]
-    formations: list = Field(default_factory=list, sa_column=Column(JSON))
+    formations: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
     # list[{name, level}]
-    languages: list = Field(default_factory=list, sa_column=Column(JSON))
+    languages: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
     # list[{title, issuer_period}]
-    certifications: list = Field(default_factory=list, sa_column=Column(JSON))
+    certifications: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
 
     # -- Préférences (étape 3 de l'onboarding)
-    contract_types: list = Field(default_factory=list, sa_column=Column(JSON))
-    remote_preferences: list = Field(default_factory=list, sa_column=Column(JSON))
+    contract_types: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
+    remote_preferences: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
     mobility: str | None = Field(default=None)
     salary_target: int | None = Field(default=None)
 
