@@ -107,6 +107,15 @@ class Settings(BaseSettings):
     MAIL_QUEUE_BATCH_SIZE: int = 20
     MAIL_MAX_ATTEMPTS: int = 5
 
+    # ---- AI (CV parsing) ---------------------------------------------------
+    # Used by the `cv` module to structure raw CV text into a candidate
+    # profile. No key configured -> upload endpoint returns a clear error
+    # instead of silently failing, so local dev without a key stays honest.
+    ANTHROPIC_API_KEY: str | None = None
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-5-20250929"
+    ANTHROPIC_TIMEOUT_SECONDS: int = 60
+    CV_MAX_UPLOAD_MB: int = 5
+
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False  # True -> JSON logs (prod), False -> pretty console
