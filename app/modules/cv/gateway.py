@@ -34,7 +34,6 @@ Schéma exact à respecter :
   "last_name": "",
   "email": "",
   "location": "",
-  "availability": "",
   "total_experience": "",
   "experiences": [
     {{"title": "", "company": "", "period": "", "description": "", "tools": []}}
