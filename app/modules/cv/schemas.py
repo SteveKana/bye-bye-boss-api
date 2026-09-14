@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
 
 from app.core.schemas import BaseSchema
+
+AvailabilityStatusLiteral = Literal["immediate", "date", "notice", "unavailable"]
 
 
 class ExperienceItem(BaseSchema):
@@ -40,7 +42,9 @@ class CandidateProfileRead(BaseSchema):
     last_name: str | None
     email: str | None
     location: str | None
-    availability: str | None
+    availability_status: str
+    availability_date: date | None
+    notice_period_months: int | None
     total_experience: str | None
     experiences: list[ExperienceItem]
     skills: list[str]
@@ -63,7 +67,9 @@ class CandidateProfileUpdate(BaseSchema):
     last_name: str | None = None
     email: str | None = None
     location: str | None = None
-    availability: str | None = None
+    availability_status: AvailabilityStatusLiteral | None = None
+    availability_date: date | None = None
+    notice_period_months: int | None = Field(default=None, ge=0, le=24)
     total_experience: str | None = None
     experiences: list[ExperienceItem] | None = None
     skills: list[str] | None = None

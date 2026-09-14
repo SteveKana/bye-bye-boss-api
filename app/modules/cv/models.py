@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import date
 
 from sqlalchemy import JSON, Column
 from sqlalchemy.dialects.postgresql import JSONB
@@ -13,6 +14,13 @@ from app.core.models import BaseModel
 class ProfileStatus(enum.StrEnum):
     draft = "draft"  # CV imported and parsed, not yet confirmed by the user
     complete = "complete"  # user validated info + preferences (onboarding done)
+
+
+class AvailabilityStatus(enum.StrEnum):
+    immediate = "immediate"
+    date = "date"  # specific start date -- see availability_date
+    notice = "notice"  # currently employed, serving notice -- see notice_period_months
+    unavailable = "unavailable"
 
 
 # JSONB on Postgres (compact, indexable); plain JSON elsewhere (e.g. SQLite
@@ -42,7 +50,17 @@ class CandidateProfile(BaseModel, table=True):
     last_name: str | None = Field(default=None)
     email: str | None = Field(default=None)
     location: str | None = Field(default=None)
-    availability: str | None = Field(default=None)
+    # Availability is a live preference, not really a CV fact -- kept
+    # structured rather than free text, and only defaulted on first import
+    # (see service.import_cv), never overwritten by a CV re-import.
+    # availability_date only applies when status == "date"; notice_period_months
+    # only applies when status == "notice" -- the other is cleared whenever
+    # one is set (see service.apply_verification).
+    availability_status: str = Field(
+        default=AvailabilityStatus.immediate.value, nullable=False
+    )
+    availability_date: date | None = Field(default=None)
+    notice_period_months: int | None = Field(default=None)
 
     # -- Expérience
     total_experience: str | None = Field(default=None)

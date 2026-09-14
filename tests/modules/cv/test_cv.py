@@ -14,7 +14,6 @@ _EXTRACTED = {
     "last_name": "Martin",
     "email": "thomas.martin@email.com",
     "location": "Paris, France",
-    "availability": "Immédiate",
     "total_experience": "7 ans",
     "experiences": [
         {
@@ -142,3 +141,87 @@ async def test_preferences_requires_at_least_one_contract_type(
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+async def test_new_profile_defaults_to_available_immediately(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    body = r.json()
+    assert body["availability_status"] == "immediate"
+    assert body["availability_date"] is None
+    assert body["notice_period_months"] is None
+
+
+async def test_setting_a_future_date_clears_notice_period(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    r = await client.put(
+        PROFILE,
+        json={"availability_status": "date", "availability_date": "2026-11-01"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["availability_status"] == "date"
+    assert body["availability_date"] == "2026-11-01"
+    assert body["notice_period_months"] is None
+
+
+async def test_setting_notice_period_clears_the_date(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(
+        PROFILE,
+        json={"availability_status": "date", "availability_date": "2026-11-01"},
+        headers=auth_headers,
+    )
+    r = await client.put(
+        PROFILE,
+        json={"availability_status": "notice", "notice_period_months": 2},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["availability_status"] == "notice"
+    assert body["notice_period_months"] == 2
+    assert body["availability_date"] is None
+
+
+async def test_switching_back_to_immediate_clears_both(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(
+        PROFILE,
+        json={"availability_status": "notice", "notice_period_months": 3},
+        headers=auth_headers,
+    )
+    r = await client.put(
+        PROFILE,
+        json={"availability_status": "immediate"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["availability_status"] == "immediate"
+    assert body["availability_date"] is None
+    assert body["notice_period_months"] is None
+
+
+async def test_reimporting_cv_preserves_manually_set_availability(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(
+        PROFILE,
+        json={"availability_status": "date", "availability_date": "2026-11-01"},
+        headers=auth_headers,
+    )
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["availability_status"] == "date"
+    assert body["availability_date"] == "2026-11-01"

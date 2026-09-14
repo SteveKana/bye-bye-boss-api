@@ -6,19 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.modules.cv import extraction, gateway
-from app.modules.cv.models import CandidateProfile, ProfileStatus
+from app.modules.cv.models import AvailabilityStatus, CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
 from app.modules.cv.schemas import PreferencesUpdate
 
 # Fields the LLM is asked to fill on the flat (non-list) part of the profile.
-_FLAT_FIELDS = (
-    "first_name",
-    "last_name",
-    "email",
-    "location",
-    "availability",
-    "total_experience",
-)
+# Availability is deliberately excluded: it's a live preference (immediate /
+# a date / serving notice / unavailable), not something reliably extractable
+# as free text, and is defaulted below instead.
+_FLAT_FIELDS = ("first_name", "last_name", "email", "location", "total_experience")
 _LIST_FIELDS = ("experiences", "skills", "formations", "languages", "certifications")
 
 
@@ -50,10 +46,15 @@ class CvService:
         values["status"] = ProfileStatus.draft.value
 
         if profile is None:
+            # availability_status defaults to "immediate" on the column
+            # itself, so a fresh profile gets a sensible default without
+            # guessing from unreliable free-text extraction.
             profile = await self.profiles.create(
                 CandidateProfile(user_id=user_id, **values)
             )
         else:
+            # Re-importing a CV shouldn't silently reset a preference the
+            # user set themselves (availability isn't really a CV fact).
             profile = await self.profiles.update(profile, values)
 
         await self.session.commit()
@@ -70,6 +71,21 @@ class CvService:
     ) -> CandidateProfile:
         profile = await self.get_for_user(user_id)
         updates = {k: v for k, v in data.items() if v is not None}
+        # Only one of availability_date / notice_period_months is ever
+        # meaningful, matching whichever status was just set — clear the
+        # other explicitly, since the generic filter above drops None values
+        # and would otherwise let a stale one linger.
+        status = updates.get("availability_status")
+        if status == AvailabilityStatus.date.value:
+            updates["notice_period_months"] = None
+        elif status == AvailabilityStatus.notice.value:
+            updates["availability_date"] = None
+        elif status in (
+            AvailabilityStatus.immediate.value,
+            AvailabilityStatus.unavailable.value,
+        ):
+            updates["availability_date"] = None
+            updates["notice_period_months"] = None
         profile = await self.profiles.update(profile, updates)
         await self.session.commit()
         return profile
