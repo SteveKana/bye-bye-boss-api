@@ -65,6 +65,19 @@ async def test_upload_parses_and_creates_draft_profile(
     assert body["first_name"] == "Thomas"
     assert body["experiences"][0]["company"] == "DataSolutions"
     assert body["skills"] == ["Product Management", "Agile"]
+    assert body["headline"] == "Product Owner"
+
+
+async def test_headline_survives_reimport_once_edited(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(
+        PROFILE, json={"headline": "Senior Product Owner"}, headers=auth_headers
+    )
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["headline"] == "Senior Product Owner"
 
 
 async def test_unsupported_file_type_rejected(

@@ -48,6 +48,11 @@ class CandidateProfile(BaseModel, table=True):
     # -- Informations personnelles
     first_name: str | None = Field(default=None)
     last_name: str | None = Field(default=None)
+    # Headline (job title shown under the name). Seeded from the most
+    # recent experience on first import (see service.import_cv), then
+    # independently editable and preserved across CV re-imports -- once
+    # customized, it's the user's wording to keep, not a raw CV fact.
+    headline: str | None = Field(default=None)
     email: str | None = Field(default=None)
     location: str | None = Field(default=None)
     # Availability is a live preference, not really a CV fact -- kept

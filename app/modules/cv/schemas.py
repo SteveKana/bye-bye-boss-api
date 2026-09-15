@@ -40,6 +40,7 @@ class CandidateProfileRead(BaseSchema):
     updated_at: datetime
     first_name: str | None
     last_name: str | None
+    headline: str | None
     email: str | None
     location: str | None
     availability_status: str
@@ -65,6 +66,7 @@ class CandidateProfileUpdate(BaseSchema):
 
     first_name: str | None = None
     last_name: str | None = None
+    headline: str | None = None
     email: str | None = None
     location: str | None = None
     availability_status: AvailabilityStatusLiteral | None = None
