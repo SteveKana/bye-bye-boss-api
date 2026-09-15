@@ -48,9 +48,15 @@ class CvService:
         if profile is None:
             # availability_status defaults to "immediate" on the column
             # itself, so a fresh profile gets a sensible default without
-            # guessing from unreliable free-text extraction.
+            # guessing from unreliable free-text extraction. headline has
+            # no column default -- seed it here, once, from the most recent
+            # experience (CVs list jobs most-recent-first).
+            headline = None
+            experiences = extracted.get("experiences") or []
+            if experiences:
+                headline = experiences[0].get("title") or None
             profile = await self.profiles.create(
-                CandidateProfile(user_id=user_id, **values)
+                CandidateProfile(user_id=user_id, headline=headline, **values)
             )
         else:
             # Re-importing a CV shouldn't silently reset a preference the
