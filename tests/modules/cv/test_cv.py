@@ -80,6 +80,19 @@ async def test_headline_survives_reimport_once_edited(
     assert r.json()["headline"] == "Senior Product Owner"
 
 
+async def test_headline_backfilled_on_reimport_if_still_empty(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    # Simulates a profile created before the headline field existed, or one
+    # the user cleared -- reimporting should fill it in rather than leaving
+    # it blank forever.
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(PROFILE, json={"headline": ""}, headers=auth_headers)
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["headline"] == "Product Owner"
+
+
 async def test_unsupported_file_type_rejected(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
