@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-5"
     OPENAI_TIMEOUT_SECONDS: int = 60
     CV_MAX_UPLOAD_MB: int = 5
+    # Absolute path outside the git checkout so uploaded files survive a
+    # deploy (which replaces the checkout's tracked files). On the server,
+    # set this in .env to something like /var/lib/byebyeboss/cv-uploads.
+    CV_UPLOAD_DIR: str = "./uploads/cv"
 
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"

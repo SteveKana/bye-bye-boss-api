@@ -56,6 +56,7 @@ class CandidateProfileRead(BaseSchema):
     remote_preferences: list[str]
     mobility: str | None
     salary_target: int | None
+    cv_filename: str | None
 
 
 class CandidateProfileUpdate(BaseSchema):

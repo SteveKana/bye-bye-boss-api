@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from app.core.config import get_settings
 from app.modules.cv import extraction, gateway
 
 UPLOAD = "/api/v1/cv/upload"
@@ -34,11 +35,14 @@ _EXTRACTED = {
 
 
 @pytest.fixture(autouse=True)
-def _mock_pipeline(monkeypatch):
+def _mock_pipeline(monkeypatch, tmp_path):
     # Patch the low-level per-format readers only, so the real `extract_text`
     # still runs its file-type detection and empty-content checks.
     monkeypatch.setattr(extraction, "_extract_pdf", lambda _data: "texte brut du cv")
     monkeypatch.setattr(extraction, "_extract_docx", lambda _data: "texte brut du cv")
+    # save_original_file writes real bytes to disk regardless of the mocks
+    # above -- redirect it to a per-test temp dir instead of the repo.
+    monkeypatch.setattr(get_settings(), "CV_UPLOAD_DIR", str(tmp_path))
 
     async def _fake_structure(_raw_text: str) -> dict:
         return _EXTRACTED
@@ -251,3 +255,44 @@ async def test_reimporting_cv_preserves_manually_set_availability(
     body = r.json()
     assert body["availability_status"] == "date"
     assert body["availability_date"] == "2026-11-01"
+
+
+DOWNLOAD = "/api/v1/cv/download"
+
+
+async def test_download_returns_the_uploaded_file(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    r = await client.get(DOWNLOAD, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.content == b"%PDF-1.4 fake content"
+    assert r.headers["content-type"] == "application/pdf"
+    assert "cv.pdf" in r.headers["content-disposition"]
+
+
+async def test_download_requires_auth(client: AsyncClient) -> None:
+    r = await client.get(DOWNLOAD)
+    assert r.status_code == 401
+
+
+async def test_download_without_a_cv_returns_404(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    r = await client.get(DOWNLOAD, headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_reimporting_replaces_the_downloadable_file(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.post(
+        UPLOAD,
+        files={"file": ("cv_v2.pdf", b"%PDF-1.4 second version", "application/pdf")},
+        headers=auth_headers,
+    )
+    r = await client.get(DOWNLOAD, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.content == b"%PDF-1.4 second version"
+    assert "cv_v2.pdf" in r.headers["content-disposition"]

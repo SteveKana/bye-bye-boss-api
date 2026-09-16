@@ -41,7 +41,7 @@ class CvService:
     ) -> CandidateProfile:
         """Extract text from the file, structure it via the LLM, and persist
         it as a draft profile (creating or replacing the previous draft)."""
-        raw_text = extraction.extract_text(
+        raw_text, kind = extraction.extract_text(
             filename=filename, content_type=content_type, data=data
         )
         extracted = await gateway.structure_cv_text(raw_text)
@@ -52,6 +52,8 @@ class CvService:
             values[field] = extracted.get(field) or []
         values["raw_text"] = raw_text
         values["status"] = ProfileStatus.draft.value
+        values["cv_filename"] = filename
+        values["cv_content_type"] = content_type
 
         if profile is None:
             # availability_status defaults to "immediate" on the column
@@ -73,6 +75,10 @@ class CvService:
                 values["headline"] = _derive_headline(extracted)
             profile = await self.profiles.update(profile, values)
 
+        # Saved after the LLM call succeeds, so a failed import never
+        # leaves an orphaned file with no matching profile data.
+        extraction.save_original_file(user_id=user_id, kind=kind, data=data)
+
         await self.session.commit()
         return profile
 
@@ -81,6 +87,21 @@ class CvService:
         if profile is None:
             raise NotFoundError("Aucun profil trouvé. Importez d'abord un CV.")
         return profile
+
+    def get_cv_file(self, profile: CandidateProfile):
+        """Returns (path, filename, content_type) for downloading the
+        original uploaded file back."""
+        kind = (
+            "docx" if (profile.cv_filename or "").lower().endswith(".docx") else "pdf"
+        )
+        path = extraction.stored_file_path(profile.user_id, kind)
+        filename = profile.cv_filename or path.name
+        content_type = profile.cv_content_type or (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            if kind == "docx"
+            else "application/pdf"
+        )
+        return path, filename, content_type
 
     async def apply_verification(
         self, *, user_id: uuid.UUID, data: dict

@@ -94,3 +94,10 @@ class CandidateProfile(BaseModel, table=True):
     # Texte brut extrait du fichier, conservé pour permettre un nouveau
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
     raw_text: str | None = Field(default=None)
+
+    # The original uploaded file's bytes are saved to disk (see
+    # extraction.CV_UPLOAD_DIR), named after this profile's id -- these two
+    # fields are what's needed to serve it back with the right filename and
+    # content type on download.
+    cv_filename: str | None = Field(default=None)
+    cv_content_type: str | None = Field(default=None)
