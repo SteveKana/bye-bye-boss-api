@@ -28,6 +28,11 @@ objet JSON strict. Réponds UNIQUEMENT avec du JSON valide, sans texte autour, \
 sans balises markdown. Si une information est absente du CV, mets une chaîne \
 vide "" (ou une liste vide []) — n'invente jamais de donnée.
 
+Règle spécifique pour "location" : uniquement le nom d'une ville française \
+précise (ex: "Lyon", "Paris"), jamais une région, un département ou un pays \
+(ex: "Île-de-France", "Auvergne-Rhône-Alpes", "France"). Si le CV ne mentionne \
+qu'une zone large sans ville précise, laisse ce champ vide "".
+
 Schéma exact à respecter :
 {{
   "first_name": "",
