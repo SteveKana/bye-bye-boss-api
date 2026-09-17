@@ -72,29 +72,43 @@ async def test_upload_parses_and_creates_draft_profile(
     assert body["headline"] == "Product Owner"
 
 
-async def test_headline_survives_reimport_once_edited(
+async def test_headline_edit_lasts_only_until_the_next_reimport(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
+    # headline behaves like the other flat CV fields (name, email,
+    # location): editing it is a display tweak, not a permanent override --
+    # the next CV import refreshes it to match the latest experience.
     await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
     await client.put(
         PROFILE, json={"headline": "Senior Product Owner"}, headers=auth_headers
     )
-    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    assert r.status_code == 200
+    r = await client.get(PROFILE, headers=auth_headers)
     assert r.json()["headline"] == "Senior Product Owner"
 
-
-async def test_headline_backfilled_on_reimport_if_still_empty(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    # Simulates a profile created before the headline field existed, or one
-    # the user cleared -- reimporting should fill it in rather than leaving
-    # it blank forever.
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    await client.put(PROFILE, json={"headline": ""}, headers=auth_headers)
     r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["headline"] == "Product Owner"
+
+
+async def test_headline_refreshes_to_match_an_updated_cv(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+
+    updated = {
+        **_EXTRACTED,
+        "experiences": [
+            {**_EXTRACTED["experiences"][0], "title": "Lead Product Manager"}
+        ],
+    }
+
+    async def _fake_structure_updated(_raw_text: str) -> dict:
+        return updated
+
+    monkeypatch.setattr(gateway, "structure_cv_text", _fake_structure_updated)
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["headline"] == "Lead Product Manager"
 
 
 async def test_unsupported_file_type_rejected(
