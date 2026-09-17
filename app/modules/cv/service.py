@@ -48,6 +48,7 @@ class CvService:
 
         profile = await self.profiles.get_by_user(user_id)
         values = {field: extracted.get(field) or None for field in _FLAT_FIELDS}
+        values["headline"] = _derive_headline(extracted)
         for field in _LIST_FIELDS:
             values[field] = extracted.get(field) or []
         values["raw_text"] = raw_text
@@ -60,19 +61,15 @@ class CvService:
             # itself, so a fresh profile gets a sensible default without
             # guessing from unreliable free-text extraction.
             profile = await self.profiles.create(
-                CandidateProfile(
-                    user_id=user_id, headline=_derive_headline(extracted), **values
-                )
+                CandidateProfile(user_id=user_id, **values)
             )
         else:
             # Re-importing a CV shouldn't silently reset a preference the
             # user set themselves (availability isn't really a CV fact).
-            # headline is the one exception with a middle ground: it's
-            # worth backfilling if it was never set (e.g. a profile created
-            # before this field existed), but never overwritten once the
-            # user has their own value in there.
-            if not profile.headline:
-                values["headline"] = _derive_headline(extracted)
+            # headline behaves like the other flat CV fields (name, email,
+            # location): always refreshed from the latest import. Editing
+            # it by hand is a display tweak that lasts until the next CV
+            # import, not a permanent override.
             profile = await self.profiles.update(profile, values)
 
         # Saved after the LLM call succeeds, so a failed import never
