@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.core.dependencies import DBSession
@@ -49,6 +50,14 @@ async def upload_cv(
 async def get_profile(session: DBSession, user: CurrentUser) -> CandidateProfileRead:
     profile = await CvService(session).get_for_user(user.id)
     return CandidateProfileRead.model_validate(profile)
+
+
+@router.get("/download")
+async def download_cv(session: DBSession, user: CurrentUser) -> FileResponse:
+    service = CvService(session)
+    profile = await service.get_for_user(user.id)
+    path, filename, content_type = service.get_cv_file(profile)
+    return FileResponse(path, filename=filename, media_type=content_type)
 
 
 @router.put("/profile", response_model=CandidateProfileRead)

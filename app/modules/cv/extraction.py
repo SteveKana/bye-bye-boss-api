@@ -8,11 +8,14 @@ it than hand-rolled heuristics.
 from __future__ import annotations
 
 import io
+import uuid
+from pathlib import Path
 
 import docx
 from pypdf import PdfReader
 
-from app.core.exceptions import BadRequestError
+from app.core.config import get_settings
+from app.core.exceptions import BadRequestError, NotFoundError
 
 SUPPORTED_CONTENT_TYPES = {
     "application/pdf": "pdf",
@@ -34,7 +37,11 @@ def detect_kind(filename: str, content_type: str | None) -> str:
     )
 
 
-def extract_text(*, filename: str, content_type: str | None, data: bytes) -> str:
+def extract_text(
+    *, filename: str, content_type: str | None, data: bytes
+) -> tuple[str, str]:
+    """Returns (text, kind) -- kind ('pdf'/'docx') is what the caller needs
+    to save the original file under the right extension."""
     kind = detect_kind(filename, content_type)
     try:
         text = _extract_pdf(data) if kind == "pdf" else _extract_docx(data)
@@ -53,7 +60,7 @@ def extract_text(*, filename: str, content_type: str | None, data: bytes) -> str
             "scanné en image ou vide.",
             code="empty_cv_content",
         )
-    return text
+    return text, kind
 
 
 def _extract_pdf(data: bytes) -> str:
@@ -64,3 +71,31 @@ def _extract_pdf(data: bytes) -> str:
 def _extract_docx(data: bytes) -> str:
     document = docx.Document(io.BytesIO(data))
     return "\n".join(p.text for p in document.paragraphs)
+
+
+def _storage_path(user_id: uuid.UUID, kind: str) -> Path:
+    return Path(get_settings().CV_UPLOAD_DIR) / f"{user_id}.{kind}"
+
+
+def save_original_file(*, user_id: uuid.UUID, kind: str, data: bytes) -> None:
+    """Persist the raw uploaded file so it can be served back on download.
+
+    One file per user, named by kind -- overwritten on re-import (a new CV
+    replaces the old one, same as every other field). Any stale file left
+    over from a previous upload of a *different* kind (e.g. re-importing a
+    .docx after a .pdf) is cleaned up so there's never more than one file
+    per user lying around.
+    """
+    upload_dir = Path(get_settings().CV_UPLOAD_DIR)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    for other in SUPPORTED_CONTENT_TYPES.values():
+        if other != kind:
+            _storage_path(user_id, other).unlink(missing_ok=True)
+    _storage_path(user_id, kind).write_bytes(data)
+
+
+def stored_file_path(user_id: uuid.UUID, kind: str) -> Path:
+    path = _storage_path(user_id, kind)
+    if not path.is_file():
+        raise NotFoundError("Aucun CV importé.")
+    return path
