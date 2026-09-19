@@ -118,7 +118,11 @@ def _extract_json(text: str) -> str:
 
 
 def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) -> str:
-    client = OpenAI(api_key=api_key, timeout=timeout)
+    # max_retries=0: the SDK itself retries transient errors by default (2
+    # extra attempts per call), which stacks with our own retry loop below
+    # and can multiply the worst-case wait far past `timeout * max_retries`.
+    # We already retry explicitly, so the SDK's own retries are disabled.
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
     max_retries = 3
     last_exc: Exception | None = None
     for attempt in range(1, max_retries + 1):
