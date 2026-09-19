@@ -34,6 +34,11 @@ class CertificationItem(BaseSchema):
     issuer_period: str = ""
 
 
+class SkillCategoryItem(BaseSchema):
+    category: str = ""
+    skills: list[str] = Field(default_factory=list)
+
+
 class CandidateProfileRead(BaseSchema):
     id: uuid.UUID
     status: str
@@ -52,6 +57,12 @@ class CandidateProfileRead(BaseSchema):
     formations: list[FormationItem]
     languages: list[LanguageItem]
     certifications: list[CertificationItem]
+    # Synthesized from the CV by the LLM -- not user-editable, so these three
+    # are absent from CandidateProfileUpdate below.
+    professional_summary: str | None
+    identified_roles: list[str]
+    domains: list[str]
+    skill_categories: list[SkillCategoryItem]
     contract_types: list[str]
     remote_preferences: list[str]
     mobility: str | None

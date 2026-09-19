@@ -33,6 +33,29 @@ précise (ex: "Lyon", "Paris"), jamais une région, un département ou un pays \
 (ex: "Île-de-France", "Auvergne-Rhône-Alpes", "France"). Si le CV ne mentionne \
 qu'une zone large sans ville précise, laisse ce champ vide "".
 
+Règles pour les quatre champs de synthèse ci-dessous ("professional_summary", \
+"identified_roles", "domains", "skill_categories") : contrairement aux autres \
+champs, ce ne sont pas des copies littérales du CV mais une synthèse que tu \
+dois produire toi-même à partir de son contenu réel — reste néanmoins \
+strictement fondé sur ce que le CV décrit, sans inventer d'employeur, de \
+diplôme ou de compétence qui n'y figure pas.
+- "professional_summary" : 1 à 2 phrases en français résumant le profil \
+professionnel du candidat (son métier principal et ses domaines de \
+spécialisation), rédigées naturellement comme une accroche de CV.
+- "identified_roles" : 2 à 4 intitulés de poste/métiers auxquels ce profil \
+correspond globalement (ex: "Product Owner", "Chef de projet SI") — pas \
+nécessairement une recopie exacte des intitulés déjà présents dans \
+"experiences", plutôt une classification du profil dans son ensemble.
+- "domains" : 2 à 4 secteurs ou domaines fonctionnels dans lesquels le \
+candidat a de l'expérience (ex: "Data", "Retail", "Finance"), déduits des \
+entreprises et missions décrites.
+- "skill_categories" : les compétences détectées (reprises de "skills"), \
+regroupées sous des noms de catégories que tu choisis toi-même en fonction \
+du profil (ex: "Product & Delivery", "Data & Tech", "Outils", "Méthodes" \
+pour un profil produit/data ; des catégories différentes conviendront à un \
+autre profil). Chaque compétence de "skills" doit apparaître dans au moins \
+une catégorie.
+
 Schéma exact à respecter :
 {{
   "first_name": "",
@@ -46,7 +69,11 @@ Schéma exact à respecter :
   "skills": [],
   "formations": [{{"title": "", "school_period": ""}}],
   "languages": [{{"name": "", "level": ""}}],
-  "certifications": [{{"title": "", "issuer_period": ""}}]
+  "certifications": [{{"title": "", "issuer_period": ""}}],
+  "professional_summary": "",
+  "identified_roles": [],
+  "domains": [],
+  "skill_categories": [{{"category": "", "skills": []}}]
 }}
 
 CV

@@ -14,8 +14,24 @@ from app.modules.cv.schemas import PreferencesUpdate
 # Availability is deliberately excluded: it's a live preference (immediate /
 # a date / serving notice / unavailable), not something reliably extractable
 # as free text, and is defaulted below instead.
-_FLAT_FIELDS = ("first_name", "last_name", "email", "location", "total_experience")
-_LIST_FIELDS = ("experiences", "skills", "formations", "languages", "certifications")
+_FLAT_FIELDS = (
+    "first_name",
+    "last_name",
+    "email",
+    "location",
+    "total_experience",
+    "professional_summary",
+)
+_LIST_FIELDS = (
+    "experiences",
+    "skills",
+    "formations",
+    "languages",
+    "certifications",
+    "identified_roles",
+    "domains",
+    "skill_categories",
+)
 
 
 def _derive_headline(extracted: dict) -> str | None:
