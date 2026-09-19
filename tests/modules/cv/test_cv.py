@@ -31,6 +31,13 @@ _EXTRACTED = {
     ],
     "languages": [{"name": "Français", "level": "Langue maternelle"}],
     "certifications": [{"title": "PSPO I", "issuer_period": "Scrum.org • 2021"}],
+    "professional_summary": "Product Owner orienté data avec 7 ans d'expérience.",
+    "identified_roles": ["Product Owner", "Product Manager"],
+    "domains": ["Data", "Retail"],
+    "skill_categories": [
+        {"category": "Product & Delivery", "skills": ["Product Management"]},
+        {"category": "Méthodes", "skills": ["Agile"]},
+    ],
 }
 
 
@@ -70,6 +77,29 @@ async def test_upload_parses_and_creates_draft_profile(
     assert body["experiences"][0]["company"] == "DataSolutions"
     assert body["skills"] == ["Product Management", "Agile"]
     assert body["headline"] == "Product Owner"
+    assert body["professional_summary"] == _EXTRACTED["professional_summary"]
+    assert body["identified_roles"] == ["Product Owner", "Product Manager"]
+    assert body["domains"] == ["Data", "Retail"]
+    assert body["skill_categories"][0]["category"] == "Product & Delivery"
+    assert body["skill_categories"][0]["skills"] == ["Product Management"]
+
+
+async def test_synthesized_fields_are_not_user_editable(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    # professional_summary/identified_roles/domains/skill_categories are
+    # LLM-synthesized and refreshed on every re-import -- unlike headline,
+    # there's no verification-step override for them.
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    r = await client.put(
+        PROFILE,
+        json={"first_name": "Thomasse"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["professional_summary"] == _EXTRACTED["professional_summary"]
+    assert body["domains"] == ["Data", "Retail"]
 
 
 async def test_headline_edit_lasts_only_until_the_next_reimport(

@@ -55,6 +55,11 @@ class CandidateProfile(BaseModel, table=True):
     headline: str | None = Field(default=None)
     email: str | None = Field(default=None)
     location: str | None = Field(default=None)
+    # A short, synthesized 1-2 sentence summary of the candidate's
+    # professional profile -- like headline/experiences, always refreshed
+    # from the latest CV import rather than user-editable, since it's a
+    # synthesis of the CV content rather than a fact the user states.
+    professional_summary: str | None = Field(default=None)
     # Availability is a live preference, not really a CV fact -- kept
     # structured rather than free text, and only defaulted on first import
     # (see service.import_cv), never overwritten by a CV re-import.
@@ -78,6 +83,21 @@ class CandidateProfile(BaseModel, table=True):
     languages: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
     # list[{title, issuer_period}]
     certifications: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
+    # Job titles/functions this profile is suited for, and the business
+    # domains it shows experience in -- both inferred by the LLM from the
+    # whole CV rather than copied from any single field, and, like the
+    # fields above, refreshed on every re-import rather than user-editable.
+    identified_roles: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
+    domains: list = Field(default_factory=list, sa_column=Column(_JsonListColumn))
+    # list[{category, skills: list[str]}] -- the same skills as `skills`
+    # above, grouped under LLM-chosen category names for display. `skills`
+    # itself stays a flat list since that's what matching logic keys off of;
+    # this is a presentation-only view over the same underlying data.
+    skill_categories: list = Field(
         default_factory=list, sa_column=Column(_JsonListColumn)
     )
 
