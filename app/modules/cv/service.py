@@ -135,6 +135,7 @@ class CvService:
                 "remote_preferences": data.remote_preferences,
                 "mobility": data.mobility,
                 "salary_target": data.salary_target,
+                "daily_rate": data.daily_rate,
                 "status": ProfileStatus.complete.value,
             },
         )

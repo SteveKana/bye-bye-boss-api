@@ -90,6 +90,11 @@ class CandidateProfile(BaseModel, table=True):
     )
     mobility: str | None = Field(default=None)
     salary_target: int | None = Field(default=None)
+    # Taux Journalier Moyen -- daily rate for candidates open to freelance
+    # missions. Independent of salary_target: a candidate can look for both
+    # a permanent role and freelance work at once, so neither field implies
+    # or replaces the other.
+    daily_rate: int | None = Field(default=None)
 
     # Texte brut extrait du fichier, conservé pour permettre un nouveau
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
