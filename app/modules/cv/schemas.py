@@ -56,6 +56,7 @@ class CandidateProfileRead(BaseSchema):
     remote_preferences: list[str]
     mobility: str | None
     salary_target: int | None
+    daily_rate: int | None
     cv_filename: str | None
 
 
@@ -91,3 +92,8 @@ class PreferencesUpdate(BaseSchema):
     remote_preferences: list[RemotePreference] = Field(min_length=1)
     mobility: Mobility
     salary_target: int | None = Field(default=None, ge=0)
+    # Only meaningful when "Freelance" is among contract_types, but not
+    # enforced server-side -- the client hides the field otherwise, and
+    # rejecting a stray value would just be an extra way to fail a request
+    # for no real benefit.
+    daily_rate: int | None = Field(default=None, ge=0)

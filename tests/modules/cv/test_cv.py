@@ -160,6 +160,7 @@ async def test_preferences_update_completes_onboarding(
             "remote_preferences": ["Hybride", "Full remote"],
             "mobility": "France entière",
             "salary_target": 55000,
+            "daily_rate": 500,
         },
         headers=auth_headers,
     )
@@ -169,6 +170,7 @@ async def test_preferences_update_completes_onboarding(
     assert body["contract_types"] == ["CDI", "Freelance"]
     assert body["remote_preferences"] == ["Hybride", "Full remote"]
     assert body["salary_target"] == 55000
+    assert body["daily_rate"] == 500
 
 
 async def test_preferences_requires_at_least_one_contract_type(
