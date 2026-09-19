@@ -127,7 +127,17 @@ def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) ->
     last_exc: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
-            response = client.responses.create(model=model, input=prompt)
+            # This is a structured-extraction task (read the CV, fill in a
+            # fixed schema, write a short summary) -- not the kind of
+            # multi-step problem that needs heavy reasoning. Without these,
+            # the model defaults to a much deeper (and slower) reasoning
+            # mode, which was pushing real calls past the timeout below.
+            response = client.responses.create(
+                model=model,
+                input=prompt,
+                reasoning={"effort": "low"},
+                text={"verbosity": "low"},
+            )
             return response.output_text
         except (RateLimitError, APITimeoutError, APIError) as exc:
             last_exc = exc
