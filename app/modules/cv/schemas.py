@@ -66,6 +66,7 @@ class CandidateProfileRead(BaseSchema):
     contract_types: list[str]
     remote_preferences: list[str]
     mobility: str | None
+    mobility_region: str | None
     salary_target: int | None
     daily_rate: int | None
     cv_filename: str | None
@@ -96,12 +97,41 @@ class CandidateProfileUpdate(BaseSchema):
 ContractType = Literal["CDI", "CDD", "Freelance", "Intérim"]
 RemotePreference = Literal["Sur site", "Hybride", "Full remote"]
 Mobility = Literal["France entière", "Région uniquement", "Ville uniquement"]
+# The 18 French régions (13 metropolitan + 5 overseas) -- the candidate
+# picks one explicitly (see PreferencesForm.vue) rather than us guessing it
+# from the free-text `location` extracted off their CV, which has no
+# guaranteed format to parse a région out of reliably.
+MobilityRegion = Literal[
+    "Auvergne-Rhône-Alpes",
+    "Bourgogne-Franche-Comté",
+    "Bretagne",
+    "Centre-Val de Loire",
+    "Corse",
+    "Grand Est",
+    "Hauts-de-France",
+    "Île-de-France",
+    "Normandie",
+    "Nouvelle-Aquitaine",
+    "Occitanie",
+    "Pays de la Loire",
+    "Provence-Alpes-Côte d'Azur",
+    "Guadeloupe",
+    "Martinique",
+    "Guyane",
+    "La Réunion",
+    "Mayotte",
+]
 
 
 class PreferencesUpdate(BaseSchema):
     contract_types: list[ContractType] = Field(min_length=1)
     remote_preferences: list[RemotePreference] = Field(min_length=1)
     mobility: Mobility
+    # Only meaningful when mobility == "Région uniquement", same reasoning as
+    # daily_rate below: not enforced server-side, the client shows/hides the
+    # field to match, and rejecting a stray combination would just be an
+    # extra way to fail a request for no real benefit.
+    mobility_region: MobilityRegion | None = Field(default=None)
     salary_target: int | None = Field(default=None, ge=0)
     # Only meaningful when "Freelance" is among contract_types, but not
     # enforced server-side -- the client hides the field otherwise, and
