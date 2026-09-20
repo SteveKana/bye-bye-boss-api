@@ -155,6 +155,14 @@ class Settings(BaseSettings):
     # a candidate's dashboard reads pre-computed results instead of waiting on
     # an LLM call, and cost stays predictable regardless of how often someone
     # opens the page.
+    #
+    # Its own timeout, separate from OPENAI_TIMEOUT_SECONDS: that one is tuned
+    # for the cv module's fast "low" reasoning/verbosity extraction calls.
+    # Matching uses "medium"/"medium" (see matching/gateway.py) for a heavier
+    # judgment task, which routinely takes well over a minute -- reusing the
+    # cv module's 60s timeout made every real call time out on all 3 retries
+    # and fail every pair (observed in production: 2026-09-20).
+    MATCHING_OPENAI_TIMEOUT_SECONDS: int = 180
     MATCHING_INTERVAL_MINUTES: int = 60
     # How many of the most relevant offers (see shortlist.py's keyword-overlap
     # heuristic) are actually scored by the LLM per candidate per run. Bounds
