@@ -1,0 +1,398 @@
+{
+  "company_name": "Numih France",
+  "career_score": 36,
+  "ats_score": 20,
+  "ats_potential": 30,
+  "cv_skills": [
+    "product_ownership",
+    "proxy_product_owner",
+    "agile",
+    "scrum",
+    "workshop_facilitation",
+    "requirements_gathering",
+    "functional_specification",
+    "technical_specification",
+    "user_story",
+    "backlog_management",
+    "definition_of_ready",
+    "acceptance_testing",
+    "uat",
+    "test_management",
+    "sprint_planning",
+    "daily_scrum",
+    "sprint_review",
+    "sprint_retrospective",
+    "program_increment_planning",
+    "reporting_stakeholders",
+    "support_level2",
+    "data_modeling",
+    "api_design",
+    "api_contracts",
+    "rest_api",
+    "soap_api",
+    "sql",
+    "pl_sql",
+    "oracle",
+    "postgresql",
+    "sql_server",
+    "etl",
+    "knime",
+    "data_quality",
+    "bigquery",
+    "gcp",
+    "azure_devops",
+    "jira",
+    "confluence",
+    "icescrum",
+    "trello",
+    "postman",
+    "kibana",
+    "dynatrace",
+    "power_bi",
+    "dashboarding",
+    "html5",
+    "css3",
+    "javascript",
+    "bootstrap",
+    "laravel_php",
+    "flutter",
+    "algolia",
+    "dsfr",
+    "vs_code",
+    "oracle_service_bus",
+    "oracle_sql_developer",
+    "model_driven_design",
+    "safe_popm_certification",
+    "bachelors_masters_information_systems",
+    "retail_sector",
+    "public_sector",
+    "pharmaceutical_industry",
+    "french_native",
+    "english_b2_toeic"
+  ],
+  "job_skills": [
+    {
+      "skill": "scrum_rituals_facilitation",
+      "category": "methodology",
+      "importance": "required"
+    },
+    {
+      "skill": "scrum_process_coaching",
+      "category": "methodology",
+      "importance": "required"
+    },
+    {
+      "skill": "java_backend_development",
+      "category": "technology",
+      "importance": "required"
+    },
+    {
+      "skill": "angular_frontend_development",
+      "category": "technology",
+      "importance": "required"
+    },
+    {
+      "skill": "education_bac3_to_5_cs",
+      "category": "education",
+      "importance": "required"
+    },
+    {
+      "skill": "j2ee",
+      "category": "technology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "orm_hibernate",
+      "category": "technology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "orm_jpa",
+      "category": "technology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "database_oracle",
+      "category": "technology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "database_postgresql",
+      "category": "technology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "build_maven",
+      "category": "tools",
+      "importance": "preferred"
+    },
+    {
+      "skill": "version_control_git",
+      "category": "tools",
+      "importance": "preferred"
+    },
+    {
+      "skill": "version_control_svn",
+      "category": "tools",
+      "importance": "preferred"
+    },
+    {
+      "skill": "gitlab",
+      "category": "tools",
+      "importance": "preferred"
+    },
+    {
+      "skill": "architecture_modeling_uml",
+      "category": "methodology",
+      "importance": "preferred"
+    },
+    {
+      "skill": "maintenance_solutions",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "support_developers_deployment_teams",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "curiosity_learning_sharing",
+      "category": "soft_skill",
+      "importance": "nice_to_have"
+    },
+    {
+      "skill": "analysis_rigor_autonomy_teamwork_adaptability",
+      "category": "soft_skill",
+      "importance": "nice_to_have"
+    }
+  ],
+  "mandatory_requirements": [
+    "scrum_rituals_facilitation",
+    "scrum_process_coaching",
+    "java_backend_development",
+    "angular_frontend_development",
+    "education_bac3_to_5_cs"
+  ],
+  "preferred_requirements": [
+    "j2ee",
+    "orm_hibernate",
+    "orm_jpa",
+    "database_oracle",
+    "database_postgresql",
+    "build_maven",
+    "version_control_git",
+    "version_control_svn",
+    "gitlab",
+    "architecture_modeling_uml",
+    "maintenance_solutions",
+    "support_developers_deployment_teams"
+  ],
+  "blocking_requirements": [
+    {
+      "skill": "java_backend_development_5y",
+      "level": "hard_blocker",
+      "reason": "Expérience de développement back-end Java (5 ans) requise. Parcours orienté Product Ownership/recette avec exposition Java mais sans développement Java significatif.",
+      "gap_value": "5y",
+      "gap_percent": 100
+    },
+    {
+      "skill": "angular_frontend_development_5y",
+      "level": "hard_blocker",
+      "reason": "Expérience de développement front-end Angular (5 ans) requise. Expérience front-end en HTML/CSS/JS et Laravel/Bootstrap, mais pas d'Angular.",
+      "gap_value": "5y",
+      "gap_percent": 100
+    },
+    {
+      "skill": "scrum_rituals_facilitation_5y",
+      "level": "medium_blocker",
+      "reason": "Au moins 5 ans d'animation/facilitation Scrum requis. Environ 4,1 ans de facilitation/co-animation identifiables (CNAF + Leclerc).",
+      "gap_value": "0.9y",
+      "gap_percent": 18
+    }
+  ],
+  "blocking_message": "Deux exigences éliminatoires côté développement sont absentes : 5 ans de développement back-end Java et 5 ans de développement front-end Angular. Même avec une bonne pratique Agile/PO, ces manques sont des hard blockers pour un poste combinant Scrum Master et développeur full‑stack. L’expérience de facilitation Scrum est proche de la cible mais inférieure à 5 ans (écart ~18%), ce qui ajoute une pénalité medium.",
+  "matches": [
+    {
+      "skill": "scrum_rituals_facilitation",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 75
+    },
+    {
+      "skill": "scrum_process_coaching",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 65
+    },
+    {
+      "skill": "java_backend_development",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 10
+    },
+    {
+      "skill": "angular_frontend_development",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 5
+    },
+    {
+      "skill": "education_bac3_to_5_cs",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "j2ee",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 20
+    },
+    {
+      "skill": "orm_hibernate",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 5
+    },
+    {
+      "skill": "orm_jpa",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 5
+    },
+    {
+      "skill": "database_oracle",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "database_postgresql",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "build_maven",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 5
+    },
+    {
+      "skill": "version_control_git",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 20
+    },
+    {
+      "skill": "version_control_svn",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 5
+    },
+    {
+      "skill": "gitlab",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 10
+    },
+    {
+      "skill": "architecture_modeling_uml",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 40
+    },
+    {
+      "skill": "maintenance_solutions",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 50
+    },
+    {
+      "skill": "support_developers_deployment_teams",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 60
+    }
+  ],
+  "ats_gaps": [
+    {
+      "skill": "java_backend_development",
+      "missing_in_cv": true,
+      "why_it_matters": "Compétence cœur du poste full‑stack exigée avec 5 ans d’expérience.",
+      "cv_fix_example": "Ne pas inventer. Si vous avez réalisé du dev Java (Spring, J2EE) sur CNAF ou projets perso, citez concrètement: 'Développement d’API REST Java 17/Spring Boot, tests JUnit, intégration Maven, déploiement sur Tomcat — 8 mois'."
+    },
+    {
+      "skill": "angular_frontend_development",
+      "missing_in_cv": true,
+      "why_it_matters": "Stack front principale demandée avec 5 ans d’expérience.",
+      "cv_fix_example": "Ne pas inventer. Si déjà pratiqué, ajoutez: 'Angular 14, RxJS, NgRx, Material — développement de modules, tests unitaires Jasmine/Karma'."
+    },
+    {
+      "skill": "version_control_git",
+      "missing_in_cv": true,
+      "why_it_matters": "Outil standard d’équipe (Git/GitLab) attendu par l’ATS.",
+      "cv_fix_example": "Si utilisé (Azure DevOps/GitLab), explicitez: 'Git (Azure DevOps, GitLab): branching GitFlow, merge requests, code reviews'."
+    },
+    {
+      "skill": "build_maven",
+      "missing_in_cv": true,
+      "why_it_matters": "Outil de build Java courant, souvent filtrant par ATS.",
+      "cv_fix_example": "Si pratiqué, mentionnez: 'Maven: gestion des dépendances, profils, pipelines CI'. Sinon, ne pas ajouter."
+    },
+    {
+      "skill": "orm_hibernate_jpa",
+      "missing_in_cv": true,
+      "why_it_matters": "Attendu pour la persistance côté Java.",
+      "cv_fix_example": "Si déjà utilisé, précisez: 'Hibernate/JPA: mapping entités, repositories, critères JPA'."
+    },
+    {
+      "skill": "scrum_master_role_clarity",
+      "missing_in_cv": false,
+      "why_it_matters": "Le poste requiert un rôle Scrum Master explicite; votre CV met surtout en avant le Product Ownership.",
+      "cv_fix_example": "Reformulez les expériences en séparant un sous-bloc 'Rôle Scrum Master': 'Animation Daily/Sprint Planning/Reviews/Retros (8 pers), levée d’impediments, coaching sur DoD/DoR, suivi vélocité & CFD'."
+    }
+  ],
+  "actions": [
+    {
+      "action": "Cadrer le positionnement Scrum Master sur chaque mission",
+      "details": "Créer un sous-ensemble 'Scrum Master' par expérience (CNAF, Leclerc): rituels animés, taille d’équipe, indicateurs (vélocité, burndown), exemples d’impediments levés, actions d’amélioration continue."
+    },
+    {
+      "action": "Aligner le wording sur les filtres ATS Scrum",
+      "details": "Ajouter explicitement: 'Scrum Master', 'facilitation', 'coaching agile', 'impediment removal', 'continuous improvement', 'Scrum events (Daily, Sprint Planning, Review, Retro)'."
+    },
+    {
+      "action": "Rendre visibles les environnements techniques Java/CI/CD si effectivement pratiqués",
+      "details": "Si usage réel: préciser 'Git (Azure DevOps/GitLab)', 'Maven', 'Jira/Confluence', 'UML ou MDD'. Ajouter une ligne 'Stack et outils' en fin de chaque mission."
+    },
+    {
+      "action": "Quantifier l’impact côté Data/Qualité pour valoriser la rigueur technique",
+      "details": "Ex.: 'Fiabilisation de flux multi-sources (+30M enregistrements), -40% d’anomalies', 'contrôles qualité automatisés via KNIME'."
+    },
+    {
+      "action": "Créer une section 'Projets techniques' si vous avez des travaux Java/Angular ou formations",
+      "details": "Uniquement si réel: lister mini‑projets (API Spring Boot, module Angular) avec dépôt Git public, tests, CI. Sinon, s’abstenir."
+    },
+    {
+      "action": "Adapter la cible",
+      "details": "Pour maximiser vos chances sans inventer de compétences, privilégier des rôles Scrum Master / PO (Agile, Data/BI) plutôt que Full‑stack Java/Angular."
+    },
+    {
+      "action": "Normaliser les termes métiers pour le matching sémantique",
+      "details": "Mapper vos activités vers 'user stories', 'backlog refinement', 'Definition of Done/Ready', 'UAT', 'support N2', 'API REST'."
+    }
+  ],
+  "career_explanation": [
+    "Forte cohérence avec les rôles agiles (PO/Proxy PO) et la facilitation des cérémonies.",
+    "Écart majeur avec la composante 'développeur full‑stack' (Java/Angular non pratiqués).",
+    "Domaines data/BI et suivi opérationnel transposables partiellement à un contexte produit transverse.",
+    "Diplôme et culture agile solides (SAFe POPM), favorables à un pivot vers Scrum Master mais pas vers full‑stack sans montée en compétences."
+  ],
+  "ats_explanation": [
+    "Score brut: éducation (OK), Scrum (partiel), bases de données (OK) apportent des points; J2EE/ORM/Maven/Git manquants pénalisent les exigences préférées.",
+    "Pénalités de blocage: deux hard_blockers (Java back-end 5y, Angular 5y manquants) abaissent fortement le score; un medium_blocker (Scrum 5y vs ~4.1y) ajoute une pénalité supplémentaire.",
+    "Cohérence: malgré de bons marqueurs agiles, l’absence de Java/Angular en développement ne peut pas être compensée par des compétences préférées."
+  ]
+}

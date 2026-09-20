@@ -16,6 +16,15 @@ _FIXTURES = Path(__file__).parent / "fixtures"
 # this, it can't parse what the model actually returns.
 _REAL_RESPONSE = (_FIXTURES / "astek_po_data_real_response.json").read_text()
 
+# A second real response, captured from production (2026-09-20, a Scrum
+# Master offer at Numih France) -- unlike the fixture above, this one has a
+# non-empty blocking_requirements list, and it's what caught a real bug: the
+# model returned "gap_value": "5y" (a magnitude with a unit) instead of a
+# bare number, which the schema didn't accept yet. Kept as a regression test.
+_REAL_RESPONSE_WITH_BLOCKERS = (
+    _FIXTURES / "numih_scrum_master_real_response.json"
+).read_text()
+
 
 async def test_analyse_match_without_api_key_raises_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", None)
@@ -40,6 +49,32 @@ async def test_analyse_match_parses_real_captured_response(monkeypatch) -> None:
     assert len(analysis.actions) == 9
     soapui = next(m for m in analysis.matches if m.skill == "soapui")
     assert soapui.result.value == "missing"
+
+
+async def test_analyse_match_parses_real_response_with_string_gap_values(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway, "_call_openai_sync", lambda **kwargs: _REAL_RESPONSE_WITH_BLOCKERS
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.company_name == "Numih France"
+    assert analysis.career_score == 36
+    assert analysis.ats_score == 20
+    assert analysis.ats_potential == 30
+    assert len(analysis.blocking_requirements) == 3
+    assert len(analysis.matches) == 17
+    assert len(analysis.ats_gaps) == 6
+    assert len(analysis.actions) == 7
+
+    java_gap = analysis.blocking_requirements[0]
+    assert java_gap.skill == "java_backend_development_5y"
+    assert java_gap.level.value == "hard_blocker"
+    assert java_gap.gap_value == "5y"  # kept as-is, not coerced/parsed
+    assert java_gap.gap_percent == 100
 
 
 async def test_analyse_match_wraps_response_in_json_fence(monkeypatch) -> None:
