@@ -121,6 +121,33 @@ class Settings(BaseSettings):
     # set this in .env to something like /var/lib/byebyeboss/cv-uploads.
     CV_UPLOAD_DIR: str = "./uploads/cv"
 
+    # ---- Job offers (matching) ---------------------------------------------
+    # Ingested from official, legitimate sources only -- see the `offers`
+    # module's docstring for why scraping LinkedIn/Indeed/Glassdoor/Welcome
+    # to the Jungle is deliberately not an option here. Either provider's
+    # credentials may be left unset; ingestion just skips an unconfigured
+    # one (see OfferProvider.is_configured) rather than failing.
+    FRANCE_TRAVAIL_CLIENT_ID: str | None = None
+    FRANCE_TRAVAIL_CLIENT_SECRET: str | None = None
+    ADZUNA_APP_ID: str | None = None
+    ADZUNA_APP_KEY: str | None = None
+    ADZUNA_COUNTRY: str = "fr"
+    # Comma-separated search terms ingestion loops over for each configured
+    # provider -- broad enough to cover the ESN-heavy profiles the platform
+    # targets today; extend via .env as more profile types are supported.
+    OFFERS_SEARCH_KEYWORDS: str = (
+        "chef de projet,product owner,business analyst,scrum master,"
+        "data analyst,développeur,consultant"
+    )
+    # Results requested per keyword per provider per run -- kept modest to
+    # respect Adzuna's free-tier rate limits (25 calls/min, 250/day).
+    OFFERS_MAX_PER_KEYWORD: int = 50
+    OFFERS_INGESTION_INTERVAL_MINUTES: int = 60
+
+    @property
+    def offers_search_keywords(self) -> list[str]:
+        return [k.strip() for k in self.OFFERS_SEARCH_KEYWORDS.split(",") if k.strip()]
+
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False  # True -> JSON logs (prod), False -> pretty console

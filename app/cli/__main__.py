@@ -4,6 +4,7 @@ Commands:
     new-module <name> [--force]   scaffold a new feature module
     list-modules                  list discovered modules
     routes                        print the registered route table
+    sync-offers                   fetch job offers from configured providers now
 """
 
 from __future__ import annotations
@@ -64,6 +65,29 @@ def _cmd_routes(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_sync_offers(_: argparse.Namespace) -> int:
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.offers.service import OffersIngestionService
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            report = await OffersIngestionService(session).sync()
+        print(
+            f"fetched={report.fetched} created={report.created} "
+            f"updated={report.updated}"
+        )
+        if report.skipped_unconfigured:
+            print(
+                "skipped (no credentials configured): "
+                + ", ".join(report.skipped_unconfigured)
+            )
+
+    asyncio.run(_run())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -79,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("routes", help="print the route table").set_defaults(
         func=_cmd_routes
     )
+    sub.add_parser(
+        "sync-offers", help="fetch job offers from configured providers now"
+    ).set_defaults(func=_cmd_sync_offers)
 
     args = parser.parse_args(argv)
     return args.func(args)
