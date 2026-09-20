@@ -57,8 +57,13 @@ class BlockingRequirement(BaseModel):
     skill: str
     level: BlockerLevel = BlockerLevel.medium_blocker
     reason: str = ""
-    gap_value: float | None = None
-    gap_percent: float | None = None
+    # The model doesn't consistently return a bare number here -- observed in
+    # production returning e.g. "5y" (a magnitude with a unit) instead of 5.
+    # Accepted as either shape rather than coerced/parsed: nothing downstream
+    # does arithmetic on these yet, and guessing at unit conversion (years?
+    # percent? points?) would be worse than just keeping what the model said.
+    gap_value: float | str | None = None
+    gap_percent: float | str | None = None
 
     @model_validator(mode="before")
     @classmethod
