@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     # cv module's 60s timeout made every real call time out on all 3 retries
     # and fail every pair (observed in production: 2026-09-20).
     MATCHING_OPENAI_TIMEOUT_SECONDS: int = 180
+    # How many offers are scored concurrently per candidate profile. Each LLM
+    # call is network-bound (1-2 minutes via OpenAI) and touches no shared
+    # state, so running several at once cuts a run's wall-clock time roughly
+    # by this factor without changing total token cost. Keep modest to stay
+    # within your OpenAI account's concurrent-request/rate limits.
+    MATCHING_CONCURRENCY: int = 4
     MATCHING_INTERVAL_MINUTES: int = 60
     # How many of the most relevant offers (see shortlist.py's keyword-overlap
     # heuristic) are actually scored by the LLM per candidate per run. Bounds

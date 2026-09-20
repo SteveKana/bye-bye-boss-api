@@ -6,6 +6,7 @@ never triggers this itself -- see the `matching` module's docstring.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -90,7 +91,8 @@ class MatchingService:
     async def _run_for_profile(
         self, profile: CandidateProfile, report: MatchingRunReport
     ) -> None:
-        if not profile.raw_text:
+        cv_text = profile.raw_text
+        if not cv_text:
             # No extracted CV text to match against (shouldn't normally
             # happen for a "complete" profile, but never crash a whole run
             # over one odd profile).
@@ -104,6 +106,10 @@ class MatchingService:
             profile, pool, limit=settings.MATCHING_MAX_OFFERS_PER_CANDIDATE
         )
 
+        # DB reads stay sequential on the single session (AsyncSession isn't
+        # safe for concurrent use) -- figure out up front which pairs are
+        # already fresh and can be skipped without touching the LLM at all.
+        to_score: list[tuple[JobOffer, CandidateMatch | None]] = []
         for offer in shortlisted:
             existing = await self.matches.get_by_profile_and_offer(profile.id, offer.id)
             if (
@@ -113,23 +119,42 @@ class MatchingService:
             ):
                 report.pairs_skipped_fresh += 1
                 continue
+            to_score.append((offer, existing))
 
-            try:
-                analysis = await gateway.analyse_match(
-                    profile.raw_text, _format_offer_text(offer)
-                )
-            except AppError as exc:
+        if not to_score:
+            await self.session.commit()
+            return
+
+        # The LLM call is what's slow (network-bound, 1-2 minutes via OpenAI)
+        # and touches no shared state, so score several offers at once --
+        # bounded by MATCHING_CONCURRENCY to stay within OpenAI's rate limits.
+        # DB writes (below) happen afterward, back on the single session.
+        semaphore = asyncio.Semaphore(settings.MATCHING_CONCURRENCY)
+
+        async def _score(offer: JobOffer) -> LLMAnalysis | AppError:
+            async with semaphore:
+                try:
+                    return await gateway.analyse_match(
+                        cv_text, _format_offer_text(offer)
+                    )
+                except AppError as exc:
+                    return exc
+
+        results = await asyncio.gather(*(_score(offer) for offer, _ in to_score))
+
+        for (offer, existing), result in zip(to_score, results, strict=True):
+            if isinstance(result, AppError):
                 logger.warning(
                     "matching_pair_failed",
                     profile_id=str(profile.id),
                     offer_id=str(offer.id),
-                    error=str(exc),
+                    error=str(result),
                 )
                 report.pairs_failed += 1
                 continue
 
             await self._upsert(
-                profile.id, offer.id, offer.company_name, analysis, existing
+                profile.id, offer.id, offer.company_name, result, existing
             )
             report.pairs_scored += 1
 
