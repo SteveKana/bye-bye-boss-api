@@ -101,7 +101,7 @@ async def analyse_match(cv_text: str, offer_text: str) -> LLMAnalysis:
             _call_openai_sync,
             api_key=settings.OPENAI_API_KEY,
             model=settings.OPENAI_MODEL,
-            timeout=settings.OPENAI_TIMEOUT_SECONDS,
+            timeout=settings.MATCHING_OPENAI_TIMEOUT_SECONDS,
             prompt=prompt,
         )
     except MatchingFailedError:
