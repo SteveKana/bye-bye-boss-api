@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+from app.core import embeddings
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.models import utcnow
@@ -32,6 +33,12 @@ async def _make_complete_profile(**overrides) -> CandidateProfile:
         "identified_roles": ["Product Owner"],
         "domains": ["Data"],
         "skills": ["SQL", "Agile", "Backlog"],
+        # A pre-set embedding bypasses the lazy-compute-via-API path (see
+        # MatchingService._run_for_profile) so most tests here exercise the
+        # shortlisting/scoring logic without also depending on the
+        # embeddings gateway -- that path has its own dedicated test below
+        # (test_run_for_profile_computes_and_caches_profile_embedding_when_missing).
+        "embedding": [1.0, 0.0, 0.0],
     }
     defaults.update(overrides)
     async with AsyncSessionLocal() as session:
@@ -49,6 +56,9 @@ async def _make_offer(**overrides) -> JobOffer:
         "title": "Product Owner Data",
         "description": "Backlog, SQL, Agile, méthodologie SAFe.",
         "url": "https://example.com/offre",
+        # Same vector as _make_complete_profile's default -- a strong cosine
+        # match, so the default offer is always shortlisted.
+        "embedding": [1.0, 0.0, 0.0],
     }
     defaults.update(overrides)
     async with AsyncSessionLocal() as session:
@@ -82,25 +92,53 @@ async def test_run_for_profile_creates_a_match(monkeypatch) -> None:
     assert match.company_name == "Astek"
 
 
-async def test_run_for_profile_skips_irrelevant_offers(monkeypatch) -> None:
-    calls = []
+async def test_run_for_profile_computes_and_caches_profile_embedding_when_missing(
+    monkeypatch,
+) -> None:
+    """A profile with no cached embedding yet -- never matched before, or one
+    that already existed before this feature shipped -- gets one computed
+    from its CV text and persisted before shortlisting even runs (see
+    MatchingService._run_for_profile).
 
-    async def _fake(cv, offer):
-        calls.append(offer)
+    This replaces the old v1-heuristic test that used to assert a plainly
+    irrelevant offer never got scored at all. Under the embeddings design
+    there's no such hard cutoff (see shortlist.py's docstring: the LLM step
+    is the real judge of fit, this is only a cheap pre-filter) -- shortlist's
+    own ranking/ordering behaviour is covered by test_shortlist.py instead.
+    """
+
+    async def _fake_analyse(cv, offer):
         return _FAKE_ANALYSIS
 
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
+    monkeypatch.setattr(gateway, "analyse_match", _fake_analyse)
 
-    profile = await _make_complete_profile()
-    await _make_offer(
-        title="Boulanger H/F", description="Pétrissage et cuisson artisanale."
-    )
+    embed_calls: list[str] = []
+
+    async def _fake_embed(text: str) -> list[float]:
+        embed_calls.append(text)
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr(embeddings, "get_embedding", _fake_embed)
+
+    profile = await _make_complete_profile(embedding=None)
+    offer = await _make_offer()
 
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
-    assert report.pairs_scored == 0
-    assert calls == []
+    assert embed_calls == [profile.raw_text]
+    assert report.pairs_scored == 1
+
+    async with AsyncSessionLocal() as session:
+        refreshed = await CandidateProfileRepository(session).get(profile.id)
+    assert refreshed is not None
+    assert refreshed.embedding == [1.0, 0.0, 0.0]
+
+    async with AsyncSessionLocal() as session:
+        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
+    assert match is not None
 
 
 async def test_run_for_profile_skips_already_fresh_matches(monkeypatch) -> None:

@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import embeddings
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
@@ -98,6 +99,17 @@ class MatchingService:
             # over one odd profile).
             report.profiles_skipped_no_cv_text += 1
             return
+
+        if profile.embedding is None:
+            # Lazily computed and cached rather than at CV-import time: this
+            # also self-heals profiles that already existed before this
+            # feature shipped, with no separate backfill migration/script
+            # needed. Cleared back to None on every re-import (see
+            # cv/service.import_cv) so a new CV is never scored against the
+            # old one's embedding.
+            embedding = await embeddings.get_embedding(cv_text)
+            if embedding is not None:
+                profile = await self.profiles.update(profile, {"embedding": embedding})
 
         settings = get_settings()
         since = utcnow() - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)

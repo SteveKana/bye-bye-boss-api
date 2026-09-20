@@ -120,6 +120,16 @@ class CandidateProfile(BaseModel, table=True):
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
     raw_text: str | None = Field(default=None)
 
+    # Embedding vector of raw_text (see core/embeddings.py), used by
+    # matching/shortlist.py to rank the offer pool by semantic similarity.
+    # Computed lazily on the profile's first matching run (see
+    # MatchingService._run_for_profile), not here at import time -- and
+    # explicitly cleared (see service.import_cv) whenever raw_text changes,
+    # so a stale embedding is never scored against a new CV.
+    embedding: list[float] | None = Field(
+        default=None, sa_column=Column(_JsonListColumn)
+    )
+
     # The original uploaded file's bytes are saved to disk (see
     # extraction.CV_UPLOAD_DIR), named after this profile's id -- these two
     # fields are what's needed to serve it back with the right filename and

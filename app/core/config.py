@@ -115,6 +115,14 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-5"
     OPENAI_TIMEOUT_SECONDS: int = 60
+    # Same OPENAI_API_KEY, a separate cheap embedding model -- used by
+    # core/embeddings.py to rank offers by semantic similarity (see
+    # matching/shortlist.py) instead of literal keyword overlap. Embeddings
+    # are fast (well under OPENAI_TIMEOUT_SECONDS in practice), but given a
+    # dedicated setting rather than reusing it, since the two calls have
+    # nothing else in common.
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_TIMEOUT_SECONDS: int = 30
     CV_MAX_UPLOAD_MB: int = 5
     # Absolute path outside the git checkout so uploaded files survive a
     # deploy (which replaces the checkout's tracked files). On the server,
@@ -143,6 +151,12 @@ class Settings(BaseSettings):
     # respect Adzuna's free-tier rate limits (25 calls/min, 250/day).
     OFFERS_MAX_PER_KEYWORD: int = 50
     OFFERS_INGESTION_INTERVAL_MINUTES: int = 60
+    # How many offer embeddings are computed concurrently per ingestion run
+    # (see EMBEDDING_MODEL above). Only new/changed/never-embedded offers are
+    # embedded at all (see OffersIngestionService._upsert_batch), so this
+    # only matters for a large batch -- e.g. the first run after this
+    # feature was deployed, backfilling every existing offer at once.
+    OFFERS_EMBEDDING_CONCURRENCY: int = 8
 
     @property
     def offers_search_keywords(self) -> list[str]:
