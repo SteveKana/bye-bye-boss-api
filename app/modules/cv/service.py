@@ -68,6 +68,11 @@ class CvService:
         for field in _LIST_FIELDS:
             values[field] = extracted.get(field) or []
         values["raw_text"] = raw_text
+        # A new/re-imported CV invalidates the cached matching embedding
+        # (see core/embeddings.py) -- it's recomputed lazily, from the
+        # new raw_text, the next time matching runs for this profile (see
+        # MatchingService._run_for_profile). Never left stale here.
+        values["embedding"] = None
         values["status"] = ProfileStatus.draft.value
         values["cv_filename"] = filename
         values["cv_content_type"] = content_type

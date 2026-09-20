@@ -68,3 +68,11 @@ class JobOffer(BaseModel, table=True):
     )
 
     raw: dict = Field(default_factory=dict, sa_column=Column(_JsonColumn))
+
+    # Embedding vector of "title description" (see core/embeddings.py),
+    # used by matching/shortlist.py to rank offers by semantic similarity to
+    # a candidate's CV. Computed/refreshed at ingestion time -- see
+    # OffersIngestionService._upsert_batch -- only when missing or when the
+    # title/description actually changed, so an unchanged offer isn't
+    # re-embedded on every hourly sync.
+    embedding: list[float] | None = Field(default=None, sa_column=Column(_JsonColumn))
