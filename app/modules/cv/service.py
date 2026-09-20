@@ -155,6 +155,7 @@ class CvService:
                 "contract_types": data.contract_types,
                 "remote_preferences": data.remote_preferences,
                 "mobility": data.mobility,
+                "mobility_region": data.mobility_region,
                 "salary_target": data.salary_target,
                 "daily_rate": data.daily_rate,
                 "status": ProfileStatus.complete.value,

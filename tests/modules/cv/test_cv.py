@@ -203,6 +203,45 @@ async def test_preferences_update_completes_onboarding(
     assert body["daily_rate"] == 500
 
 
+async def test_preferences_update_saves_mobility_region(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+
+    r = await client.put(
+        PREFERENCES,
+        json={
+            "contract_types": ["CDI"],
+            "remote_preferences": ["Sur site"],
+            "mobility": "Région uniquement",
+            "mobility_region": "Île-de-France",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mobility"] == "Région uniquement"
+    assert body["mobility_region"] == "Île-de-France"
+
+
+async def test_preferences_rejects_unknown_mobility_region(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+
+    r = await client.put(
+        PREFERENCES,
+        json={
+            "contract_types": ["CDI"],
+            "remote_preferences": ["Sur site"],
+            "mobility": "Région uniquement",
+            "mobility_region": "Atlantide",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
 async def test_preferences_requires_at_least_one_contract_type(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

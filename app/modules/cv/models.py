@@ -109,6 +109,9 @@ class CandidateProfile(BaseModel, table=True):
         default_factory=list, sa_column=Column(_JsonListColumn)
     )
     mobility: str | None = Field(default=None)
+    # Only meaningful when mobility == "Région uniquement" -- which of the
+    # 18 French régions the candidate picked (see schemas.MobilityRegion).
+    mobility_region: str | None = Field(default=None)
     salary_target: int | None = Field(default=None)
     # Taux Journalier Moyen -- daily rate for candidates open to freelance
     # missions. Independent of salary_target: a candidate can look for both
