@@ -1,0 +1,568 @@
+{
+  "company_name": "Astek",
+  "career_score": 86,
+  "ats_score": 72,
+  "ats_potential": 90,
+  "cv_skills": [
+    "product_ownership",
+    "requirements_gathering",
+    "workshop_facilitation",
+    "agile",
+    "kanban",
+    "safe",
+    "backlog_management",
+    "user_story",
+    "agile_ceremonies",
+    "uat_testing",
+    "functional_specification",
+    "technical_specification",
+    "data_quality",
+    "data_analysis",
+    "sql",
+    "pl_sql",
+    "power_bi",
+    "kibana",
+    "dynatrace",
+    "postman",
+    "oracle_service_bus",
+    "oracle_sql_developer",
+    "sap_businessobjects",
+    "jira",
+    "confluence",
+    "azure_devops",
+    "google_cloud_platform",
+    "migration_management",
+    "interface_testing",
+    "impact_analysis",
+    "logs_analysis",
+    "shell_scripting",
+    "support_level2",
+    "stakeholder_management",
+    "communication",
+    "demo_presentation",
+    "defect_management",
+    "anomaly_triage",
+    "program_increment_planning",
+    "html",
+    "css",
+    "javascript",
+    "dsfr",
+    "miro",
+    "adobe_xd",
+    "laravel",
+    "bootstrap",
+    "flutter",
+    "algolia",
+    "excel",
+    "java",
+    "spring_batch",
+    "retail_sector",
+    "public_sector",
+    "pharma_sector",
+    "safe_popm_certification",
+    "french_native",
+    "english_b2"
+  ],
+  "job_skills": [
+    {
+      "skill": "requirements_gathering",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "user_story",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "backlog_management",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "agile_ceremonies",
+      "category": "methodology",
+      "importance": "required"
+    },
+    {
+      "skill": "data_flow_analysis",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "api_rest",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "api_soap",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "data_quality",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "impact_analysis_interfaces",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "stakeholder_management",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "uat_support",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "progress_communication",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "sql",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "json",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "xml",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "postman",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "soapui",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "jira",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "confluence",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "etl_tools",
+      "category": "tool",
+      "importance": "preferred"
+    },
+    {
+      "skill": "cloud_platforms",
+      "category": "tool",
+      "importance": "preferred"
+    },
+    {
+      "skill": "education_engineering_master",
+      "category": "education",
+      "importance": "required"
+    },
+    {
+      "skill": "experience_years_po_4",
+      "category": "experience",
+      "importance": "required"
+    },
+    {
+      "skill": "data_integration_project_experience",
+      "category": "experience",
+      "importance": "required"
+    }
+  ],
+  "mandatory_requirements": [
+    {
+      "skill": "requirements_gathering",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "user_story",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "backlog_management",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "agile_ceremonies",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "data_flow_analysis",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "api_rest",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "api_soap",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "data_quality",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "impact_analysis_interfaces",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "stakeholder_management",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "uat_support",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "progress_communication",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "sql",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "json",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "xml",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "postman",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "soapui",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "jira",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "confluence",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "education_engineering_master",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "experience_years_po_4",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "data_integration_project_experience",
+      "category": "",
+      "importance": "required"
+    }
+  ],
+  "preferred_requirements": [
+    {
+      "skill": "etl_tools",
+      "category": "",
+      "importance": "required"
+    },
+    {
+      "skill": "cloud_platforms",
+      "category": "",
+      "importance": "required"
+    }
+  ],
+  "blocking_requirements": [],
+  "blocking_message": "Aucun critère éliminatoire identifié. Le profil correspond aux responsabilités et à l’expérience requises. Pour maximiser le passage ATS, expliciter clairement API REST/SOAP, JSON/XML, ETL et SoapUI dans le CV.",
+  "matches": [
+    {
+      "skill": "requirements_gathering",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "user_story",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "backlog_management",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "agile_ceremonies",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "data_flow_analysis",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "api_rest",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "api_soap",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "data_quality",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "impact_analysis_interfaces",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 65
+    },
+    {
+      "skill": "stakeholder_management",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "uat_support",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "progress_communication",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "sql",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "json",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 55
+    },
+    {
+      "skill": "xml",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "postman",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "soapui",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 10
+    },
+    {
+      "skill": "jira",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "confluence",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "etl_tools",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 40
+    },
+    {
+      "skill": "cloud_platforms",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 75
+    },
+    {
+      "skill": "education_engineering_master",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "experience_years_po_4",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "data_integration_project_experience",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 75
+    }
+  ],
+  "ats_gaps": [
+    {
+      "skill": "api_rest",
+      "missing_in_cv": true,
+      "why_it_matters": "Exigence clé pour la définition des besoins d’échanges applicatifs et l’intégration de données.",
+      "cv_fix_example": "Ajouter dans Compétences/Outils: \"API REST, Postman (tests d’API, collections, variables)\" et sous expériences: \"Définition et validation de contrats d’API REST (schémas, statuts HTTP)\"."
+    },
+    {
+      "skill": "api_soap",
+      "missing_in_cv": true,
+      "why_it_matters": "Nombre d’interfaces legacy utilisent SOAP; mot-clé attendu par l’ATS.",
+      "cv_fix_example": "Sous E.Leclerc ou Cnaf: \"Intégration d’interfaces SOAP via Oracle Service Bus (WSDL, XSD), validation avec SoapUI\"."
+    },
+    {
+      "skill": "json",
+      "missing_in_cv": true,
+      "why_it_matters": "Format pivot des échanges REST; mot-clé directement parsé par l’ATS.",
+      "cv_fix_example": "Compétences: \"JSON, XML\". Expériences: \"Conception de payloads JSON, mapping champs, validation via Postman\"."
+    },
+    {
+      "skill": "xml",
+      "missing_in_cv": true,
+      "why_it_matters": "Fréquent pour SOAP/ESB; utile pour définir schémas et transformations.",
+      "cv_fix_example": "Expériences: \"Manipulation XML/XSD sur OSB, transformations (XSLT) si applicable\"."
+    },
+    {
+      "skill": "soapui",
+      "missing_in_cv": true,
+      "why_it_matters": "Outil explicitement listé; l’absence du mot-clé pénalise l’ATS.",
+      "cv_fix_example": "Outils: \"SoapUI (tests SOAP, mock services)\" si déjà utilisé; sinon laisser vide."
+    },
+    {
+      "skill": "etl_tools",
+      "missing_in_cv": true,
+      "why_it_matters": "Even if preferred, ETL/flux outillage renforce le positionnement Data.",
+      "cv_fix_example": "Si utilisé: citer l’outil exact (ex: Talend, DataStage). Sinon, expliciter \"gestion de flux de données, batchs Spring, ordonnancement\"."
+    },
+    {
+      "skill": "data_flow_analysis",
+      "missing_in_cv": true,
+      "why_it_matters": "La compréhension des flux inter-applications est au cœur du rôle PO Data.",
+      "cv_fix_example": "Expériences: \"Cartographie des flux applicatifs, définition des contrats d’échange, analyse d’impacts sur interfaces\"."
+    },
+    {
+      "skill": "data_lineage_traceability",
+      "missing_in_cv": true,
+      "why_it_matters": "Traçabilité et cohérence sont demandées pour la qualité de données.",
+      "cv_fix_example": "Expériences: \"Mise en place d’indicateurs de traçabilité (origine/consommation des données), suivi qualité de données\"."
+    },
+    {
+      "skill": "education_engineering_master",
+      "missing_in_cv": false,
+      "why_it_matters": "L’offre mentionne école d’ingénieur Bac+5; vous avez un Bac+5 en SI/numérique (non ingénieur).",
+      "cv_fix_example": "Valoriser le Bac+5 orienté SI et les modules techniques pertinents (data, intégration, dev) pour adresser le filtre ATS."
+    }
+  ],
+  "actions": [
+    {
+      "action": "Rendre explicites les mots-clés Data/Intégration attendus par l’ATS",
+      "details": "Ajouter dans une section Compétences/Outils: \"API REST, API SOAP, JSON, XML, Postman, SoapUI, Oracle Service Bus\"."
+    },
+    {
+      "action": "Renforcer la preuve d’expérience sur les flux et interfaces",
+      "details": "Sous E.Leclerc: \"Cartographie des flux inter-applications, définition de contrats d’échange REST/SOAP, analyse d’impacts sur interfaces, suivi des erreurs d’intégration (logs, Kibana)\"."
+    },
+    {
+      "action": "Montrer la qualité et traçabilité des données",
+      "details": "Ajouter: \"Contrôles de qualité de données (completude, cohérence), traçabilité bout‑en‑bout, gestion des anomalies data\"."
+    },
+    {
+      "action": "Chiffrer et contextualiser",
+      "details": "Quantifier: nombre d’APIs/backlogs/users stories, volumétrie de données, gains temps/perf, taux d’incidents résolus."
+    },
+    {
+      "action": "Aligner l’intitulé et le pitch",
+      "details": "Titre/sommaire: \"Product Owner Data | Intégration & Qualité des données | REST/SOAP, SQL, Postman, OSB, Jira/Confluence\"."
+    },
+    {
+      "action": "Clarifier l’environnement Cloud et les batchs",
+      "details": "Lister précisément ce qui est utilisé: \"GCP (si services précis), Azure DevOps (CI/CD), Spring Batch (batchs d’intégration)\"."
+    },
+    {
+      "action": "Lister les rituels et artefacts Agile clés",
+      "details": "Mentionner DoR/DoD, PI Planning SAFe, démos, rétros, et gestion de backlog multi-équipes."
+    },
+    {
+      "action": "Optimiser la section Outils pour la recherche booléenne",
+      "details": "Regrouper: \"SQL, PL/SQL, SQL Server, Oracle, Postman, SoapUI, OSB, Jira, Confluence, Kibana, Dynatrace, Power BI\"."
+    },
+    {
+      "action": "Éducation: adresser le filtre école d’ingénieur",
+      "details": "Formuler: \"Bac+5 en Management des Systèmes d’Information (orientation data & intégration)\" et rappeler la certif SAFe POPM."
+    }
+  ],
+  "career_explanation": [
+    "Expérience continue en Product Ownership depuis 02/2022 jusqu’à aujourd’hui (~4 ans 5 mois), incluant Proxy PO (Cnaf), PO Retail (E.Leclerc) et PO/Founder (Weekr).",
+    "Forte exposition Data: SQL, qualité de données, reporting (Power BI), monitoring (Kibana/Dynatrace), analyse de logs et recettes technico-fonctionnelles.",
+    "Contexte intégration: Oracle Service Bus, Postman, migrations applicatives et coordination multi‑équipes.",
+    "Méthodologies solides: Agile/Scrum/SAFe (PI Planning, DoR), backlog et US, rituels.",
+    "Secteurs variés (retail, public, pharma) transférables au secteur Transport."
+  ],
+  "ats_explanation": [
+    "Score ATS brut élevé grâce aux correspondances fortes sur PO, backlog, US, Agile, SQL, Postman, Jira/Confluence et qualité de données.",
+    "Aucune pénalité hard/medium: les exigences critiques (Bac+5, ≥4 ans PO, intégration) sont remplies.",
+    "Pénalités soft cumulées dues à l’absence explicite des mots-clés requis par l’ATS: \"API REST\", \"API SOAP\", \"JSON\", \"XML\", \"SoapUI\" et \"ETL\".",
+    "Exigence éducation école d’ingénieur traitée comme soft (non réglementaire); le Bac+5 SI compense partiellement.",
+    "ATS Potential élevé (90) car l’ajout de mots-clés déjà couverts dans le parcours peut nettement augmenter le score sans inventer de compétences."
+  ]
+}
