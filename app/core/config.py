@@ -148,6 +148,23 @@ class Settings(BaseSettings):
     def offers_search_keywords(self) -> list[str]:
         return [k.strip() for k in self.OFFERS_SEARCH_KEYWORDS.split(",") if k.strip()]
 
+    # ---- Matching (CV <-> offers) ------------------------------------------
+    # Uses the same OpenAI credentials/model as the `cv` module (OPENAI_API_KEY
+    # / OPENAI_MODEL above) -- one LLM vendor for the whole project. Runs as a
+    # background job (see app/modules/matching/jobs.py) rather than on-demand:
+    # a candidate's dashboard reads pre-computed results instead of waiting on
+    # an LLM call, and cost stays predictable regardless of how often someone
+    # opens the page.
+    MATCHING_INTERVAL_MINUTES: int = 60
+    # How many of the most relevant offers (see shortlist.py's keyword-overlap
+    # heuristic) are actually scored by the LLM per candidate per run. Bounds
+    # cost -- without this, cost would grow with the full offer pool size.
+    MATCHING_MAX_OFFERS_PER_CANDIDATE: int = 15
+    # Only offers ingested within this window are even considered for
+    # shortlisting -- keeps the in-memory shortlisting step (and the pool of
+    # "still relevant" offers) bounded as the offers table grows.
+    MATCHING_MAX_OFFER_POOL_DAYS: int = 30
+
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False  # True -> JSON logs (prod), False -> pretty console

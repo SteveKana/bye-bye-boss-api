@@ -13,8 +13,11 @@ from app.core.module import Module
 
 # Import side effects: register the model so Alembic sees it.
 from app.modules.cv import models as models  # noqa: F401
+from app.modules.cv.models import CandidateProfile, ProfileStatus
+from app.modules.cv.repository import CandidateProfileRepository
 from app.modules.cv.routes.v1 import cv_routes
 from app.modules.cv.schemas import CandidateProfileRead
+from app.modules.cv.service import CvService
 
 _router = APIRouter()
 _router.include_router(cv_routes.router)
@@ -30,4 +33,8 @@ module = Module(
 __all__ = [
     "module",
     "CandidateProfileRead",
+    "CandidateProfile",
+    "ProfileStatus",
+    "CandidateProfileRepository",
+    "CvService",
 ]

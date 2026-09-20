@@ -5,6 +5,7 @@ Commands:
     list-modules                  list discovered modules
     routes                        print the registered route table
     sync-offers                   fetch job offers from configured providers now
+    run-matching                  score complete profiles against offers now
 """
 
 from __future__ import annotations
@@ -88,6 +89,25 @@ def _cmd_sync_offers(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run_matching(_: argparse.Namespace) -> int:
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.matching.service import MatchingService
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            report = await MatchingService(session).sync_all()
+        print(
+            f"profiles={report.profiles_processed} scored={report.pairs_scored} "
+            f"skipped_fresh={report.pairs_skipped_fresh} failed={report.pairs_failed} "
+            f"skipped_no_cv_text={report.profiles_skipped_no_cv_text}"
+        )
+
+    asyncio.run(_run())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -106,6 +126,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "sync-offers", help="fetch job offers from configured providers now"
     ).set_defaults(func=_cmd_sync_offers)
+    sub.add_parser(
+        "run-matching", help="score complete profiles against offers now"
+    ).set_defaults(func=_cmd_run_matching)
 
     args = parser.parse_args(argv)
     return args.func(args)

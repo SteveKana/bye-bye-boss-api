@@ -15,6 +15,7 @@ from app.core.module import Module
 # Import side effects: register the model (Alembic) and the ingestion job.
 from app.modules.offers import jobs as jobs  # noqa: F401
 from app.modules.offers import models as models  # noqa: F401
+from app.modules.offers.models import JobOffer
 from app.modules.offers.repository import JobOfferRepository
 from app.modules.offers.schemas import JobOfferRead
 from app.modules.offers.service import OffersIngestionService
@@ -27,6 +28,7 @@ module = Module(
 
 __all__ = [
     "module",
+    "JobOffer",
     "JobOfferRepository",
     "JobOfferRead",
     "OffersIngestionService",
