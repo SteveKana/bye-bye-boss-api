@@ -64,6 +64,68 @@ async def test_france_travail_search_normalizes_results(monkeypatch) -> None:
     assert offer.raw["id"] == "123ABC"
 
 
+async def test_france_travail_prefers_actualisation_date_over_creation(
+    monkeypatch,
+) -> None:
+    """France Travail's own site shows "Actualisé le ..." (dateActualisation),
+    not the original creation date -- using dateCreation made long-running
+    offers look far staler than France Travail itself reports them as."""
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Product Owner",
+                        "dateCreation": "2026-06-01T08:00:00.000Z",
+                        "dateActualisation": "2026-09-18T08:00:00.000Z",
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].published_at.isoformat() == "2026-09-18T08:00:00+00:00"
+
+
+async def test_france_travail_falls_back_to_creation_date_when_no_actualisation(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Product Owner",
+                        "dateCreation": "2026-06-01T08:00:00.000Z",
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].published_at.isoformat() == "2026-06-01T08:00:00+00:00"
+
+
 async def test_france_travail_search_failure_returns_empty(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
     monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")

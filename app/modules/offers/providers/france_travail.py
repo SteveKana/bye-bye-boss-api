@@ -110,6 +110,16 @@ class FranceTravailProvider(OfferProvider):
             location=lieu.get("libelle"),
             contract_type=item.get("typeContratLibelle") or item.get("typeContrat"),
             salary_label=salaire.get("libelle"),
-            published_at=parse_iso_datetime(item.get("dateCreation")),
+            # `dateActualisation` (last refreshed by the employer/agency) is
+            # what France Travail's own site displays as "Actualisé le ..."
+            # -- `dateCreation` is the offer's original creation date, which
+            # for a long-running or re-surfaced offer can be far in the past
+            # and made offers look stale (reported: an offer showing
+            # "Actualisé le 18 septembre 2026" on France Travail was showing
+            # as "publiée il y a 111 jours" here). Fall back to dateCreation
+            # only if dateActualisation is absent.
+            published_at=parse_iso_datetime(
+                item.get("dateActualisation") or item.get("dateCreation")
+            ),
             raw=item,
         )
