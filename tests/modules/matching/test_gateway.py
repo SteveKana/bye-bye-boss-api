@@ -25,6 +25,17 @@ _REAL_RESPONSE_WITH_BLOCKERS = (
     _FIXTURES / "numih_scrum_master_real_response.json"
 ).read_text()
 
+# A third real response, captured from production (2026-09-21, a Business
+# Analyst Fonctionnel mission, employer not named) -- caught another real
+# bug: the model returned cv_skills as {"concept": ..., "group": ...}
+# objects (mirroring job_skills' own shape) instead of the flat concept
+# strings ETAPE 1 of the prompt asks for. Every entry failed validation,
+# which silently dropped the whole analysis (matching.service just skips a
+# pair on a schema error) -- kept as a regression test.
+_REAL_RESPONSE_WITH_CATEGORIZED_CV_SKILLS = (
+    _FIXTURES / "business_analyst_fonctionnel_real_response.json"
+).read_text()
+
 
 async def test_analyse_match_without_api_key_raises_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", None)
@@ -75,6 +86,29 @@ async def test_analyse_match_parses_real_response_with_string_gap_values(
     assert java_gap.level.value == "hard_blocker"
     assert java_gap.gap_value == "5y"  # kept as-is, not coerced/parsed
     assert java_gap.gap_percent == 100
+
+
+async def test_analyse_match_parses_real_response_with_categorized_cv_skills(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway,
+        "_call_openai_sync",
+        lambda **kwargs: _REAL_RESPONSE_WITH_CATEGORIZED_CV_SKILLS,
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.career_score == 78
+    assert analysis.ats_score == 46
+    assert analysis.ats_potential == 54
+    # The {"concept": ..., "group": ...} wrapper is unwrapped down to the
+    # concept string -- there's no field on this side to keep "group" in,
+    # same trade-off job_skills' accept_plain_string makes in reverse.
+    assert len(analysis.cv_skills) == 58
+    assert analysis.cv_skills[0] == "product_ownership"
+    assert all(isinstance(skill, str) for skill in analysis.cv_skills)
 
 
 async def test_analyse_match_wraps_response_in_json_fence(monkeypatch) -> None:

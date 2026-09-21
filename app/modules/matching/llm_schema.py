@@ -131,6 +131,27 @@ class LLMAnalysis(BaseModel):
     cv_skills: list[str] = Field(default_factory=list)
     job_skills: list[JobSkill] = Field(default_factory=list)
 
+    @field_validator("cv_skills", mode="before")
+    @classmethod
+    def accept_categorized_skills(cls, value):
+        # The prompt asks for a flat list of concept strings (ETAPE 1), but
+        # the model sometimes mirrors job_skills' richer shape instead and
+        # returns {"concept": ..., "group": ...} objects here too -- observed
+        # in production (2026-09-21), where it made every cv_skills entry
+        # fail validation and silently dropped the whole analysis (see
+        # matching.service, which just skips a pair on a schema error).
+        # There's no `category`/`group` field on this side to keep the extra
+        # detail in, so only the label is kept, same as job_skills' own
+        # accept_plain_string does in the other direction.
+        if not isinstance(value, list):
+            return value
+        return [
+            (item.get("concept") or item.get("skill") or item.get("name") or "")
+            if isinstance(item, dict)
+            else item
+            for item in value
+        ]
+
     mandatory_requirements: list[JobSkill] = Field(default_factory=list)
     preferred_requirements: list[JobSkill] = Field(default_factory=list)
 
