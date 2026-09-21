@@ -22,3 +22,4 @@ class JobOfferRead(BaseModel):
     salary_label: str | None
     url: str
     published_at: datetime | None
+    is_full_remote: bool
