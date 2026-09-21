@@ -36,6 +36,17 @@ _REAL_RESPONSE_WITH_CATEGORIZED_CV_SKILLS = (
     _FIXTURES / "business_analyst_fonctionnel_real_response.json"
 ).read_text()
 
+# A fourth real response, captured from production (2026-09-21, a Product
+# Owner Low-Code mission) -- caught a third real bug: the model returned a
+# blocking_requirements entry with "level": "soft_blocker", a value the
+# prompt itself defines (see prompt.py, ETAPE 5/8/9) but BlockerLevel didn't
+# accept -- every prior incident was the model deviating from the prompt;
+# this one was the schema being stricter than the prompt it was meant to
+# match. Kept as a regression test.
+_REAL_RESPONSE_WITH_SOFT_BLOCKER = (
+    _FIXTURES / "product_owner_lowcode_soft_blocker_real_response.json"
+).read_text()
+
 
 async def test_analyse_match_without_api_key_raises_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", None)
@@ -109,6 +120,27 @@ async def test_analyse_match_parses_real_response_with_categorized_cv_skills(
     assert len(analysis.cv_skills) == 58
     assert analysis.cv_skills[0] == "product_ownership"
     assert all(isinstance(skill, str) for skill in analysis.cv_skills)
+
+
+async def test_analyse_match_parses_real_response_with_soft_blocker(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway,
+        "_call_openai_sync",
+        lambda **kwargs: _REAL_RESPONSE_WITH_SOFT_BLOCKER,
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.career_score == 80
+    assert analysis.ats_score == 60
+    assert analysis.ats_potential == 70
+    assert len(analysis.blocking_requirements) == 1
+    soft_blocker = analysis.blocking_requirements[0]
+    assert soft_blocker.skill == "microsoft_power_platform"
+    assert soft_blocker.level.value == "soft_blocker"
 
 
 async def test_analyse_match_wraps_response_in_json_fence(monkeypatch) -> None:

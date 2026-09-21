@@ -30,6 +30,17 @@ class Importance(enum.StrEnum):
 class BlockerLevel(enum.StrEnum):
     hard_blocker = "hard_blocker"
     medium_blocker = "medium_blocker"
+    # The prompt (see prompt.py, ETAPE 5/8/9) defines soft_blocker as a real
+    # classification level -- it's just supposed to never appear *alone* in
+    # blocking_requirements (ETAPE 10: "jamais un soft seul"). Observed in
+    # production (2026-09-21) doing exactly that anyway (one soft_blocker
+    # entry, on its own, for a Product Owner Low-Code offer) -- validation
+    # rejected the whole analysis over a value the prompt itself defines.
+    # Accepting it costs nothing (nothing downstream branches on the level's
+    # exact value) and matches this schema's own general policy of not
+    # dropping an entire match over the model not perfectly following an
+    # instruction about a value it's otherwise allowed to produce.
+    soft_blocker = "soft_blocker"
 
 
 class MatchResultStatus(enum.StrEnum):
