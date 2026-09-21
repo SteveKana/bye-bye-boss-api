@@ -25,6 +25,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.regions import region_from_insee_code, region_from_postal_code
+from app.core.remote_work import looks_full_remote
 from app.modules.offers.providers._util import parse_iso_datetime
 from app.modules.offers.providers.base import NormalizedOffer, OfferProvider
 
@@ -100,16 +102,27 @@ class FranceTravailProvider(OfferProvider):
         entreprise = item.get("entreprise") or {}
         salaire = item.get("salaire") or {}
         origine = item.get("origineOffre") or {}
+        title = item.get("intitule") or ""
+        description = item.get("description")
+        # codePostal resolves a région directly and is preferred; commune is
+        # an INSEE code (same département-prefix convention, see
+        # core/regions.py) kept as a fallback for the rarer case where only
+        # one of the two is present.
+        region = region_from_postal_code(
+            lieu.get("codePostal")
+        ) or region_from_insee_code(lieu.get("commune"))
         return NormalizedOffer(
             external_id=offer_id,
-            title=item.get("intitule") or "",
+            title=title,
             url=origine.get("urlOrigine")
             or f"https://candidat.francetravail.fr/offres/recherche/detail/{offer_id}",
             company_name=entreprise.get("nom"),
-            description=item.get("description"),
+            description=description,
             location=lieu.get("libelle"),
             contract_type=item.get("typeContratLibelle") or item.get("typeContrat"),
             salary_label=salaire.get("libelle"),
+            region=region,
+            is_full_remote=looks_full_remote(title, description),
             # `dateActualisation` (last refreshed by the employer/agency) is
             # what France Travail's own site displays as "Actualisé le ..."
             # -- `dateCreation` is the offer's original creation date, which

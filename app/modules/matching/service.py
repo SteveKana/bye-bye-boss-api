@@ -20,6 +20,7 @@ from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.modules.cv import CandidateProfile, CandidateProfileRepository, ProfileStatus
 from app.modules.matching import gateway
+from app.modules.matching.geo_filter import filter_by_geography
 from app.modules.matching.llm_schema import LLMAnalysis
 from app.modules.matching.models import CandidateMatch
 from app.modules.matching.repository import CandidateMatchRepository
@@ -114,8 +115,12 @@ class MatchingService:
         settings = get_settings()
         since = utcnow() - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
         pool = await self.offers.list_recent(since=since)
+        # Enforce the candidate's mobility preference (see geo_filter's
+        # docstring) before ranking -- an out-of-zone offer should never
+        # occupy one of the limited shortlist slots in the first place.
+        eligible = filter_by_geography(profile, pool)
         shortlisted = shortlist_offers(
-            profile, pool, limit=settings.MATCHING_MAX_OFFERS_PER_CANDIDATE
+            profile, eligible, limit=settings.MATCHING_MAX_OFFERS_PER_CANDIDATE
         )
 
         # DB reads stay sequential on the single session (AsyncSession isn't

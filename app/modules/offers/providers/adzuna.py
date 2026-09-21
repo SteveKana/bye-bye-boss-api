@@ -16,6 +16,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.regions import normalize_region_name
+from app.core.remote_work import looks_full_remote
 from app.modules.offers.providers._util import parse_iso_datetime
 from app.modules.offers.providers.base import NormalizedOffer, OfferProvider
 
@@ -63,11 +65,26 @@ class AdzunaProvider(OfferProvider):
 
         return [self._normalize(item) for item in payload.get("results", [])]
 
+    def _region_from_area(self, location: dict) -> str | None:
+        """Adzuna's `location.area` is a hierarchical breadcrumb (e.g., for
+        the UK, ["UK", "South East England", "Buckinghamshire", "Marlow"] --
+        see https://developer.adzuna.com/docs/regional). No French example
+        was available while building this, so rather than assume a fixed
+        index for the région, every element is tried and the first one that
+        normalizes to a known région (see core/regions.py) wins."""
+        for element in location.get("area") or []:
+            region = normalize_region_name(element)
+            if region:
+                return region
+        return None
+
     def _normalize(self, item: dict) -> NormalizedOffer:
         company = item.get("company") or {}
         location = item.get("location") or {}
         salary_min = item.get("salary_min")
         salary_max = item.get("salary_max")
+        title = item.get("title") or ""
+        description = item.get("description")
         # Adzuna splits "permanent/contract" and "full_time/part_time" into
         # two separate fields; there's no single equivalent on our model, so
         # both are folded into the one free-text contract_type label.
@@ -76,14 +93,16 @@ class AdzunaProvider(OfferProvider):
         )
         return NormalizedOffer(
             external_id=str(item.get("id")),
-            title=item.get("title") or "",
+            title=title,
             url=item.get("redirect_url") or "",
             company_name=company.get("display_name"),
-            description=item.get("description"),
+            description=description,
             location=location.get("display_name"),
             contract_type=contract_type or None,
             salary_min=int(salary_min) if salary_min is not None else None,
             salary_max=int(salary_max) if salary_max is not None else None,
             published_at=parse_iso_datetime(item.get("created")),
+            region=self._region_from_area(location),
+            is_full_remote=looks_full_remote(title, description),
             raw=item,
         )

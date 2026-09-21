@@ -210,6 +210,55 @@ async def test_run_for_profile_skips_when_no_raw_text(monkeypatch) -> None:
     assert report.pairs_scored == 0
 
 
+async def test_run_for_profile_excludes_offers_outside_mobility_region(
+    monkeypatch,
+) -> None:
+    """End-to-end check that MatchingService actually applies geo_filter
+    before shortlisting/scoring -- geo_filter's own unit tests cover the
+    filtering logic itself, this just confirms the wiring."""
+
+    async def _fake(cv, offer):
+        raise AssertionError("the out-of-region offer should never reach the LLM")
+
+    monkeypatch.setattr(gateway, "analyse_match", _fake)
+
+    profile = await _make_complete_profile(
+        mobility="Région uniquement", mobility_region="Bretagne"
+    )
+    await _make_offer(region="Occitanie")
+
+    async with AsyncSessionLocal() as session:
+        report = await MatchingService(session).run_for_profile(profile)
+
+    assert report.pairs_scored == 0
+    assert report.pairs_failed == 0
+
+
+async def test_run_for_profile_keeps_full_remote_offer_outside_mobility_region(
+    monkeypatch,
+) -> None:
+    async def _fake(cv, offer):
+        return _FAKE_ANALYSIS
+
+    monkeypatch.setattr(gateway, "analyse_match", _fake)
+
+    profile = await _make_complete_profile(
+        mobility="Région uniquement", mobility_region="Bretagne"
+    )
+    offer = await _make_offer(region="Occitanie", is_full_remote=True)
+
+    async with AsyncSessionLocal() as session:
+        report = await MatchingService(session).run_for_profile(profile)
+
+    assert report.pairs_scored == 1
+
+    async with AsyncSessionLocal() as session:
+        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
+    assert match is not None
+
+
 async def test_run_for_profile_scores_offers_concurrently_within_limit(
     monkeypatch,
 ) -> None:

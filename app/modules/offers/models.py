@@ -57,6 +57,17 @@ class JobOffer(BaseModel, table=True):
     # remote/hybrid/on-site field -- left None for now rather than guessed
     # from free text; a future refinement could derive it from `description`.
     remote_policy: str | None = Field(default=None)
+    # One of app.core.regions.FRENCH_REGIONS, derived at ingestion time from
+    # whatever structured location data the source gives us (see each
+    # provider's _normalize) -- None when that data was missing or
+    # unrecognized. Consumed by matching/geo_filter.py to enforce a
+    # candidate's "Région uniquement" mobility preference; an offer with no
+    # région is excluded outright rather than assumed to match.
+    region: str | None = Field(default=None, index=True)
+    # Best-effort keyword detection over title+description (see
+    # core/remote_work.py) -- a fully-remote offer always bypasses the
+    # geographic filter in matching/geo_filter.py, regardless of `region`.
+    is_full_remote: bool = Field(default=False, nullable=False)
     salary_min: int | None = Field(default=None)
     salary_max: int | None = Field(default=None)
     # Fallback for sources (France Travail) that only give a free-text

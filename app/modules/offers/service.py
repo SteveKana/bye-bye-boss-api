@@ -142,6 +142,8 @@ class OffersIngestionService:
             "location": item.location,
             "contract_type": item.contract_type,
             "remote_policy": item.remote_policy,
+            "region": item.region,
+            "is_full_remote": item.is_full_remote,
             "salary_min": item.salary_min,
             "salary_max": item.salary_max,
             "salary_label": item.salary_label,
