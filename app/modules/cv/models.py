@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field
 
@@ -118,6 +118,16 @@ class CandidateProfile(BaseModel, table=True):
     # a permanent role and freelance work at once, so neither field implies
     # or replaces the other.
     daily_rate: int | None = Field(default=None)
+
+    # When the CV was last actually (re-)parsed (see service.import_cv) --
+    # deliberately separate from BaseModel's `updated_at`, which the DB
+    # bumps on ANY change to this row (saving preferences, verification
+    # edits...). Without this, "Dernière mise à jour" on the profile page
+    # would read as "you just updated your CV" whenever the candidate had
+    # merely saved a preference.
+    cv_analyzed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     # Texte brut extrait du fichier, conservé pour permettre un nouveau
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
