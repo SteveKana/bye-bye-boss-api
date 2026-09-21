@@ -39,6 +39,16 @@ class NormalizedOffer:
     salary_max: int | None = None
     salary_label: str | None = None
     published_at: datetime | None = None
+    # One of app.core.regions.FRENCH_REGIONS, or None when the source gave
+    # us nothing (or nothing recognizable) to derive one from -- see each
+    # provider's own _normalize for how it's worked out. Consumed by
+    # matching/geo_filter.py: an offer with no région is excluded outright
+    # whenever the candidate has restricted their search geographically.
+    region: str | None = None
+    # Best-effort keyword detection (see core/remote_work.py) -- a
+    # fully-remote offer always bypasses the geographic filter regardless
+    # of its région (or lack of one).
+    is_full_remote: bool = False
     # Full original payload from the source, kept for later reprocessing.
     raw: dict = field(default_factory=dict)
 

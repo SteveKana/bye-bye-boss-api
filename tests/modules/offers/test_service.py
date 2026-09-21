@@ -25,13 +25,15 @@ class _FakeProvider(OfferProvider):
         return self.offers_by_keyword.get(keywords, [])
 
 
-def _offer(external_id: str, title: str) -> NormalizedOffer:
-    return NormalizedOffer(
-        external_id=external_id,
-        title=title,
-        url=f"https://example.com/{external_id}",
-        company_name="Astek",
-    )
+def _offer(external_id: str, title: str, **overrides) -> NormalizedOffer:
+    defaults = {
+        "external_id": external_id,
+        "title": title,
+        "url": f"https://example.com/{external_id}",
+        "company_name": "Astek",
+    }
+    defaults.update(overrides)
+    return NormalizedOffer(**defaults)
 
 
 async def test_sync_creates_new_offers() -> None:
@@ -155,3 +157,58 @@ async def test_sync_reembeds_when_title_changes(monkeypatch) -> None:
     async with AsyncSessionLocal() as session:
         await OffersIngestionService(session, providers=[provider]).sync()
     assert len(calls) == 2
+
+
+async def test_sync_persists_region_and_full_remote_flag() -> None:
+    provider = _FakeProvider("test_source")
+    provider.offers_by_keyword = {
+        "chef de projet": [
+            _offer(
+                "1",
+                "Chef de projet SI",
+                region="Bretagne",
+                is_full_remote=True,
+            )
+        ]
+    }
+
+    async with AsyncSessionLocal() as session:
+        await OffersIngestionService(session, providers=[provider]).sync()
+
+    async with AsyncSessionLocal() as session:
+        offers = await JobOfferRepository(session).list()
+    assert offers[0].region == "Bretagne"
+    assert offers[0].is_full_remote is True
+
+
+async def test_sync_refreshes_region_and_full_remote_flag_on_an_unchanged_offer() -> (
+    None
+):
+    """Unlike the embedding (only recomputed when title/description
+    changes), region/is_full_remote are cheap to derive and always
+    rewritten on every sync -- so an offer ingested before this feature
+    shipped picks up a correct value on its very next sync, with no
+    separate backfill needed."""
+    provider = _FakeProvider("test_source")
+    provider.offers_by_keyword = {"chef de projet": [_offer("1", "Chef de projet SI")]}
+
+    async with AsyncSessionLocal() as session:
+        await OffersIngestionService(session, providers=[provider]).sync()
+    async with AsyncSessionLocal() as session:
+        offers = await JobOfferRepository(session).list()
+    assert offers[0].region is None
+    assert offers[0].is_full_remote is False
+
+    # Same title/description (no re-embedding triggered), but the provider
+    # now reports a région and full-remote status for it.
+    provider.offers_by_keyword = {
+        "chef de projet": [
+            _offer("1", "Chef de projet SI", region="Corse", is_full_remote=True)
+        ]
+    }
+    async with AsyncSessionLocal() as session:
+        await OffersIngestionService(session, providers=[provider]).sync()
+    async with AsyncSessionLocal() as session:
+        offers = await JobOfferRepository(session).list()
+    assert offers[0].region == "Corse"
+    assert offers[0].is_full_remote is True
