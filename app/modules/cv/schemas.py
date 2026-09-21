@@ -43,6 +43,12 @@ class CandidateProfileRead(BaseSchema):
     id: uuid.UUID
     status: str
     updated_at: datetime
+    # When the CV itself was last parsed (see service.import_cv) -- distinct
+    # from `updated_at` above, which bumps on ANY change to this row
+    # (preferences, verification corrections...). The profile page's
+    # "Dernière mise à jour" next to the CV download button means "last time
+    # we reprocessed your CV", so it reads this field, not `updated_at`.
+    cv_analyzed_at: datetime | None
     first_name: str | None
     last_name: str | None
     headline: str | None

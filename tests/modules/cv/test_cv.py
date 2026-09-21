@@ -84,6 +84,14 @@ async def test_upload_parses_and_creates_draft_profile(
     assert body["skill_categories"][0]["skills"] == ["Product Management"]
 
 
+async def test_upload_sets_cv_analyzed_at(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["cv_analyzed_at"] is not None
+
+
 async def test_synthesized_fields_are_not_user_editable(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -201,6 +209,31 @@ async def test_preferences_update_completes_onboarding(
     assert body["remote_preferences"] == ["Hybride", "Full remote"]
     assert body["salary_target"] == 55000
     assert body["daily_rate"] == 500
+
+
+async def test_saving_preferences_does_not_touch_cv_analyzed_at(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    # cv_analyzed_at means "the CV was last (re-)parsed" -- saving
+    # preferences updates the same row (bumping the generic `updated_at`)
+    # but must never look like a fresh CV analysis on the profile page.
+    upload = await client.post(
+        UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers
+    )
+    analyzed_at = upload.json()["cv_analyzed_at"]
+    assert analyzed_at is not None
+
+    r = await client.put(
+        PREFERENCES,
+        json={
+            "contract_types": ["CDI"],
+            "remote_preferences": ["Sur site"],
+            "mobility": "France entière",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["cv_analyzed_at"] == analyzed_at
 
 
 async def test_preferences_update_saves_mobility_region(

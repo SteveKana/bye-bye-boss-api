@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.models import utcnow
 from app.modules.cv import extraction, gateway
 from app.modules.cv.models import AvailabilityStatus, CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
@@ -76,6 +77,10 @@ class CvService:
         values["status"] = ProfileStatus.draft.value
         values["cv_filename"] = filename
         values["cv_content_type"] = content_type
+        # This is the one place a CV is actually (re-)parsed -- see the
+        # field's docstring in models.py for why it's kept apart from the
+        # generic, always-bumped `updated_at`.
+        values["cv_analyzed_at"] = utcnow()
 
         if profile is None:
             # availability_status defaults to "immediate" on the column
