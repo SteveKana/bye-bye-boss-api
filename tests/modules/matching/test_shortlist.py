@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import uuid
 
 from app.modules.cv.models import CandidateProfile
@@ -69,3 +70,50 @@ def test_shortlist_sorts_offers_with_no_embedding_last() -> None:
     result = shortlist_offers(profile, [no_embedding, has_embedding], limit=10)
 
     assert result == [has_embedding, no_embedding]
+
+
+def test_shortlist_normalizes_scores_per_source() -> None:
+    """A standout offer from a source whose postings are systematically
+    thinner in content (e.g. Adzuna's free-tier API truncates descriptions
+    to ~500 characters vs France Travail's ~2500 -- see this module's
+    docstring) shouldn't be buried under every offer from a richer source
+    just because its raw similarity trails them all. Comparing each offer
+    to its own source's mean/stdev lets a genuine standout compete even
+    when its raw score sits below a whole cluster from another source."""
+    profile = _profile(embedding=[1.0, 0.0, 0.0])
+
+    def _at(cosine: float) -> list[float]:
+        return [cosine, math.sqrt(1 - cosine * cosine), 0.0]
+
+    # france_travail clusters at raw ~0.7-0.9; adzuna clusters much lower
+    # (~0.1-0.5), but 0.5 is a clear outlier *above its own peers* --
+    # despite trailing every single france_travail offer in raw terms.
+    ft_high = _offer("FT haut", _at(0.9), source="france_travail")
+    ft_mid = _offer("FT moyen", _at(0.8), source="france_travail")
+    ft_low = _offer("FT bas", _at(0.7), source="france_travail")
+    adzuna_standout = _offer("Adzuna standout", _at(0.5), source="adzuna")
+    adzuna_mid = _offer("Adzuna moyen", _at(0.2), source="adzuna")
+    adzuna_low = _offer("Adzuna bas", _at(0.1), source="adzuna")
+
+    result = shortlist_offers(
+        profile,
+        [ft_high, ft_mid, ft_low, adzuna_standout, adzuna_mid, adzuna_low],
+        limit=10,
+    )
+
+    # Raw similarity alone would rank every france_travail offer ahead of
+    # every adzuna one. Normalized per source, adzuna's outlier now beats
+    # even france_travail's best.
+    assert result[0] == adzuna_standout
+    assert result.index(adzuna_standout) < result.index(ft_high)
+
+
+def test_shortlist_handles_single_offer_source_without_crashing() -> None:
+    """A source with only one offer (or every offer tied) has zero
+    variance -- normalizing against it must not divide by zero."""
+    profile = _profile(embedding=[1.0, 0.0, 0.0])
+    only_offer = _offer("Unique", [1.0, 0.0, 0.0], source="solo")
+
+    result = shortlist_offers(profile, [only_offer], limit=10)
+
+    assert result == [only_offer]
