@@ -21,6 +21,13 @@ that already depends on both (see the module dependency graph in
 app/modules/*/__init__.py) -- comparing a CandidateProfile's preference
 against a JobOffer's derived région needs both, and putting it in either
 side would create the cross-dependency `offers`/`cv` don't otherwise need.
+
+This function only decides what's eligible for a *new* match -- it doesn't
+touch matches that already exist. See MatchingService._run_for_profile,
+which also prunes any existing CandidateMatch for an offer this excludes
+(otherwise a match computed before the offer's zone was known, or before
+the candidate restricted their mobility, would linger on the dashboard
+forever with nothing left to ever revisit it).
 """
 
 from __future__ import annotations

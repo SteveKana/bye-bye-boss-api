@@ -259,6 +259,49 @@ async def test_run_for_profile_keeps_full_remote_offer_outside_mobility_region(
     assert match is not None
 
 
+async def test_run_for_profile_prunes_existing_match_that_falls_outside_mobility_zone(
+    monkeypatch,
+) -> None:
+    """The gap this closes: filter_by_geography only decides what's eligible
+    for a *new* match, so without this pruning, a match computed before the
+    candidate restricted their mobility (or before the offer's région was
+    even known) would linger on the dashboard forever -- nothing else ever
+    revisits a pair that fails the geo filter (see geo_filter.py's
+    docstring)."""
+
+    async def _fake(cv, offer):
+        return _FAKE_ANALYSIS
+
+    monkeypatch.setattr(gateway, "analyse_match", _fake)
+
+    # First run, no mobility restriction yet: the offer matches normally.
+    profile = await _make_complete_profile(mobility=None)
+    offer = await _make_offer(region="Occitanie")
+
+    async with AsyncSessionLocal() as session:
+        await MatchingService(session).run_for_profile(profile)
+    async with AsyncSessionLocal() as session:
+        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
+    assert match is not None
+
+    # The candidate now restricts their search to a région the offer isn't in.
+    async with AsyncSessionLocal() as session:
+        profile = await CandidateProfileRepository(session).update(
+            profile, {"mobility": "Région uniquement", "mobility_region": "Bretagne"}
+        )
+
+    async with AsyncSessionLocal() as session:
+        await MatchingService(session).run_for_profile(profile)
+
+    async with AsyncSessionLocal() as session:
+        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
+    assert match is None
+
+
 async def test_run_for_profile_scores_offers_concurrently_within_limit(
     monkeypatch,
 ) -> None:

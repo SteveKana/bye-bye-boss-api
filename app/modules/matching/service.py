@@ -119,6 +119,24 @@ class MatchingService:
         # docstring) before ranking -- an out-of-zone offer should never
         # occupy one of the limited shortlist slots in the first place.
         eligible = filter_by_geography(profile, pool)
+
+        # A match already on file for an offer that's now excluded (the
+        # offer's région/full-remote status was only just backfilled, or the
+        # candidate only just restricted their mobility) must not linger:
+        # the dashboard only ever reads CandidateMatch rows this table
+        # already has (see its docstring) -- nothing else would ever revisit
+        # or hide it otherwise, since a pair that fails the geo filter is
+        # simply never selected for (re)scoring below.
+        excluded_offer_ids = {offer.id for offer in pool} - {
+            offer.id for offer in eligible
+        }
+        if excluded_offer_ids:
+            stale = await self.matches.list_by_profile_and_offer_ids(
+                profile.id, excluded_offer_ids
+            )
+            for match in stale:
+                await self.matches.delete(match)
+
         shortlisted = shortlist_offers(
             profile, eligible, limit=settings.MATCHING_MAX_OFFERS_PER_CANDIDATE
         )
