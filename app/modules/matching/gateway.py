@@ -117,5 +117,11 @@ async def analyse_match(cv_text: str, offer_text: str) -> LLMAnalysis:
     try:
         return LLMAnalysis.model_validate(data)
     except ValidationError as exc:
-        logger.error("matching_bad_schema", raw=raw)
+        # `raw` alone (the previous behaviour) meant diagnosing a schema
+        # drift required manually reconstructing the payload and replaying
+        # it through LLMAnalysis by hand to even find which field failed --
+        # exactly what the cv_skills incident (2026-09-21) took. Logging the
+        # error itself names the offending field(s) and why, right in this
+        # line, the moment it happens.
+        logger.error("matching_bad_schema", error=str(exc), raw=raw)
         raise MatchingFailedError() from exc
