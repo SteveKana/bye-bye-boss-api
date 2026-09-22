@@ -100,7 +100,7 @@ async def analyse_match(cv_text: str, offer_text: str) -> LLMAnalysis:
         raw = await asyncio.to_thread(
             _call_openai_sync,
             api_key=settings.OPENAI_API_KEY,
-            model=settings.OPENAI_MODEL,
+            model=settings.MATCHING_OPENAI_MODEL,
             timeout=settings.MATCHING_OPENAI_TIMEOUT_SECONDS,
             prompt=prompt,
         )
