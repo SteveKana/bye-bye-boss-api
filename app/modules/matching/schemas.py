@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.modules.matching.models import ApplicationStatus
 from app.modules.offers import JobOfferRead
 
 
@@ -19,4 +20,10 @@ class CandidateMatchRead(BaseModel):
     regret_availability: str
     regret_score: int | None
     computed_at: datetime
+    application_status: ApplicationStatus
+    application_status_updated_at: datetime | None
     offer: JobOfferRead
+
+
+class ApplicationStatusUpdate(BaseModel):
+    application_status: ApplicationStatus
