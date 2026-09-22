@@ -1,10 +1,16 @@
-"""Scheduled matching: scores complete profiles against relevant offers on a
-fixed interval, so a candidate's dashboard always reads a pre-computed
-result instead of waiting on an LLM call."""
+"""Scheduled matching: scores complete profiles against relevant offers once
+a day, so a candidate's dashboard always reads a pre-computed result instead
+of waiting on an LLM call.
+
+Was an interval (every MATCHING_INTERVAL_MINUTES) until the 2026-09-22 cost
+review -- running once daily at a fixed local time, right after the day's
+new offers have had a chance to come in, cuts LLM spend further without
+losing much freshness for a still-small candidate base (see the config
+history in app/core/config.py for the earlier interval-based step).
+"""
 
 from __future__ import annotations
 
-from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.scheduler import scheduled
@@ -14,7 +20,8 @@ logger = get_logger("matching.worker")
 
 
 @scheduled(
-    interval_minutes=get_settings().MATCHING_INTERVAL_MINUTES,
+    cron="0 18 * * *",  # 18:00, every day
+    timezone="Europe/Paris",
     id="matching_sync",
 )
 async def sync_matches() -> None:
