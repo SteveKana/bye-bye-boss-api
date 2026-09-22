@@ -159,7 +159,7 @@ async def structure_cv_text(raw_text: str) -> dict:
         raw = await asyncio.to_thread(
             _call_openai_sync,
             api_key=settings.OPENAI_API_KEY,
-            model=settings.OPENAI_MODEL,
+            model=settings.CV_OPENAI_MODEL,
             timeout=settings.OPENAI_TIMEOUT_SECONDS,
             prompt=prompt,
         )

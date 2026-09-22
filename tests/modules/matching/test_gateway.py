@@ -143,6 +143,38 @@ async def test_analyse_match_parses_real_response_with_soft_blocker(
     assert soft_blocker.level.value == "soft_blocker"
 
 
+async def test_analyse_match_defaults_to_configured_model(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(get_settings(), "MATCHING_OPENAI_MODEL", "gpt-5")
+    captured: dict = {}
+
+    def _fake_call(**kwargs):
+        captured.update(kwargs)
+        return _REAL_RESPONSE
+
+    monkeypatch.setattr(gateway, "_call_openai_sync", _fake_call)
+
+    await gateway.analyse_match("cv text", "offer text")
+
+    assert captured["model"] == "gpt-5"
+
+
+async def test_analyse_match_model_override_takes_precedence(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(get_settings(), "MATCHING_OPENAI_MODEL", "gpt-5")
+    captured: dict = {}
+
+    def _fake_call(**kwargs):
+        captured.update(kwargs)
+        return _REAL_RESPONSE
+
+    monkeypatch.setattr(gateway, "_call_openai_sync", _fake_call)
+
+    await gateway.analyse_match("cv text", "offer text", model="gpt-5-mini")
+
+    assert captured["model"] == "gpt-5-mini"
+
+
 async def test_analyse_match_wraps_response_in_json_fence(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
     fenced = f"```json\n{_REAL_RESPONSE}\n```"

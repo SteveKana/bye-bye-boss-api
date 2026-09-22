@@ -109,11 +109,14 @@ class Settings(BaseSettings):
 
     # ---- AI (CV parsing) ---------------------------------------------------
     # Used by the `cv` module to structure raw CV text into a candidate
-    # profile. Same provider as `matchcareer_engine` (the standalone matching
-    # engine) so the whole project runs on one LLM vendor. No key configured
-    # -> upload endpoint returns a clear error instead of silently failing.
+    # profile. Same OpenAI account/key as `matching` below, but its own
+    # (cheaper) model: this is a fixed-schema extraction task ("read the CV,
+    # fill in this JSON"), not the kind of judgment call matching makes, so
+    # it doesn't need a flagship-tier model -- confirmed cost driver, see
+    # 2026-09-22 cost review. No key configured -> upload endpoint returns a
+    # clear error instead of silently failing.
     OPENAI_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-5"
+    CV_OPENAI_MODEL: str = "gpt-5-mini"
     OPENAI_TIMEOUT_SECONDS: int = 60
     # Same OPENAI_API_KEY, a separate cheap embedding model -- used by
     # core/embeddings.py to rank offers by semantic similarity (see
@@ -163,12 +166,18 @@ class Settings(BaseSettings):
         return [k.strip() for k in self.OFFERS_SEARCH_KEYWORDS.split(",") if k.strip()]
 
     # ---- Matching (CV <-> offers) ------------------------------------------
-    # Uses the same OpenAI credentials/model as the `cv` module (OPENAI_API_KEY
-    # / OPENAI_MODEL above) -- one LLM vendor for the whole project. Runs as a
-    # background job (see app/modules/matching/jobs.py) rather than on-demand:
-    # a candidate's dashboard reads pre-computed results instead of waiting on
-    # an LLM call, and cost stays predictable regardless of how often someone
-    # opens the page.
+    # Uses the same OpenAI account/key as the `cv` module (OPENAI_API_KEY
+    # above), but its own model setting: matching is a heavier judgment call
+    # (weighing hard/medium/soft blockers, producing two internally
+    # consistent scores) than the cv module's fixed-schema extraction, so it
+    # keeps the flagship-tier model for now. Still the dominant cost driver
+    # (2026-09-22 cost review: runs hourly for every candidate, up to
+    # MATCHING_MAX_OFFERS_PER_CANDIDATE offers each) -- swapping this one too
+    # is the next step, once a side-by-side quality check confirms a cheaper
+    # model still produces trustworthy scores. Runs as a background job (see
+    # app/modules/matching/jobs.py) rather than on-demand: a candidate's
+    # dashboard reads pre-computed results instead of waiting on an LLM call.
+    MATCHING_OPENAI_MODEL: str = "gpt-5"
     #
     # Its own timeout, separate from OPENAI_TIMEOUT_SECONDS: that one is tuned
     # for the cv module's fast "low" reasoning/verbosity extraction calls.
@@ -183,11 +192,20 @@ class Settings(BaseSettings):
     # by this factor without changing total token cost. Keep modest to stay
     # within your OpenAI account's concurrent-request/rate limits.
     MATCHING_CONCURRENCY: int = 4
-    MATCHING_INTERVAL_MINUTES: int = 60
+    # Was 60: an hourly re-scan of every complete profile is more than a
+    # freshly-launched platform needs and was the single biggest lever on
+    # LLM spend (2026-09-22 cost review) -- a new best-match offer showing up
+    # up to 3h later instead of within the hour is a fair trade for a 3x cut
+    # in how often the scoring job runs at all. Lower again once real usage
+    # data (candidates per day, offers ingested per hour) justifies it.
+    MATCHING_INTERVAL_MINUTES: int = 180
     # How many of the most relevant offers (see shortlist.py's keyword-overlap
     # heuristic) are actually scored by the LLM per candidate per run. Bounds
     # cost -- without this, cost would grow with the full offer pool size.
-    MATCHING_MAX_OFFERS_PER_CANDIDATE: int = 15
+    # Was 15: halved (2026-09-22 cost review) -- also shrinks how often a
+    # *new* offer bumps into the shortlist at all (the main source of fresh,
+    # non-skippable LLM calls), on top of the direct per-run cap.
+    MATCHING_MAX_OFFERS_PER_CANDIDATE: int = 8
     # Only offers ingested within this window are even considered for
     # shortlisting -- keeps the in-memory shortlisting step (and the pool of
     # "still relevant" offers) bounded as the offers table grows.
