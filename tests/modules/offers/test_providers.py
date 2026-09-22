@@ -252,6 +252,69 @@ async def test_france_travail_detects_full_remote_from_description(
     assert results[0].is_full_remote is True
 
 
+async def test_france_travail_extracts_daily_rate_from_salaire_libelle(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Développeur freelance",
+                        "typeContratLibelle": "Mission freelance",
+                        "salaire": {"libelle": "TJM : 500€"},
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="developpeur", limit=50)
+
+    assert results[0].daily_rate_min == 500
+    assert results[0].daily_rate_max == 500
+
+
+async def test_france_travail_has_no_daily_rate_for_a_salaried_offer(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Product Owner",
+                        "salaire": {
+                            "libelle": "Annuel de 45000.0 Euros à 55000.0 Euros"
+                        },
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].daily_rate_min is None
+    assert results[0].daily_rate_max is None
+
+
 # ---- Adzuna -----------------------------------------------------------------
 
 
@@ -399,3 +462,59 @@ async def test_adzuna_detects_full_remote_from_title(monkeypatch) -> None:
     results = await provider.search(keywords="business analyst", limit=50)
 
     assert results[0].is_full_remote is True
+
+
+async def test_adzuna_extracts_daily_rate_from_description(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "999",
+                        "title": "Développeur freelance",
+                        "description": "Mission longue durée. TJM : 450-550€.",
+                        "location": {"display_name": "Lyon"},
+                        "redirect_url": "https://adzuna.fr/details/999",
+                    }
+                ]
+            },
+        )
+
+    provider = AdzunaProvider(client=_client(handler))
+    results = await provider.search(keywords="developpeur", limit=50)
+
+    assert results[0].daily_rate_min == 450
+    assert results[0].daily_rate_max == 550
+
+
+async def test_adzuna_has_no_daily_rate_for_a_salaried_offer(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "999",
+                        "title": "Business Analyst",
+                        "description": "Poste en CDI, salaire selon profil.",
+                        "location": {"display_name": "Lyon"},
+                        "salary_min": 38000,
+                        "salary_max": 45000,
+                        "redirect_url": "https://adzuna.fr/details/999",
+                    }
+                ]
+            },
+        )
+
+    provider = AdzunaProvider(client=_client(handler))
+    results = await provider.search(keywords="business analyst", limit=50)
+
+    assert results[0].daily_rate_min is None
+    assert results[0].daily_rate_max is None

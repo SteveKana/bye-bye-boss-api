@@ -20,6 +20,8 @@ class JobOfferRead(BaseModel):
     salary_min: int | None
     salary_max: int | None
     salary_label: str | None
+    daily_rate_min: int | None
+    daily_rate_max: int | None
     url: str
     published_at: datetime | None
     is_full_remote: bool

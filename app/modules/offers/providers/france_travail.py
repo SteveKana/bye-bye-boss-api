@@ -24,6 +24,7 @@ from __future__ import annotations
 import httpx
 
 from app.core.config import get_settings
+from app.core.daily_rate import extract_daily_rate
 from app.core.logging import get_logger
 from app.core.regions import region_from_insee_code, region_from_postal_code
 from app.core.remote_work import looks_full_remote
@@ -111,6 +112,11 @@ class FranceTravailProvider(OfferProvider):
         region = region_from_postal_code(
             lieu.get("codePostal")
         ) or region_from_insee_code(lieu.get("commune"))
+        salary_label = salaire.get("libelle")
+        # A TJM shows up, when it's stated at all, either in the free-text
+        # description or in this same salaire.libelle field France Travail
+        # otherwise uses for a plain salary label -- see core/daily_rate.py.
+        daily_rate_min, daily_rate_max = extract_daily_rate(description, salary_label)
         return NormalizedOffer(
             external_id=offer_id,
             title=title,
@@ -120,9 +126,11 @@ class FranceTravailProvider(OfferProvider):
             description=description,
             location=lieu.get("libelle"),
             contract_type=item.get("typeContratLibelle") or item.get("typeContrat"),
-            salary_label=salaire.get("libelle"),
+            salary_label=salary_label,
             region=region,
             is_full_remote=looks_full_remote(title, description),
+            daily_rate_min=daily_rate_min,
+            daily_rate_max=daily_rate_max,
             # `dateActualisation` (last refreshed by the employer/agency) is
             # what France Travail's own site displays as "Actualisé le ..."
             # -- `dateCreation` is the offer's original creation date, which

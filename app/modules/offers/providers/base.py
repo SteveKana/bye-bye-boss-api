@@ -49,6 +49,14 @@ class NormalizedOffer:
     # fully-remote offer always bypasses the geographic filter regardless
     # of its région (or lack of one).
     is_full_remote: bool = False
+    # Best-effort extraction (see core/daily_rate.py) of a freelance TJM
+    # from free text -- neither source exposes this as a structured field,
+    # unlike salary_min/salary_max above. None on either means no plausible
+    # figure was found in this offer's text, not that it isn't a freelance
+    # mission -- see that module's docstring for why a miss here is common
+    # and expected, never guessed at.
+    daily_rate_min: int | None = None
+    daily_rate_max: int | None = None
     # Full original payload from the source, kept for later reprocessing.
     raw: dict = field(default_factory=dict)
 

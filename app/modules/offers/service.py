@@ -147,6 +147,8 @@ class OffersIngestionService:
             "salary_min": item.salary_min,
             "salary_max": item.salary_max,
             "salary_label": item.salary_label,
+            "daily_rate_min": item.daily_rate_min,
+            "daily_rate_max": item.daily_rate_max,
             "url": item.url,
             "published_at": item.published_at,
             "raw": item.raw,

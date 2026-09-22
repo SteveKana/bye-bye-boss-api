@@ -73,6 +73,17 @@ class JobOffer(BaseModel, table=True):
     # Fallback for sources (France Travail) that only give a free-text
     # salary label instead of structured min/max figures.
     salary_label: str | None = Field(default=None)
+    # Best-effort extraction of a freelance TJM from free text (see
+    # core/daily_rate.py) -- neither source exposes this as a structured
+    # field the way salary_min/salary_max are for a permanent role. Both
+    # None means no plausible figure was found in this offer's text, not
+    # that it isn't a freelance mission; never guessed when absent. Applying
+    # a salary_min/salary_max threshold to a freelance offer doesn't mean
+    # anything (see opportunites.vue on the frontend) -- this is the
+    # separate, correctly-scaled field that filtering/sorting by TJM should
+    # use instead.
+    daily_rate_min: int | None = Field(default=None)
+    daily_rate_max: int | None = Field(default=None)
     url: str = Field(nullable=False)
     published_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
