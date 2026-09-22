@@ -94,3 +94,13 @@ class CandidateMatch(BaseModel, table=True):
     application_status_updated_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
+    # Set once and for all by update_application_status (any explicit
+    # change, including a downgrade back to not_applied) -- never by
+    # mark_applied. Distinguishes a match the candidate has actually acted
+    # on from one that's merely never been clicked, since both look
+    # identical as a bare `application_status == "not_applied"` value.
+    # mark_applied checks this before auto-upgrading so that a candidate who
+    # corrects a false-positive "applied" back to "not_applied" doesn't have
+    # it silently flipped back to "applied" the next time they revisit the
+    # same offer and click "Voir l'offre" again.
+    application_manually_corrected: bool = Field(default=False, nullable=False)
