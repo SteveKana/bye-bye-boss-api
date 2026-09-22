@@ -28,12 +28,13 @@ class CVOptimization(BaseModel, table=True):
     documented limitation for this first version, not an oversight.
 
     `confirmed_at` is set by `POST /matching/{id}/cv-optimization/confirm`,
-    the "Créer cette variante de CV" button -- today that's the entire
-    effect of "confirming": it records that the candidate looked at this
-    optimization and decided to keep it, so a later screen can show that
-    intent. It does not (yet) produce a downloadable file or otherwise
-    change the candidate's stored profile -- deliberately out of scope for
-    this first version.
+    the "Créer cette variante de CV" button: it records that the candidate
+    looked at this optimization and decided to keep it, so a later screen
+    can show that intent. The button also triggers a separate download,
+    `GET /matching/{id}/cv-optimization/pdf` (see cv_pdf.py) -- a PDF
+    rendered on demand from this row, not stored anywhere. Confirming does
+    not otherwise change the candidate's stored profile -- deliberately out
+    of scope for this first version.
     """
 
     __tablename__ = "cv_optimizations"
