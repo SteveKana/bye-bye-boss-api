@@ -10,16 +10,25 @@ from app.core.models import utcnow
 from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
-from app.modules.matching.models import CandidateMatch
+from app.modules.matching.models import ApplicationStatus, CandidateMatch
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.offers.models import JobOffer
 from app.modules.offers.repository import JobOfferRepository
 
 TOP = "/api/v1/matching/top"
+APPLICATIONS = "/api/v1/matching/applications"
 
 
 def _detail(match_id: uuid.UUID) -> str:
     return f"/api/v1/matching/{match_id}"
+
+
+def _mark_applied(match_id: uuid.UUID) -> str:
+    return f"/api/v1/matching/{match_id}/mark-applied"
+
+
+def _status_url(match_id: uuid.UUID) -> str:
+    return f"/api/v1/matching/{match_id}/application-status"
 
 
 async def _user_id(email: str) -> uuid.UUID:
@@ -176,6 +185,8 @@ async def test_get_match_returns_full_analysis(
     assert body["analysis"]["matches"][0]["skill"] == "sql"
     assert body["offer"]["title"] == "Product Owner Data"
     assert body["offer"]["url"] == "https://example.com/offre"
+    assert body["application_status"] == "not_applied"
+    assert body["application_status_updated_at"] is None
 
 
 async def test_get_match_404_for_another_users_match(
@@ -222,3 +233,271 @@ async def test_get_match_404_for_another_users_match(
 
     r = await client.get(_detail(match.id), headers=auth_headers)
     assert r.status_code == 404
+
+
+async def _profile_and_match(
+    *, application_status: str = ApplicationStatus.not_applied.value
+) -> CandidateMatch:
+    """Shared setup for the application-tracking tests below: a complete
+    profile for "user@example.com" plus one match, at the given starting
+    application_status."""
+    user_id = await _user_id("user@example.com")
+    async with AsyncSessionLocal() as session:
+        profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=user_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        offer = await JobOfferRepository(session).create(
+            JobOffer(
+                source="test",
+                external_id="app-track",
+                title="Offre suivie",
+                url="https://example.com/offre-suivie",
+            )
+        )
+        match = await CandidateMatchRepository(session).create(
+            CandidateMatch(
+                candidate_profile_id=profile.id,
+                job_offer_id=offer.id,
+                career_score=70,
+                ats_score=60,
+                ats_potential=80,
+                computed_at=utcnow(),
+                application_status=application_status,
+            )
+        )
+        await session.commit()
+    return match
+
+
+async def test_mark_applied_requires_auth(client: AsyncClient) -> None:
+    r = await client.post(_mark_applied(uuid.uuid4()))
+    assert r.status_code == 401
+
+
+async def test_mark_applied_upgrades_not_applied_to_applied(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    match = await _profile_and_match()
+
+    r = await client.post(_mark_applied(match.id), headers=auth_headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["application_status"] == "applied"
+    assert body["application_status_updated_at"] is not None
+
+
+async def test_mark_applied_does_not_regress_further_progress(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Clicking "Voir l'offre" again after the candidate has already
+    declared an interview must never reset that progress back to
+    "applied" -- see mark_applied's docstring."""
+    match = await _profile_and_match(
+        application_status=ApplicationStatus.interview.value
+    )
+
+    r = await client.post(_mark_applied(match.id), headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.json()["application_status"] == "interview"
+
+
+async def test_mark_applied_404_for_another_users_match(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    owner_id = uuid.uuid4()
+    caller_id = await _user_id("user@example.com")
+    async with AsyncSessionLocal() as session:
+        await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=caller_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        someone_elses_profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=owner_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        offer = await JobOfferRepository(session).create(
+            JobOffer(
+                source="test",
+                external_id="app-track-other",
+                title="Offre d'un autre",
+                url="https://example.com/autre-suivie",
+            )
+        )
+        match = await CandidateMatchRepository(session).create(
+            CandidateMatch(
+                candidate_profile_id=someone_elses_profile.id,
+                job_offer_id=offer.id,
+                career_score=50,
+                ats_score=40,
+                ats_potential=60,
+                computed_at=utcnow(),
+            )
+        )
+        await session.commit()
+
+    r = await client.post(_mark_applied(match.id), headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_update_application_status_requires_auth(client: AsyncClient) -> None:
+    r = await client.patch(
+        _status_url(uuid.uuid4()), json={"application_status": "interview"}
+    )
+    assert r.status_code == 401
+
+
+async def test_update_application_status_sets_given_value(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    match = await _profile_and_match(application_status=ApplicationStatus.applied.value)
+
+    r = await client.patch(
+        _status_url(match.id),
+        json={"application_status": "interview"},
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 200
+    assert r.json()["application_status"] == "interview"
+
+
+async def test_update_application_status_can_reset_to_not_applied(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Corrects a false positive (clicked "Voir l'offre" without actually
+    applying) -- unlike mark_applied, this endpoint always applies the
+    given value, including a downgrade."""
+    match = await _profile_and_match(application_status=ApplicationStatus.applied.value)
+
+    r = await client.patch(
+        _status_url(match.id),
+        json={"application_status": "not_applied"},
+        headers=auth_headers,
+    )
+
+    assert r.status_code == 200
+    assert r.json()["application_status"] == "not_applied"
+
+
+async def test_update_application_status_404_for_another_users_match(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    owner_id = uuid.uuid4()
+    caller_id = await _user_id("user@example.com")
+    async with AsyncSessionLocal() as session:
+        await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=caller_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        someone_elses_profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=owner_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        offer = await JobOfferRepository(session).create(
+            JobOffer(
+                source="test",
+                external_id="app-track-other-2",
+                title="Offre d'un autre",
+                url="https://example.com/autre-suivie-2",
+            )
+        )
+        match = await CandidateMatchRepository(session).create(
+            CandidateMatch(
+                candidate_profile_id=someone_elses_profile.id,
+                job_offer_id=offer.id,
+                career_score=50,
+                ats_score=40,
+                ats_potential=60,
+                computed_at=utcnow(),
+            )
+        )
+        await session.commit()
+
+    r = await client.patch(
+        _status_url(match.id),
+        json={"application_status": "interview"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 404
+
+
+async def test_list_applications_requires_auth(client: AsyncClient) -> None:
+    r = await client.get(APPLICATIONS)
+    assert r.status_code == 401
+
+
+async def test_list_applications_404_when_no_profile(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    r = await client.get(APPLICATIONS, headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_list_applications_returns_only_declared_matches(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    user_id = await _user_id("user@example.com")
+    async with AsyncSessionLocal() as session:
+        profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=user_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        offers_repo = JobOfferRepository(session)
+        offer_untouched = await offers_repo.create(
+            JobOffer(
+                source="test",
+                external_id="untouched",
+                title="Offre non candidatée",
+                url="https://example.com/untouched",
+            )
+        )
+        offer_applied = await offers_repo.create(
+            JobOffer(
+                source="test",
+                external_id="applied",
+                title="Offre candidatée",
+                url="https://example.com/applied",
+            )
+        )
+        matches_repo = CandidateMatchRepository(session)
+        # Never touched -- must not appear in /applications.
+        await matches_repo.create(
+            CandidateMatch(
+                candidate_profile_id=profile.id,
+                job_offer_id=offer_untouched.id,
+                career_score=90,
+                ats_score=80,
+                ats_potential=95,
+                computed_at=utcnow(),
+            )
+        )
+        await matches_repo.create(
+            CandidateMatch(
+                candidate_profile_id=profile.id,
+                job_offer_id=offer_applied.id,
+                career_score=50,
+                ats_score=40,
+                ats_potential=60,
+                computed_at=utcnow(),
+                application_status=ApplicationStatus.applied.value,
+                application_status_updated_at=utcnow(),
+            )
+        )
+        await session.commit()
+
+    r = await client.get(APPLICATIONS, headers=auth_headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["offer"]["title"] == "Offre candidatée"
+    assert body[0]["application_status"] == "applied"

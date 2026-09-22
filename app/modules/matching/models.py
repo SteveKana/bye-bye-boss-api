@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import datetime
 
@@ -12,6 +13,31 @@ from app.core.models import BaseModel
 # JSONB on Postgres, plain JSON elsewhere -- same pattern as
 # app/modules/cv/models.py and app/modules/offers/models.py.
 _JsonColumn = JSON().with_variant(JSONB(), "postgresql")
+
+
+class ApplicationStatus(enum.StrEnum):
+    """Where a candidate stands on a given offer -- entirely self-reported
+    (or self-corrected, see below), since MatchCareer never sees what
+    happens on the employer's/aggregator's own site.
+
+    `not_applied` is the default for every match; it's what keeps a match
+    out of the "Candidatures" list (see matching_routes.list_applications).
+    `applied` is normally set automatically -- see
+    routes/v1/matching_routes.mark_applied, called the moment the
+    candidate clicks "Voir l'offre" on the opportunity page, on the
+    (deliberate) assumption that clicking through is itself the signal of
+    intent, so nothing is asked of the candidate for the common case. Every
+    other transition (interview/offer/rejected/withdrawn), and correcting a
+    wrong `applied` back to `not_applied`, is explicit -- see
+    update_application_status.
+    """
+
+    not_applied = "not_applied"
+    applied = "applied"
+    interview = "interview"
+    offer = "offer"
+    rejected = "rejected"
+    withdrawn = "withdrawn"
 
 
 class CandidateMatch(BaseModel, table=True):
@@ -58,3 +84,13 @@ class CandidateMatch(BaseModel, table=True):
     regret_score: int | None = Field(default=None)
 
     computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+
+    # See ApplicationStatus's docstring. Never touched by MatchingService's
+    # re-scoring upsert (see service.py's `values` dict) -- a fresh LLM
+    # score must never reset a candidate's declared application progress.
+    application_status: str = Field(
+        default=ApplicationStatus.not_applied.value, nullable=False, index=True
+    )
+    application_status_updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )

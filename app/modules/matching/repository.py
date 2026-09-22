@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from sqlmodel import desc
 
 from app.core.repository import BaseRepository
-from app.modules.matching.models import CandidateMatch
+from app.modules.matching.models import ApplicationStatus, CandidateMatch
 
 
 class CandidateMatchRepository(BaseRepository[CandidateMatch]):
@@ -41,3 +41,22 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
             order_by=desc(CandidateMatch.career_score),
             limit=limit,
         )
+
+    async def list_applications_for_profile(
+        self, candidate_profile_id: uuid.UUID
+    ) -> Sequence[CandidateMatch]:
+        """Matches this candidate has a declared application status for --
+        i.e. anything but the default `not_applied` -- backing the
+        "Candidatures" page. `list()`'s `filters` only does equality, so
+        this needs its own query, same as list_by_profile_and_offer_ids
+        above. Most recently updated first."""
+        stmt = (
+            self._base_select()
+            .where(
+                CandidateMatch.candidate_profile_id == candidate_profile_id,
+                CandidateMatch.application_status
+                != ApplicationStatus.not_applied.value,
+            )
+            .order_by(desc(CandidateMatch.application_status_updated_at))
+        )
+        return (await self.session.exec(stmt)).all()
