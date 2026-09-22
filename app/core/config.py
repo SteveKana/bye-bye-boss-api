@@ -214,6 +214,21 @@ class Settings(BaseSettings):
     # "still relevant" offers) bounded as the offers table grows.
     MATCHING_MAX_OFFER_POOL_DAYS: int = 30
 
+    # ---- CV optimization ("Adapter mon CV pour cette offre") --------------
+    # A separate, on-demand LLM call (see matching/cv_optimization_gateway.py)
+    # -- unlike the matching call above, this one is triggered by the
+    # candidate clicking a button for one specific offer, not run in the
+    # background for every candidate x offer pair, so it doesn't carry the
+    # same "runs daily for everyone" cost multiplier. Kept as its own
+    # setting anyway (not reusing MATCHING_OPENAI_MODEL) so it can be tuned
+    # or swapped to a cheaper model independently later, same convention as
+    # the cv module's own CV_OPENAI_MODEL.
+    CV_OPTIMIZATION_OPENAI_MODEL: str = "gpt-5"
+    # Same "medium" reasoning/verbosity as the matching call (heavier
+    # judgment task than a fixed extraction schema) -- same generous timeout
+    # for the same reason (see MATCHING_OPENAI_TIMEOUT_SECONDS above).
+    CV_OPTIMIZATION_OPENAI_TIMEOUT_SECONDS: int = 180
+
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False  # True -> JSON logs (prod), False -> pretty console
