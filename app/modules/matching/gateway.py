@@ -86,7 +86,14 @@ def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) ->
     raise MatchingFailedError() from last_exc
 
 
-async def analyse_match(cv_text: str, offer_text: str) -> LLMAnalysis:
+async def analyse_match(
+    cv_text: str, offer_text: str, *, model: str | None = None
+) -> LLMAnalysis:
+    """`model` overrides settings.MATCHING_OPENAI_MODEL for this one call --
+    every real call site leaves it unset (unchanged behaviour); it exists so
+    scripts/compare_matching_models.py can run the identical prompt/parsing/
+    validation path against a different model for a side-by-side quality
+    check, without duplicating this function."""
     settings = get_settings()
     if not settings.OPENAI_API_KEY:
         logger.warning("matching_no_api_key")
@@ -100,7 +107,7 @@ async def analyse_match(cv_text: str, offer_text: str) -> LLMAnalysis:
         raw = await asyncio.to_thread(
             _call_openai_sync,
             api_key=settings.OPENAI_API_KEY,
-            model=settings.MATCHING_OPENAI_MODEL,
+            model=model or settings.MATCHING_OPENAI_MODEL,
             timeout=settings.MATCHING_OPENAI_TIMEOUT_SECONDS,
             prompt=prompt,
         )
