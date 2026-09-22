@@ -15,6 +15,7 @@ from __future__ import annotations
 import httpx
 
 from app.core.config import get_settings
+from app.core.daily_rate import extract_daily_rate
 from app.core.logging import get_logger
 from app.core.regions import normalize_region_name
 from app.core.remote_work import looks_full_remote
@@ -91,6 +92,10 @@ class AdzunaProvider(OfferProvider):
         contract_type = ", ".join(
             v for v in (item.get("contract_type"), item.get("contract_time")) if v
         )
+        # Adzuna has no free-text salary label like France Travail's
+        # salaire.libelle -- title + description is all there is to look
+        # for a stated TJM in (see core/daily_rate.py).
+        daily_rate_min, daily_rate_max = extract_daily_rate(title, description)
         return NormalizedOffer(
             external_id=str(item.get("id")),
             title=title,
@@ -104,5 +109,7 @@ class AdzunaProvider(OfferProvider):
             published_at=parse_iso_datetime(item.get("created")),
             region=self._region_from_area(location),
             is_full_remote=looks_full_remote(title, description),
+            daily_rate_min=daily_rate_min,
+            daily_rate_max=daily_rate_max,
             raw=item,
         )
