@@ -25,16 +25,20 @@ from fastapi import APIRouter
 
 from app.core.module import Module
 
-# Import side effects: register the model (Alembic) and the scheduled job.
+# Import side effects: register the models (Alembic) and the scheduled job.
+from app.modules.matching import (
+    cv_optimization_models as cv_optimization_models,  # noqa: F401
+)
 from app.modules.matching import jobs as jobs  # noqa: F401
 from app.modules.matching import models as models  # noqa: F401
 from app.modules.matching.repository import CandidateMatchRepository
-from app.modules.matching.routes.v1 import matching_routes
-from app.modules.matching.schemas import CandidateMatchRead
+from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
+from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
 from app.modules.matching.service import MatchingService
 
 _router = APIRouter()
 _router.include_router(matching_routes.router)
+_router.include_router(cv_optimization_routes.router)
 
 module = Module(
     name="matching",
@@ -48,5 +52,6 @@ __all__ = [
     "module",
     "CandidateMatchRepository",
     "CandidateMatchRead",
+    "CVOptimizationRead",
     "MatchingService",
 ]
