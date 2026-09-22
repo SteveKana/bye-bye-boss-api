@@ -26,6 +26,10 @@ def _confirm_url(match_id: uuid.UUID) -> str:
     return f"/api/v1/matching/{match_id}/cv-optimization/confirm"
 
 
+def _pdf_url(match_id: uuid.UUID) -> str:
+    return f"/api/v1/matching/{match_id}/cv-optimization/pdf"
+
+
 async def _user_id(email: str) -> uuid.UUID:
     async with AsyncSessionLocal() as session:
         user = (await session.exec(select(User).where(User.email == email))).first()
@@ -212,3 +216,66 @@ async def test_confirm_cv_optimization_sets_confirmed_at(
 
     assert r.status_code == 200
     assert r.json()["confirmed_at"] is not None
+
+
+async def test_download_cv_optimization_pdf_requires_auth(client: AsyncClient) -> None:
+    r = await client.get(_pdf_url(uuid.uuid4()))
+    assert r.status_code == 401
+
+
+async def test_download_cv_optimization_pdf_404_before_generation(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    match = await _profile_and_match()
+    r = await client.get(_pdf_url(match.id), headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_download_cv_optimization_pdf_404_for_another_users_match(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    _mock_gateway(monkeypatch)
+    owner_id = uuid.uuid4()
+    async with AsyncSessionLocal() as session:
+        someone_elses_profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=owner_id, status=ProfileStatus.complete.value, raw_text="cv"
+            )
+        )
+        offer = await JobOfferRepository(session).create(
+            JobOffer(
+                source="test",
+                external_id="cv-opt-pdf-other",
+                title="Offre d'un autre",
+                url="https://example.com/cv-opt-pdf-other",
+            )
+        )
+        match = await CandidateMatchRepository(session).create(
+            CandidateMatch(
+                candidate_profile_id=someone_elses_profile.id,
+                job_offer_id=offer.id,
+                career_score=50,
+                ats_score=40,
+                ats_potential=60,
+                computed_at=utcnow(),
+            )
+        )
+        await session.commit()
+
+    r = await client.get(_pdf_url(match.id), headers=auth_headers)
+    assert r.status_code == 404
+
+
+async def test_download_cv_optimization_pdf_returns_pdf(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    _mock_gateway(monkeypatch)
+    match = await _profile_and_match()
+    await client.post(_generate_url(match.id), headers=auth_headers)
+
+    r = await client.get(_pdf_url(match.id), headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "attachment" in r.headers["content-disposition"]
+    assert r.content.startswith(b"%PDF")

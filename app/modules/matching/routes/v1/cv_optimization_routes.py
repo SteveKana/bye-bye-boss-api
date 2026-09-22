@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.core.dependencies import DBSession
 from app.core.exceptions import NotFoundError
@@ -10,6 +10,7 @@ from app.modules.auth import CurrentUser
 from app.modules.cv import CvService
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_service import CVOptimizationService
+from app.modules.matching.cv_pdf import build_cv_pdf, cv_pdf_filename
 from app.modules.matching.routes.v1.matching_routes import _get_owned_match_or_404
 from app.modules.matching.schemas import CVOptimizationRead
 from app.modules.offers import JobOfferRepository
@@ -88,9 +89,11 @@ async def get_cv_optimization(
 async def confirm_cv_optimization(
     match_id: uuid.UUID, session: DBSession, user: CurrentUser
 ) -> CVOptimizationRead:
-    """ "Créer cette variante de CV" -- see CVOptimization's docstring for
-    exactly what this does and doesn't do today (records intent, no file is
-    produced yet)."""
+    """ "Créer cette variante de CV" -- records that the candidate looked at
+    this optimization and decided to keep it (sets confirmed_at). The
+    actual PDF download is a separate call, see
+    download_cv_optimization_pdf below -- the frontend triggers both from
+    the same button click."""
     match = await _get_owned_match_or_404(match_id, session, user)
     service = CVOptimizationService(session)
     optimization = await service.optimizations.get_by_match(match.id)
@@ -101,4 +104,32 @@ async def confirm_cv_optimization(
         optimization,
         ats_score_before=match.ats_score,
         ats_score_after=match.ats_potential,
+    )
+
+
+@router.get("/{match_id}/cv-optimization/pdf")
+async def download_cv_optimization_pdf(
+    match_id: uuid.UUID, session: DBSession, user: CurrentUser
+) -> Response:
+    """The optimized CV as a downloadable PDF -- what "Créer cette variante
+    de CV" actually produces (see cv_pdf.py for the rendering itself and
+    why it doesn't try to reproduce the candidate's original CV style).
+    Deterministic rendering from the already-generated optimization, no LLM
+    call, so it's cheap to regenerate on every download rather than
+    persisting a file -- same "derive, don't store, what you can recompute
+    instantly" instinct as _to_read's ats_score_before/after above.
+    """
+    match = await _get_owned_match_or_404(match_id, session, user)
+    optimization = await CVOptimizationService(session).optimizations.get_by_match(
+        match.id
+    )
+    if optimization is None:
+        raise NotFoundError(_NO_OPTIMIZATION_YET)
+    profile = await CvService(session).get_for_user(user.id)
+    pdf_bytes = build_cv_pdf(profile, optimization)
+    filename = cv_pdf_filename(profile)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
