@@ -85,9 +85,7 @@ def _reconcile_experiences(
     real experience slot."""
     reconciled = []
     for index, original in enumerate(original_experiences):
-        model_exp = (
-            model_experiences[index] if index < len(model_experiences) else None
-        )
+        model_exp = model_experiences[index] if index < len(model_experiences) else None
         title = original.get("title", "")
         if model_exp is not None and model_exp.title.strip():
             title = model_exp.title.strip()

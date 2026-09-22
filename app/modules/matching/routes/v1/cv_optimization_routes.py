@@ -88,7 +88,7 @@ async def get_cv_optimization(
 async def confirm_cv_optimization(
     match_id: uuid.UUID, session: DBSession, user: CurrentUser
 ) -> CVOptimizationRead:
-    """"Créer cette variante de CV" -- see CVOptimization's docstring for
+    """ "Créer cette variante de CV" -- see CVOptimization's docstring for
     exactly what this does and doesn't do today (records intent, no file is
     produced yet)."""
     match = await _get_owned_match_or_404(match_id, session, user)
