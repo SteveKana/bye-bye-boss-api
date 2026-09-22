@@ -8,12 +8,22 @@ Register jobs from anywhere at import time:
     async def sync_data() -> None:
         ...
 
-    @scheduled(cron="0 0 1 * *")   # 1st of month, 00:00
+    @scheduled(cron="0 0 1 * *")   # 1st of month, 00:00 UTC
     async def monthly_report() -> None:
+        ...
+
+    @scheduled(cron="0 18 * * *", timezone="Europe/Paris")   # 18:00 Paris time
+    async def evening_job() -> None:
         ...
 
 Jobs only run if `SCHEDULER_ENABLED` is true. The scheduler is started/stopped
 by the app lifespan.
+
+`cron` is interpreted in the scheduler's own timezone (UTC, see `scheduler`
+below) unless `timezone` is given -- pass it whenever the schedule is meant
+to track a human's clock (e.g. "18:00 in France") rather than a fixed UTC
+instant, so it keeps landing at the same local time across DST changes
+instead of drifting by an hour twice a year.
 """
 
 from __future__ import annotations
@@ -48,17 +58,20 @@ def scheduled(
     *,
     interval_minutes: int | None = None,
     cron: str | None = None,
+    timezone: str | None = None,
     id: str | None = None,
 ) -> Callable[[Job], Job]:
     if (interval_minutes is None) == (cron is None):
         raise ValueError("Provide exactly one of `interval_minutes` or `cron`.")
+    if timezone is not None and interval_minutes is not None:
+        raise ValueError("`timezone` only applies to a `cron` trigger.")
 
     def decorator(func: Job) -> Job:
         trigger: object
         if interval_minutes is not None:
             trigger = IntervalTrigger(minutes=interval_minutes)
         else:
-            trigger = CronTrigger.from_crontab(cron)  # type: ignore[arg-type]
+            trigger = CronTrigger.from_crontab(cron, timezone=timezone)  # type: ignore[arg-type]
         _registry.append(_JobSpec(func=func, trigger=trigger, id=id or func.__name__))
         return func
 

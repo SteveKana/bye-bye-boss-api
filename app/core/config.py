@@ -171,12 +171,16 @@ class Settings(BaseSettings):
     # (weighing hard/medium/soft blockers, producing two internally
     # consistent scores) than the cv module's fixed-schema extraction, so it
     # keeps the flagship-tier model for now. Still the dominant cost driver
-    # (2026-09-22 cost review: runs hourly for every candidate, up to
-    # MATCHING_MAX_OFFERS_PER_CANDIDATE offers each) -- swapping this one too
-    # is the next step, once a side-by-side quality check confirms a cheaper
-    # model still produces trustworthy scores. Runs as a background job (see
-    # app/modules/matching/jobs.py) rather than on-demand: a candidate's
-    # dashboard reads pre-computed results instead of waiting on an LLM call.
+    # (2026-09-22 cost review: runs once daily for every candidate, up to
+    # MATCHING_MAX_OFFERS_PER_CANDIDATE offers each -- see app/modules/
+    # matching/jobs.py for the schedule) -- swapping this one too is the
+    # next step, once a side-by-side quality check (see
+    # scripts/compare_matching_models.py) confirms a cheaper model still
+    # produces trustworthy scores: an early 3-case run (2026-09-22) showed
+    # real divergences on blocker detection and semantic-match recall, so
+    # it's on hold pending a larger sample. Runs as a background job rather
+    # than on-demand: a candidate's dashboard reads pre-computed results
+    # instead of waiting on an LLM call.
     MATCHING_OPENAI_MODEL: str = "gpt-5"
     #
     # Its own timeout, separate from OPENAI_TIMEOUT_SECONDS: that one is tuned
@@ -192,13 +196,12 @@ class Settings(BaseSettings):
     # by this factor without changing total token cost. Keep modest to stay
     # within your OpenAI account's concurrent-request/rate limits.
     MATCHING_CONCURRENCY: int = 4
-    # Was 60: an hourly re-scan of every complete profile is more than a
-    # freshly-launched platform needs and was the single biggest lever on
-    # LLM spend (2026-09-22 cost review) -- a new best-match offer showing up
-    # up to 3h later instead of within the hour is a fair trade for a 3x cut
-    # in how often the scoring job runs at all. Lower again once real usage
-    # data (candidates per day, offers ingested per hour) justifies it.
-    MATCHING_INTERVAL_MINUTES: int = 180
+    # How often the job itself runs lives in app/modules/matching/jobs.py
+    # (a fixed daily cron, not a setting here) -- was an hourly interval,
+    # then every 3h, then once a day at a fixed local time (2026-09-22 cost
+    # review): the single biggest lever on LLM spend, since it bounds how
+    # often *any* candidate gets rescanned at all, not just how many offers
+    # each rescan touches (see MATCHING_MAX_OFFERS_PER_CANDIDATE below).
     # How many of the most relevant offers (see shortlist.py's keyword-overlap
     # heuristic) are actually scored by the LLM per candidate per run. Bounds
     # cost -- without this, cost would grow with the full offer pool size.
