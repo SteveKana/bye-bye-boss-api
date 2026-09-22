@@ -221,9 +221,15 @@ class Settings(BaseSettings):
     # background for every candidate x offer pair, so it doesn't carry the
     # same "runs daily for everyone" cost multiplier. Kept as its own
     # setting anyway (not reusing MATCHING_OPENAI_MODEL) so it can be tuned
-    # or swapped to a cheaper model independently later, same convention as
-    # the cv module's own CV_OPENAI_MODEL.
-    CV_OPTIMIZATION_OPENAI_MODEL: str = "gpt-5"
+    # independently, same convention as the cv module's own CV_OPENAI_MODEL.
+    #
+    # gpt-5-mini rather than the flagship gpt-5 -- explicit call during the
+    # current test phase (2026-09-22): no need to pay for the top-tier model
+    # while the feature itself is still being validated. Revisit once real
+    # usage confirms the cheaper model's rewrites/deductions stay reliable
+    # enough (same quality-check step MATCHING_OPENAI_MODEL is still
+    # pending before it gets the same treatment).
+    CV_OPTIMIZATION_OPENAI_MODEL: str = "gpt-5-mini"
     # Same "medium" reasoning/verbosity as the matching call (heavier
     # judgment task than a fixed extraction schema) -- same generous timeout
     # for the same reason (see MATCHING_OPENAI_TIMEOUT_SECONDS above).
