@@ -130,16 +130,23 @@ async def mark_applied(
 ) -> CandidateMatchRead:
     """Called the instant the candidate clicks "Voir l'offre" on the
     opportunity page -- the click-through itself is the signal, nothing is
-    asked of the candidate. Idempotent and one-way: only upgrades a fresh
-    `not_applied` match to `applied`; a match already further along
-    (interview/offer/rejected/withdrawn), or explicitly reset back to
-    `not_applied`, is left untouched -- so clicking "Voir l'offre" again
-    later never regresses real progress the candidate already recorded.
-    See ApplicationStatus's docstring and update_application_status below
-    for the explicit-correction path.
+    asked of the candidate. Idempotent and one-way: only upgrades a fresh,
+    never-touched `not_applied` match to `applied`; a match already further
+    along (interview/offer/rejected/withdrawn), or explicitly reset back to
+    `not_applied` via update_application_status below, is left untouched --
+    so clicking "Voir l'offre" again later never regresses real progress
+    the candidate already recorded, and never silently undoes a correction
+    either. The `application_manually_corrected` flag is what makes the
+    second case possible: a manual reset looks identical to a never-clicked
+    match by `application_status` alone (both are `not_applied`), so the
+    flag is what this check actually relies on to tell them apart -- see
+    CandidateMatch.application_manually_corrected's docstring.
     """
     match = await _get_owned_match_or_404(match_id, session, user)
-    if match.application_status == ApplicationStatus.not_applied.value:
+    if (
+        match.application_status == ApplicationStatus.not_applied.value
+        and not match.application_manually_corrected
+    ):
         match = await CandidateMatchRepository(session).update(
             match,
             {
@@ -162,6 +169,11 @@ async def update_application_status(
     resetting a wrongly auto-marked `applied` back to `not_applied` (which
     drops it out of list_applications above). Unlike mark_applied, this
     always applies the given value, including a downgrade.
+
+    Also sets `application_manually_corrected`, permanently for this match:
+    once a candidate has explicitly set a status here, mark_applied must
+    never auto-upgrade it again, even if it's `not_applied` and the
+    candidate later re-clicks "Voir l'offre" on the same offer.
     """
     match = await _get_owned_match_or_404(match_id, session, user)
     match = await CandidateMatchRepository(session).update(
@@ -169,6 +181,7 @@ async def update_application_status(
         {
             "application_status": payload.application_status.value,
             "application_status_updated_at": utcnow(),
+            "application_manually_corrected": True,
         },
     )
     return await _read_or_404(match, session)

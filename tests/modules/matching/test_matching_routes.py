@@ -305,6 +305,29 @@ async def test_mark_applied_does_not_regress_further_progress(
     assert r.json()["application_status"] == "interview"
 
 
+async def test_mark_applied_does_not_undo_a_manual_reset(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A candidate who corrects a false-positive "applied" back to
+    "not_applied" and later revisits the same offer must not have that
+    correction silently overwritten by clicking "Voir l'offre" again --
+    both states share the same bare application_status value, so this
+    relies on application_manually_corrected to tell them apart."""
+    match = await _profile_and_match(application_status=ApplicationStatus.applied.value)
+
+    reset = await client.patch(
+        _status_url(match.id),
+        json={"application_status": "not_applied"},
+        headers=auth_headers,
+    )
+    assert reset.json()["application_status"] == "not_applied"
+
+    r = await client.post(_mark_applied(match.id), headers=auth_headers)
+
+    assert r.status_code == 200
+    assert r.json()["application_status"] == "not_applied"
+
+
 async def test_mark_applied_404_for_another_users_match(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
