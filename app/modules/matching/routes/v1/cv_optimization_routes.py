@@ -10,7 +10,12 @@ from app.modules.auth import CurrentUser
 from app.modules.cv import CvService
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_service import CVOptimizationService
-from app.modules.matching.cv_pdf import build_cv_pdf, cv_pdf_filename
+from app.modules.matching.cv_pdf import (
+    DEFAULT_CV_TEMPLATE,
+    CvTemplate,
+    build_cv_pdf,
+    cv_pdf_filename,
+)
 from app.modules.matching.routes.v1.matching_routes import _get_owned_match_or_404
 from app.modules.matching.schemas import CVOptimizationRead
 from app.modules.offers import JobOfferRepository
@@ -109,11 +114,17 @@ async def confirm_cv_optimization(
 
 @router.get("/{match_id}/cv-optimization/pdf")
 async def download_cv_optimization_pdf(
-    match_id: uuid.UUID, session: DBSession, user: CurrentUser
+    match_id: uuid.UUID,
+    session: DBSession,
+    user: CurrentUser,
+    template: CvTemplate = DEFAULT_CV_TEMPLATE,
 ) -> Response:
     """The optimized CV as a downloadable PDF -- what "Créer cette variante
     de CV" actually produces (see cv_pdf.py for the rendering itself and
     why it doesn't try to reproduce the candidate's original CV style).
+    `template` picks between the two layouts cv_pdf.py offers ("sobre",
+    the default, or "visuelle") -- an invalid value is rejected with 422 by
+    FastAPI's own Literal validation, no manual check needed here.
     Deterministic rendering from the already-generated optimization, no LLM
     call, so it's cheap to regenerate on every download rather than
     persisting a file -- same "derive, don't store, what you can recompute
@@ -126,7 +137,7 @@ async def download_cv_optimization_pdf(
     if optimization is None:
         raise NotFoundError(_NO_OPTIMIZATION_YET)
     profile = await CvService(session).get_for_user(user.id)
-    pdf_bytes = build_cv_pdf(profile, optimization)
+    pdf_bytes = build_cv_pdf(profile, optimization, template=template)
     filename = cv_pdf_filename(profile)
     return Response(
         content=pdf_bytes,

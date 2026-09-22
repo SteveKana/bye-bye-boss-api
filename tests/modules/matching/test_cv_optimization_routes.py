@@ -279,3 +279,32 @@ async def test_download_cv_optimization_pdf_returns_pdf(
     assert r.headers["content-type"] == "application/pdf"
     assert "attachment" in r.headers["content-disposition"]
     assert r.content.startswith(b"%PDF")
+
+
+async def test_download_cv_optimization_pdf_accepts_visuelle_template(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    _mock_gateway(monkeypatch)
+    match = await _profile_and_match()
+    await client.post(_generate_url(match.id), headers=auth_headers)
+
+    r = await client.get(
+        _pdf_url(match.id), headers=auth_headers, params={"template": "visuelle"}
+    )
+
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF")
+
+
+async def test_download_cv_optimization_pdf_rejects_unknown_template(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    _mock_gateway(monkeypatch)
+    match = await _profile_and_match()
+    await client.post(_generate_url(match.id), headers=auth_headers)
+
+    r = await client.get(
+        _pdf_url(match.id), headers=auth_headers, params={"template": "flashy"}
+    )
+
+    assert r.status_code == 422

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+
 from app.core.models import utcnow
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.matching.cv_optimization_models import CVOptimization
@@ -22,6 +24,48 @@ def _optimization(**overrides) -> CVOptimization:
     defaults = {"candidate_match_id": uuid.uuid4(), "computed_at": utcnow()}
     defaults.update(overrides)
     return CVOptimization(**defaults)
+
+
+def test_build_cv_pdf_defaults_to_sobre_template() -> None:
+    """No template argument -- must not crash and must still produce a
+    valid PDF, same as explicitly passing template='sobre'."""
+    profile = _profile()
+    optimization = _optimization()
+
+    pdf_bytes = build_cv_pdf(profile, optimization)
+
+    assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_build_cv_pdf_visuelle_template_returns_valid_pdf_bytes() -> None:
+    """The second template ('visuelle') must render just as reliably as
+    the default -- same content, different header/section-title rendering
+    (see cv_pdf.py's _draw_visuelle_first_page)."""
+    profile = _profile(first_name="Steve", last_name="Kana", email="steve@example.com")
+    optimization = _optimization(
+        headline="Product Owner IT",
+        experiences=[
+            {
+                "title": "Product Owner",
+                "company": "Doctolib",
+                "period": "2022-2026",
+                "bullets": [{"text": "Gestion du backlog", "status": "unchanged"}],
+            }
+        ],
+    )
+
+    pdf_bytes = build_cv_pdf(profile, optimization, template="visuelle")
+
+    assert pdf_bytes.startswith(b"%PDF")
+    assert len(pdf_bytes) > 500
+
+
+def test_build_cv_pdf_rejects_unknown_template() -> None:
+    profile = _profile()
+    optimization = _optimization()
+
+    with pytest.raises(ValueError, match="flashy"):
+        build_cv_pdf(profile, optimization, template="flashy")
 
 
 def test_build_cv_pdf_returns_valid_pdf_bytes() -> None:
