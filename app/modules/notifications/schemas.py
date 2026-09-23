@@ -23,3 +23,11 @@ class NotificationPreferenceUpdate(BaseSchema):
     discord_webhook_url: str | None = None
     whatsapp_enabled: bool | None = None
     whatsapp_phone_number: str | None = None
+
+
+class NotificationTestSendResult(BaseSchema):
+    """Which channels a POST /preferences/test-send actually delivered to --
+    e.g. ["email"] if Discord is configured but its webhook rejected the
+    call, or ["email", "discord"] once both work."""
+
+    channels_sent: list[str]

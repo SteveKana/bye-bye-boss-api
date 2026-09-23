@@ -110,3 +110,17 @@ async def test_update_preferences_enabling_whatsapp_with_phone_succeeds(
     body = r.json()
     assert body["whatsapp_enabled"] is True
     assert body["whatsapp_phone_number"] == "+33612345678"
+
+
+async def test_test_send_requires_auth(client: AsyncClient) -> None:
+    r = await client.post(f"{_URL}/test-send")
+    assert r.status_code == 401
+
+
+async def test_test_send_fails_without_a_complete_profile(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    # auth_headers registers a fresh user with no CV/profile at all yet --
+    # nothing to build a brief from, regardless of channel configuration.
+    r = await client.post(f"{_URL}/test-send", headers=auth_headers)
+    assert r.status_code == 400
