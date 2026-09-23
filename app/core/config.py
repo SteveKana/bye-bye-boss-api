@@ -235,6 +235,31 @@ class Settings(BaseSettings):
     # for the same reason (see MATCHING_OPENAI_TIMEOUT_SECONDS above).
     CV_OPTIMIZATION_OPENAI_TIMEOUT_SECONDS: int = 180
 
+    # ---- Notifications (daily brief) ---------------------------------------
+    # "Le brief quotidien" -- best-matching offers, sent once a day per
+    # candidate (see app/modules/notifications/jobs.py, scheduled right
+    # after the matching job so it reads that day's fresh matches). Email
+    # needs nothing here: it reuses the `mailer` module already configured
+    # above. Discord needs nothing app-wide either -- each candidate pastes
+    # their own webhook URL (see channels/discord_channel.py).
+    NOTIFICATIONS_BRIEF_MAX_ITEMS: int = 5
+
+    # -- WhatsApp (Meta Business Cloud API) -- the one channel that can't
+    # go live from code alone: needs a verified Meta Business Account, a
+    # registered phone number, and a message template pre-approved by Meta
+    # (see channels/whatsapp_channel.py for why a template, not free text).
+    # Left unset -> WhatsApp delivery is skipped with a log line, same
+    # "unconfigured integration, don't crash the run" convention as the
+    # offers module's providers.
+    WHATSAPP_ACCESS_TOKEN: str | None = None
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    # Name of the pre-approved template in Meta Business Manager -- its
+    # parameter order must match channels/whatsapp_channel.py's payload
+    # (first_name, offer count, top offer title, top offer company, link).
+    WHATSAPP_TEMPLATE_NAME: str | None = None
+    WHATSAPP_API_VERSION: str = "v21.0"
+    WHATSAPP_TIMEOUT_SECONDS: int = 15
+
     # ---- Logging ---------------------------------------------------------
     LOG_LEVEL: str = "INFO"
     LOG_JSON: bool = False  # True -> JSON logs (prod), False -> pretty console

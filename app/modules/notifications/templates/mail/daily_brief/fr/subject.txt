@@ -1,0 +1,1 @@
+{{ count }} offre{{ "s" if count > 1 else "" }} qui correspond{{ "ent" if count > 1 else "" }} à votre profil
