@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.logging import get_logger
 from app.core.models import utcnow
@@ -178,7 +178,7 @@ class DailyBriefService:
         if user is None:
             return
 
-        channels_sent = await self._dispatch(user, preference, items, settings)
+        channels_sent = await self._dispatch(user, preference, items)
         for failure in {"email", "discord", "whatsapp"} - set(channels_sent):
             enabled = getattr(preference, f"{failure}_enabled")
             if enabled:
@@ -258,7 +258,7 @@ class DailyBriefService:
         if user is None:
             raise NotFoundError("Utilisateur introuvable.")
 
-        channels_sent = await self._dispatch(user, preference, items, settings)
+        channels_sent = await self._dispatch(user, preference, items)
         # send_brief_email only enqueues an EmailMessage row in this
         # session's transaction (see channels/email_channel.py) -- without
         # this commit a test-send would silently never actually reach the
@@ -271,7 +271,6 @@ class DailyBriefService:
         user: PublicUser,
         preference: NotificationPreference,
         items: list[BriefItem],
-        settings: Settings,
     ) -> list[str]:
         channels_sent: list[str] = []
 
@@ -300,7 +299,6 @@ class DailyBriefService:
                 phone_number=preference.whatsapp_phone_number,
                 first_name=user.first_name,
                 items=items,
-                dashboard_url=f"{settings.APP_URL.rstrip('/')}/dashboard",
             )
         ):
             channels_sent.append("whatsapp")
