@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.core.exceptions import BadRequestError
 from app.core.models import utcnow
 from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
@@ -249,3 +251,80 @@ async def test_send_daily_briefs_whatsapp_unconfigured_is_skipped_not_fatal(
             profile.user_id
         )
     assert entries[0].channels_sent == ["email"]  # whatsapp attempted, not delivered
+
+
+async def test_send_test_brief_requires_a_channel(
+    client: AsyncClient, verify_user
+) -> None:
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=1)
+    async with AsyncSessionLocal() as session:
+        await NotificationPreferenceRepository(session).create(
+            NotificationPreference(user_id=profile.user_id, email_enabled=False)
+        )
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        with pytest.raises(BadRequestError):
+            await DailyBriefService(session).send_test_brief(profile.user_id)
+
+
+async def test_send_test_brief_sends_immediately_and_ignores_dedup(
+    client: AsyncClient, verify_user
+) -> None:
+    """Unlike send_daily_briefs, a match already recorded as sent must still
+    go out again here -- testing must never be blocked by, or itself
+    disturb, the real job's dedup ledger."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=1)
+    async with AsyncSessionLocal() as session:
+        await NotificationPreferenceRepository(session).create(
+            NotificationPreference(user_id=profile.user_id)
+        )
+        matches = await CandidateMatchRepository(session).list_top_for_profile(
+            profile.id
+        )
+        await NotificationBriefEntryRepository(session).create(
+            NotificationBriefEntry(
+                user_id=profile.user_id,
+                candidate_match_id=matches[0].id,
+                sent_at=utcnow(),
+                channels_sent=["email"],
+            )
+        )
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        channels_sent = await DailyBriefService(session).send_test_brief(
+            profile.user_id
+        )
+
+    assert channels_sent == ["email"]
+    async with AsyncSessionLocal() as session:
+        entries = await NotificationBriefEntryRepository(session).list_for_user(
+            profile.user_id
+        )
+    assert len(entries) == 1  # test-send recorded nothing new
+
+
+async def test_test_send_route_delivers_and_reports_channels(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    profile = await _profile_with_matches(n_matches=1)
+    async with AsyncSessionLocal() as session:
+        # Default-constructed preference: email_enabled=True, Discord/
+        # WhatsApp off -- avoids the route actually reaching out over the
+        # network to a fake webhook/WhatsApp endpoint during a test.
+        await NotificationPreferenceRepository(session).create(
+            NotificationPreference(user_id=profile.user_id)
+        )
+        await session.commit()
+
+    r = await client.post(
+        "/api/v1/notifications/preferences/test-send", headers=auth_headers
+    )
+
+    assert r.status_code == 200
+    assert r.json()["channels_sent"] == ["email"]

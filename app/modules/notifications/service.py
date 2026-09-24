@@ -14,8 +14,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, get_settings
-from app.core.exceptions import BadRequestError
+from app.core.config import get_settings
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.modules.auth import AuthGateway, PublicUser
@@ -178,7 +178,7 @@ class DailyBriefService:
         if user is None:
             return
 
-        channels_sent = await self._dispatch(user, preference, items, settings)
+        channels_sent = await self._dispatch(user, preference, items)
         for failure in {"email", "discord", "whatsapp"} - set(channels_sent):
             enabled = getattr(preference, f"{failure}_enabled")
             if enabled:
@@ -200,12 +200,77 @@ class DailyBriefService:
         report.users_sent += 1
         report.items_sent += len(items)
 
+    async def send_test_brief(self, user_id: uuid.UUID) -> list[str]:
+        """Manual "send me one now" -- backs a "Tester l'envoi" action on the
+        notification-settings screen so a candidate can see a real email/
+        Discord/WhatsApp message land before trusting the scheduled 18:30
+        job to ever run.
+
+        Deliberately independent of the real daily job's state in both
+        directions: an offer already recorded as sent by send_daily_briefs
+        is still eligible here (dedup would otherwise make testing
+        impossible once the job has run once), and nothing sent here is
+        recorded in NotificationBriefEntry (a test-send must never suppress
+        that same offer from the real brief later).
+        """
+        settings = get_settings()
+        profile = await self.profiles.get_by_user(user_id)
+        if profile is None or profile.status != ProfileStatus.complete.value:
+            raise BadRequestError(
+                "Complétez votre profil candidat avant de tester l'envoi des "
+                "notifications."
+            )
+
+        preference = await self.preferences.get_by_user(user_id)
+        if preference is None or not (
+            preference.email_enabled
+            or preference.discord_enabled
+            or preference.whatsapp_enabled
+        ):
+            raise BadRequestError(
+                "Activez au moins un canal de notification avant de tester l'envoi."
+            )
+
+        candidates = await self.matches.list_top_for_profile(
+            profile.id, limit=settings.NOTIFICATIONS_BRIEF_MAX_ITEMS
+        )
+        items: list[BriefItem] = []
+        for match in candidates:
+            offer = await self.offers.get(match.job_offer_id)
+            if offer is None:
+                continue
+            items.append(
+                BriefItem(
+                    match_id=str(match.id),
+                    title=offer.title,
+                    company_name=offer.company_name or match.company_name,
+                    url=f"{settings.APP_URL.rstrip('/')}/opportunity/{match.id}",
+                    career_score=match.career_score,
+                )
+            )
+        if not items:
+            raise BadRequestError(
+                "Aucune offre correspondante pour l'instant -- réessayez une "
+                "fois que des correspondances auront été calculées."
+            )
+
+        user = await self.auth.get_user(user_id)
+        if user is None:
+            raise NotFoundError("Utilisateur introuvable.")
+
+        channels_sent = await self._dispatch(user, preference, items)
+        # send_brief_email only enqueues an EmailMessage row in this
+        # session's transaction (see channels/email_channel.py) -- without
+        # this commit a test-send would silently never actually reach the
+        # mailer's outbox.
+        await self.session.commit()
+        return channels_sent
+
     async def _dispatch(
         self,
         user: PublicUser,
         preference: NotificationPreference,
         items: list[BriefItem],
-        settings: Settings,
     ) -> list[str]:
         channels_sent: list[str] = []
 
@@ -234,7 +299,6 @@ class DailyBriefService:
                 phone_number=preference.whatsapp_phone_number,
                 first_name=user.first_name,
                 items=items,
-                dashboard_url=f"{settings.APP_URL.rstrip('/')}/dashboard",
             )
         ):
             channels_sent.append("whatsapp")

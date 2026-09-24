@@ -253,9 +253,11 @@ class Settings(BaseSettings):
     # offers module's providers.
     WHATSAPP_ACCESS_TOKEN: str | None = None
     WHATSAPP_PHONE_NUMBER_ID: str | None = None
-    # Name of the pre-approved template in Meta Business Manager -- its
-    # parameter order must match channels/whatsapp_channel.py's payload
-    # (first_name, offer count, top offer title, top offer company, link).
+    # Name of the pre-approved template in Meta Business Manager -- its 5
+    # positional body variables must match channels/whatsapp_channel.py's
+    # payload order (first name, job title, company name, match score,
+    # offer link). One template message is sent per offer, not one
+    # summarizing the whole brief -- see that module's docstring.
     WHATSAPP_TEMPLATE_NAME: str | None = None
     WHATSAPP_API_VERSION: str = "v21.0"
     WHATSAPP_TIMEOUT_SECONDS: int = 15

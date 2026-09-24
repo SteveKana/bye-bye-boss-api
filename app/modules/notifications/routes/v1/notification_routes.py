@@ -7,8 +7,12 @@ from app.modules.auth import CurrentUser
 from app.modules.notifications.schemas import (
     NotificationPreferenceRead,
     NotificationPreferenceUpdate,
+    NotificationTestSendResult,
 )
-from app.modules.notifications.service import NotificationPreferenceService
+from app.modules.notifications.service import (
+    DailyBriefService,
+    NotificationPreferenceService,
+)
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -32,3 +36,16 @@ async def update_preferences(
         user.id, **payload.model_dump(exclude_unset=True)
     )
     return NotificationPreferenceRead.model_validate(preference)
+
+
+@router.post("/preferences/test-send", response_model=NotificationTestSendResult)
+async def test_send_preferences(
+    session: DBSession, user: CurrentUser
+) -> NotificationTestSendResult:
+    """ "Tester l'envoi" button on the notification-settings screen -- sends
+    one real brief right now, on whatever channels are currently enabled and
+    valid, instead of waiting for the scheduled 18:30 job. See
+    DailyBriefService.send_test_brief for exactly how this differs from the
+    real daily run (ignores dedup, records nothing)."""
+    channels_sent = await DailyBriefService(session).send_test_brief(user.id)
+    return NotificationTestSendResult(channels_sent=channels_sent)
