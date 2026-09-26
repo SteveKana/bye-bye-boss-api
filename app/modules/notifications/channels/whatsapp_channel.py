@@ -14,16 +14,22 @@ are set, this channel just logs and no-ops -- same "skip an unconfigured
 integration rather than crash the run" convention as the offers module's
 providers (see OfferProvider.is_configured).
 
-Template constraint: a Meta template message takes a *fixed* number of
-positional variables ({{1}}, {{2}}, ...) -- there's no way to loop over
-"however many offers today" inside a single message. So instead of one
-message summarizing the brief, this sends one template message *per offer*
-in `items`, each with that offer's own title/company/score/link -- a
-candidate with 3 new matches today gets 3 separate WhatsApp messages, each
-linking straight to one real offer. The pre-approved template in Meta
-Business Manager (WHATSAPP_TEMPLATE_NAME) must have exactly 5 positional
-body variables in this order: first name, job title, company name, match
-score, offer link.
+Template constraint: a Meta template message takes a *fixed* set of
+variables -- there's no way to loop over "however many offers today"
+inside a single message. So instead of one message summarizing the brief,
+this sends one template message *per offer* in `items`, each with that
+offer's own title/company/score/link -- a candidate with 3 new matches
+today gets 3 separate WhatsApp messages, each linking straight to one real
+offer.
+
+The pre-approved template (WHATSAPP_TEMPLATE_NAME, "job_offer_alert" in
+Meta Business Manager) uses NAMED body variables, not positional ones --
+its parameter_format is "NAMED" (confirmed via GET .../message_templates),
+so every parameter sent below must carry a "parameter_name" matching the
+template's own placeholder name, or Meta rejects the send with "(#100)
+Invalid parameter" / "Parameter name is missing or empty". The template
+has exactly 5 named body variables, in this order: first_name, job_title,
+company_name, match_score, offer_link.
 """
 
 from __future__ import annotations
@@ -60,11 +66,31 @@ def _build_payload(
                 {
                     "type": "body",
                     "parameters": [
-                        {"type": "text", "text": first_name or "candidat"},
-                        {"type": "text", "text": item.title},
-                        {"type": "text", "text": item.company_name},
-                        {"type": "text", "text": str(item.career_score)},
-                        {"type": "text", "text": item.url},
+                        {
+                            "type": "text",
+                            "parameter_name": "first_name",
+                            "text": first_name or "candidat",
+                        },
+                        {
+                            "type": "text",
+                            "parameter_name": "job_title",
+                            "text": item.title,
+                        },
+                        {
+                            "type": "text",
+                            "parameter_name": "company_name",
+                            "text": item.company_name,
+                        },
+                        {
+                            "type": "text",
+                            "parameter_name": "match_score",
+                            "text": str(item.career_score),
+                        },
+                        {
+                            "type": "text",
+                            "parameter_name": "offer_link",
+                            "text": item.url,
+                        },
                     ],
                 }
             ],
