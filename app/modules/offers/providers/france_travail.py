@@ -24,6 +24,7 @@ from __future__ import annotations
 import httpx
 
 from app.core.config import get_settings
+from app.core.contract_type import guess_contract_type
 from app.core.daily_rate import extract_daily_rate
 from app.core.logging import get_logger
 from app.core.regions import region_from_insee_code, region_from_postal_code
@@ -117,6 +118,14 @@ class FranceTravailProvider(OfferProvider):
         # description or in this same salaire.libelle field France Travail
         # otherwise uses for a plain salary label -- see core/daily_rate.py.
         daily_rate_min, daily_rate_max = extract_daily_rate(description, salary_label)
+        # France Travail usually fills typeContratLibelle/typeContrat, but not
+        # always -- same fallback as Adzuna's normalizer (see
+        # core/contract_type.py) for the listings where neither is set, even
+        # though the contract type is stated in plain text in the title or
+        # description. Never overrides an actual provided value.
+        contract_type = item.get("typeContratLibelle") or item.get("typeContrat")
+        if not contract_type:
+            contract_type = guess_contract_type(title, description)
         return NormalizedOffer(
             external_id=offer_id,
             title=title,
@@ -125,7 +134,7 @@ class FranceTravailProvider(OfferProvider):
             company_name=entreprise.get("nom"),
             description=description,
             location=lieu.get("libelle"),
-            contract_type=item.get("typeContratLibelle") or item.get("typeContrat"),
+            contract_type=contract_type,
             salary_label=salary_label,
             region=region,
             is_full_remote=looks_full_remote(title, description),

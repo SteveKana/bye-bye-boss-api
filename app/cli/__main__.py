@@ -6,6 +6,8 @@ Commands:
     routes                        print the registered route table
     sync-offers                   fetch job offers from configured providers now
     run-matching                  score complete profiles against offers now
+    backfill-contract-type        guess contract_type for already-stored offers
+                                   that have none (one-off, safe to re-run)
 """
 
 from __future__ import annotations
@@ -89,6 +91,39 @@ def _cmd_sync_offers(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_backfill_contract_type(_: argparse.Namespace) -> int:
+    """One-off: core/contract_type.py's keyword guess only runs at ingestion
+    time (see adzuna.py/france_travail.py's `_normalize`), so it never
+    touches an offer already sitting in the DB from before that fallback
+    existed -- that offer only gets fixed if/when it's re-fetched by a
+    provider, which isn't guaranteed for an older listing that may have
+    already fallen out of the source's own search results. This applies the
+    same guess directly to every already-stored offer with no contract_type,
+    from the title/description already on file. Safe to re-run: it only
+    ever touches offers where contract_type is still empty."""
+    import asyncio
+
+    from app.core.contract_type import guess_contract_type
+    from app.core.database import AsyncSessionLocal
+    from app.modules.offers.repository import JobOfferRepository
+
+    async def _run() -> None:
+        updated = 0
+        async with AsyncSessionLocal() as session:
+            offers = JobOfferRepository(session)
+            candidates = await offers.list_missing_contract_type()
+            for offer in candidates:
+                guess = guess_contract_type(offer.title, offer.description)
+                if guess:
+                    await offers.update(offer, {"contract_type": guess})
+                    updated += 1
+            await session.commit()
+        print(f"checked={len(candidates)} updated={updated}")
+
+    asyncio.run(_run())
+    return 0
+
+
 def _cmd_run_matching(_: argparse.Namespace) -> int:
     import asyncio
 
@@ -129,6 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "run-matching", help="score complete profiles against offers now"
     ).set_defaults(func=_cmd_run_matching)
+    sub.add_parser(
+        "backfill-contract-type",
+        help="guess contract_type for already-stored offers that have none",
+    ).set_defaults(func=_cmd_backfill_contract_type)
 
     args = parser.parse_args(argv)
     return args.func(args)
