@@ -15,6 +15,7 @@ from __future__ import annotations
 import httpx
 
 from app.core.config import get_settings
+from app.core.contract_type import guess_contract_type
 from app.core.daily_rate import extract_daily_rate
 from app.core.logging import get_logger
 from app.core.regions import normalize_region_name
@@ -92,6 +93,14 @@ class AdzunaProvider(OfferProvider):
         contract_type = ", ".join(
             v for v in (item.get("contract_type"), item.get("contract_time")) if v
         )
+        # Both fields are frequently empty -- Adzuna only has as much
+        # structured contract info as the original job board gave it. Falls
+        # back to guessing from the posting's own wording rather than
+        # leaving the frontend's contract-type tag blank (see
+        # core/contract_type.py). Never overrides a value Adzuna did
+        # provide, even a partial one (e.g. "full_time" alone).
+        if not contract_type:
+            contract_type = guess_contract_type(title, description)
         # Adzuna has no free-text salary label like France Travail's
         # salaire.libelle -- title + description is all there is to look
         # for a stated TJM in (see core/daily_rate.py).
