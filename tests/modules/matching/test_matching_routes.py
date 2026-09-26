@@ -104,7 +104,7 @@ async def test_top_matches_returns_precomputed_results_sorted_by_score(
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 2
-    # Best career_score first.
+    # Best career_score * ats_potential first (90*95=8550 vs 40*50=2000).
     assert body[0]["career_score"] == 90
     assert body[0]["offer"]["title"] == "Offre B"
     assert body[1]["career_score"] == 40

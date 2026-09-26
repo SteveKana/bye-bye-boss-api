@@ -19,6 +19,10 @@ _ITEMS = [
         company_name="Doctolib",
         url="https://example.com/opportunity/1",
         career_score=87,
+        # Deliberately different from career_score in these fixtures, so a
+        # test asserting on this value can't accidentally pass because the
+        # two numbers happen to match.
+        ats_potential=72,
     )
 ]
 
@@ -30,6 +34,7 @@ _TWO_ITEMS = [
         company_name="Leclerc",
         url="https://example.com/opportunity/2",
         career_score=91,
+        ats_potential=64,
     ),
 ]
 
@@ -164,18 +169,21 @@ async def test_send_brief_whatsapp_sends_one_message_per_offer(monkeypatch) -> N
         json.loads(r.content)["template"]["components"][0]["parameters"]
         for r in requests
     ]
+    # 4th value is ats_potential (72/64), not career_score (87/91) -- the
+    # WhatsApp template's "match_score" placeholder deliberately carries
+    # ats_potential, see whatsapp_channel.py's module docstring.
     assert [p["text"] for p in bodies[0]] == [
         "Steve",
         "Product Owner Data",
         "Doctolib",
-        "87",
+        "72",
         "https://example.com/opportunity/1",
     ]
     assert [p["text"] for p in bodies[1]] == [
         "Steve",
         "Développeur Backend",
         "Leclerc",
-        "91",
+        "64",
         "https://example.com/opportunity/2",
     ]
 
