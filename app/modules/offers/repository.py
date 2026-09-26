@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlmodel import desc
+from sqlmodel import desc, or_
 
 from app.core.repository import BaseRepository
 from app.modules.offers.models import JobOffer
@@ -16,6 +16,18 @@ class JobOfferRepository(BaseRepository[JobOffer]):
         self, source: str, external_id: str
     ) -> JobOffer | None:
         return await self.find_one(source=source, external_id=external_id)
+
+    async def list_missing_contract_type(self) -> Sequence[JobOffer]:
+        """Offers with no contract_type at all -- backs the one-off
+        `backfill-contract-type` CLI command that applies core/contract_type's
+        keyword guess to offers ingested before either provider had that
+        fallback wired in (see adzuna.py/france_travail.py's `_normalize`).
+        `filters` on `list()` only does equality, so this needs its own
+        query for "is null or empty string"."""
+        stmt = self._base_select().where(
+            or_(JobOffer.contract_type.is_(None), JobOffer.contract_type == "")  # type: ignore[attr-defined]
+        )
+        return (await self.session.exec(stmt)).all()
 
     async def list_recent(self, *, since: datetime) -> Sequence[JobOffer]:
         """Offers ingested on or after `since`, most recently published
