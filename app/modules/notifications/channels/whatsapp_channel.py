@@ -30,6 +30,15 @@ template's own placeholder name, or Meta rejects the send with "(#100)
 Invalid parameter" / "Parameter name is missing or empty". The template
 has exactly 5 named body variables, in this order: first_name, job_title,
 company_name, match_score, offer_link.
+
+The "match_score" placeholder's name is fixed on Meta's side (renaming it
+means re-submitting the template for review), but the value we send under
+it is `item.ats_potential`, not `item.career_score` -- unlike career_score,
+ats_potential already prices in a real hard_blocker (stays low when one
+applies), so it can't tout a match the candidate would actually be
+disqualified from (Steve's call, see matching/prompt.py's ETAPE 7/9).
+Email and Discord still show career_score; this substitution is
+WhatsApp-only.
 """
 
 from __future__ import annotations
@@ -84,7 +93,8 @@ def _build_payload(
                         {
                             "type": "text",
                             "parameter_name": "match_score",
-                            "text": str(item.career_score),
+                            # Not career_score -- see module docstring.
+                            "text": str(item.ats_potential),
                         },
                         {
                             "type": "text",

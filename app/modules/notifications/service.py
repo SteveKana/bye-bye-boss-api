@@ -168,6 +168,7 @@ class DailyBriefService:
                     # cette offre", not just a bare job posting.
                     url=f"{settings.APP_URL.rstrip('/')}/opportunity/{match.id}",
                     career_score=match.career_score,
+                    ats_potential=match.ats_potential,
                 )
             )
         if not items:
@@ -246,6 +247,7 @@ class DailyBriefService:
                     company_name=offer.company_name or match.company_name,
                     url=f"{settings.APP_URL.rstrip('/')}/opportunity/{match.id}",
                     career_score=match.career_score,
+                    ats_potential=match.ats_potential,
                 )
             )
         if not items:

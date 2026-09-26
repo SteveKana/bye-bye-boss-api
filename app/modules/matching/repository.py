@@ -36,9 +36,17 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
     async def list_top_for_profile(
         self, candidate_profile_id: uuid.UUID, *, limit: int = 20
     ):
+        # career_score and ats_potential are deliberately independent (see
+        # matching/prompt.py's ETAPE 7/9 -- career_score ignores ATS filters
+        # and blockers entirely, ats_potential already prices in a real
+        # hard_blocker by staying low). Sorting on either alone lets the
+        # other collapse to zero while still ranking near the top, so a
+        # candidate can see a 91% match that's actually disqualified, or
+        # vice versa. The product of the two only ranks a match highly when
+        # BOTH are good -- a zero on either side sinks it (Steve's call).
         return await self.list(
             filters={"candidate_profile_id": candidate_profile_id},
-            order_by=desc(CandidateMatch.career_score),
+            order_by=desc(CandidateMatch.career_score * CandidateMatch.ats_potential),
             limit=limit,
         )
 
