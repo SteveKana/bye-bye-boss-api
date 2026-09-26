@@ -368,6 +368,89 @@ async def test_adzuna_search_normalizes_results(monkeypatch) -> None:
     assert offer.published_at is not None
 
 
+async def test_adzuna_guesses_contract_type_when_fields_are_empty(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "999",
+                        "title": "Product Owner freelance",
+                        "description": "Mission en freelance, TJM à définir.",
+                        "redirect_url": "https://adzuna.fr/details/999",
+                        # No contract_type/contract_time at all -- the
+                        # common case for a lot of Adzuna listings.
+                    }
+                ]
+            },
+        )
+
+    provider = AdzunaProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].contract_type == "Freelance"
+
+
+async def test_adzuna_never_overrides_its_own_contract_fields_with_a_guess(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "999",
+                        "title": "Stage Business Analyst",
+                        "description": "Stage de fin d'études.",
+                        "redirect_url": "https://adzuna.fr/details/999",
+                        # Adzuna did provide something -- even though the
+                        # wording would otherwise guess "Stage", the actual
+                        # provided value must win.
+                        "contract_time": "part_time",
+                    }
+                ]
+            },
+        )
+
+    provider = AdzunaProvider(client=_client(handler))
+    results = await provider.search(keywords="business analyst", limit=50)
+
+    assert results[0].contract_type == "part_time"
+
+
+async def test_adzuna_has_no_contract_type_when_nothing_recognized(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
+    monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "999",
+                        "title": "Product Owner",
+                        "description": "Rejoignez notre équipe produit.",
+                        "redirect_url": "https://adzuna.fr/details/999",
+                    }
+                ]
+            },
+        )
+
+    provider = AdzunaProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].contract_type is None
+
+
 async def test_adzuna_search_failure_returns_empty(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "ADZUNA_APP_ID", "app-id")
     monkeypatch.setattr(get_settings(), "ADZUNA_APP_KEY", "app-key")
