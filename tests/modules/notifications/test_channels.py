@@ -186,6 +186,13 @@ async def test_send_brief_whatsapp_sends_one_message_per_offer(monkeypatch) -> N
         "64",
         "https://example.com/opportunity/2",
     ]
+    # The template now uses POSITIONAL variables ({{1}}..{{5}}), not named
+    # ones -- a "parameter_name" key here would make Meta reject the send
+    # with "(#100) Invalid parameter" (see whatsapp_channel.py's module
+    # docstring). Locks in the NAMED->POSITIONAL switch as a regression.
+    for body in bodies:
+        for parameter in body:
+            assert "parameter_name" not in parameter
 
 
 async def test_send_brief_whatsapp_one_offer_failing_does_not_block_the_rest(
