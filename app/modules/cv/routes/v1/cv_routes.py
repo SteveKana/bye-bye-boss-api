@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.core.dependencies import DBSession
+from app.core.events import event_bus
 from app.core.exceptions import BadRequestError
 from app.core.ratelimit import RateLimiter
 from app.modules.auth import CurrentUser
+from app.modules.cv.events import ProfileOnboardingCompleted
 from app.modules.cv.schemas import (
     CandidateProfileRead,
     CandidateProfileUpdate,
@@ -79,7 +81,24 @@ async def update_profile(
 
 @router.put("/profile/preferences", response_model=CandidateProfileRead)
 async def update_preferences(
-    data: PreferencesUpdate, session: DBSession, user: CurrentUser
+    data: PreferencesUpdate,
+    session: DBSession,
+    user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> CandidateProfileRead:
-    profile = await CvService(session).apply_preferences(user_id=user.id, data=data)
+    profile, is_first_completion = await CvService(session).apply_preferences(
+        user_id=user.id, data=data
+    )
+    if is_first_completion:
+        # Deferred to a background task rather than a plain, inline
+        # `await event_bus.emit(...)` (the usual place -- see events.py's
+        # docstring): cv has no idea who, if anyone, listens for this event,
+        # and today's one subscriber (matching's on-demand run, see
+        # matching/listeners.py) is a slow, LLM-bound job. Emitting inline
+        # would make "Terminer" hang on onboarding for however long that
+        # run takes. `background_tasks` only exists at the route layer,
+        # which is why this lives here rather than inside CvService.
+        background_tasks.add_task(
+            event_bus.emit, ProfileOnboardingCompleted(profile_id=profile.id)
+        )
     return CandidateProfileRead.model_validate(profile)

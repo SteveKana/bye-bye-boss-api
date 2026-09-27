@@ -129,6 +129,17 @@ class CandidateProfile(BaseModel, table=True):
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
 
+    # Set once, permanently, by CvService.apply_preferences the very first
+    # time this profile completes onboarding -- deliberately NOT derived
+    # from `status == complete`, because status alone flips back to draft
+    # on every CV re-import (see import_cv below) and would let a candidate
+    # force repeat, LLM-costed immediate matching runs (see
+    # cv.events.ProfileOnboardingCompleted) just by re-importing their CV
+    # and resaving preferences. Never cleared once set.
+    onboarding_matched_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+
     # Texte brut extrait du fichier, conservé pour permettre un nouveau
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
     raw_text: str | None = Field(default=None)

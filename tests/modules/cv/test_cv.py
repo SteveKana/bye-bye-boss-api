@@ -5,6 +5,7 @@ from httpx import AsyncClient
 
 from app.core.config import get_settings
 from app.modules.cv import extraction, gateway
+from app.modules.matching import jobs as matching_jobs
 
 UPLOAD = "/api/v1/cv/upload"
 PROFILE = "/api/v1/cv/profile"
@@ -209,6 +210,68 @@ async def test_preferences_update_completes_onboarding(
     assert body["remote_preferences"] == ["Hybride", "Full remote"]
     assert body["salary_target"] == 55000
     assert body["daily_rate"] == 500
+
+
+async def test_completing_onboarding_for_the_first_time_triggers_immediate_matching(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    triggered: list = []
+
+    async def _fake_run(profile_id):
+        triggered.append(profile_id)
+
+    monkeypatch.setattr(matching_jobs, "run_matching_for_new_profile", _fake_run)
+
+    upload = await client.post(
+        UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers
+    )
+    profile_id = upload.json()["id"]
+
+    r = await client.put(
+        PREFERENCES,
+        json={
+            "contract_types": ["CDI"],
+            "remote_preferences": ["Sur site"],
+            "mobility": "France entière",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert [str(p) for p in triggered] == [profile_id]
+
+
+async def test_saving_preferences_again_does_not_retrigger_matching(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    # The abuse case Steve flagged: a candidate must not be able to force
+    # extra (LLM-costed) matching runs by resaving preferences, or by
+    # re-importing their CV, over and over.
+    triggered: list = []
+
+    async def _fake_run(profile_id):
+        triggered.append(profile_id)
+
+    monkeypatch.setattr(matching_jobs, "run_matching_for_new_profile", _fake_run)
+
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    payload = {
+        "contract_types": ["CDI"],
+        "remote_preferences": ["Sur site"],
+        "mobility": "France entière",
+    }
+    await client.put(PREFERENCES, json=payload, headers=auth_headers)
+    assert len(triggered) == 1
+
+    # Re-saving preferences a second time...
+    r = await client.put(PREFERENCES, json=payload, headers=auth_headers)
+    assert r.status_code == 200
+    assert len(triggered) == 1
+
+    # ...and re-importing the CV in between, then saving preferences once
+    # more, still doesn't fire a second immediate run.
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(PREFERENCES, json=payload, headers=auth_headers)
+    assert len(triggered) == 1
 
 
 async def test_saving_preferences_does_not_touch_cv_analyzed_at(

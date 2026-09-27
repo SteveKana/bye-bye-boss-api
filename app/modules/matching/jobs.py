@@ -7,13 +7,22 @@ review -- running once daily at a fixed local time, right after the day's
 new offers have had a chance to come in, cuts LLM spend further without
 losing much freshness for a still-small candidate base (see the config
 history in app/core/config.py for the earlier interval-based step).
+
+Also holds `run_matching_for_new_profile` -- an on-demand, one-off entry
+point for a single profile, called by matching/listeners.py in reaction to
+cv's `ProfileOnboardingCompleted` event (see both docstrings below). Not
+part of the daily schedule itself, but living here because it opens its
+own session the same way `sync_matches` does.
 """
 
 from __future__ import annotations
 
+import uuid
+
 from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.scheduler import scheduled
+from app.modules.cv import CandidateProfileRepository
 from app.modules.matching.service import MatchingService
 
 logger = get_logger("matching.worker")
@@ -29,3 +38,33 @@ async def sync_matches() -> None:
         report = await MatchingService(session).sync_all()
     if report.pairs_failed:
         logger.warning("matching_sync_had_failures", failed=report.pairs_failed)
+
+
+async def run_matching_for_new_profile(profile_id: uuid.UUID) -> None:
+    """One-off matching run for a single profile -- called by
+    matching/listeners.py in reaction to cv's `ProfileOnboardingCompleted`
+    event, itself only fired the very first time a profile completes
+    onboarding (see that event's docstring for why this can't be
+    re-triggered by re-uploading a CV or resaving preferences later). Lets
+    a brand-new candidate see real opportunities on their dashboard right
+    away instead of waiting for the next 18:00 sync.
+
+    That event is emitted from a FastAPI background task (see
+    cv.routes.v1.cv_routes.update_preferences), started after the request's
+    own response is sent -- the request's own DB session is already closed
+    by then, so this opens its own, same as `sync_matches` above. Never
+    raises: a failure here just means this candidate's dashboard keeps
+    showing "en cours d'analyse" until the next scheduled sync picks it up,
+    rather than surfacing as a server error on onboarding completion.
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            profile = await CandidateProfileRepository(session).get(profile_id)
+            if profile is None:
+                return
+            await MatchingService(session).run_for_profile(profile)
+        except Exception:
+            logger.exception(
+                "immediate_matching_for_new_profile_failed",
+                profile_id=str(profile_id),
+            )
