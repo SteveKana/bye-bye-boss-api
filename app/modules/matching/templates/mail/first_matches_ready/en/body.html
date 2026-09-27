@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">Hi,</p>
+
+<p style="margin:0 0 20px">
+  Your CV has been analyzed and compared against the offers available on
+  <strong>{{ brand }}</strong>.
+</p>
+
+{% if match_count > 0 %}
+<p style="margin:0 0 24px">
+  <strong>{{ match_count }}</strong> opportunit{{ 'ies' if match_count > 1 else 'y' }}
+  matching your profile {{ 'are' if match_count > 1 else 'is' }} already waiting for
+  you, with an ATS score, a career score, and the fit details for each one.
+</p>
+{% else %}
+<p style="margin:0 0 24px">
+  No offer matches your profile closely enough yet, but we keep analyzing new
+  ones every day -- you'll be notified as soon as a match appears.
+</p>
+{% endif %}
+
+<p style="margin:0 0 24px">
+  <a
+    href="{{ link }}"
+    style="display:inline-block;background:#5B3FE8;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px"
+  >
+    View my dashboard
+  </a>
+</p>
+
+<p style="margin:0;font-size:13px;color:#9CA3AF">
+  You're receiving this email because your profile on {{ brand }} was just analyzed.
+</p>
+{% endblock %}
+
+{% block footer %}
+{{ brand }} — you're receiving this email because your account was just created.
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">Bonjour,</p>
+
+<p style="margin:0 0 20px">
+  Votre CV a été analysé et comparé aux offres disponibles sur <strong>{{ brand }}</strong>.
+</p>
+
+{% if match_count > 0 %}
+<p style="margin:0 0 24px">
+  <strong>{{ match_count }}</strong> opportunité{{ 's' if match_count > 1 else '' }}
+  correspondant{{ 'ent' if match_count > 1 else '' }} à votre profil
+  {{ 'vous attendent' if match_count > 1 else 'vous attend' }} déjà, avec un score ATS,
+  un score de carrière et le détail de la compatibilité pour chacune.
+</p>
+{% else %}
+<p style="margin:0 0 24px">
+  Aucune offre ne correspond encore assez précisément à votre profil, mais nous
+  continuons à en analyser de nouvelles chaque jour -- vous serez prévenu dès
+  qu'une correspondance apparaît.
+</p>
+{% endif %}
+
+<p style="margin:0 0 24px">
+  <a
+    href="{{ link }}"
+    style="display:inline-block;background:#5B3FE8;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px"
+  >
+    Voir mon tableau de bord
+  </a>
+</p>
+
+<p style="margin:0;font-size:13px;color:#9CA3AF">
+  Vous recevez cet email suite à l'analyse de votre profil sur {{ brand }}.
+</p>
+{% endblock %}
+
+{% block footer %}
+{{ brand }} — vous recevez cet email suite à l'inscription de votre compte.
+{% endblock %}

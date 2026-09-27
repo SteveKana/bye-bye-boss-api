@@ -1,0 +1,5 @@
+{% if match_count > 0 -%}
+Your analysis is ready: {{ match_count }} opportunit{{ 'ies' if match_count > 1 else 'y' }} waiting for you
+{%- else -%}
+Your analysis is ready
+{%- endif %}
