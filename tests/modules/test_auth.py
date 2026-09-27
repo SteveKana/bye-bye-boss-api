@@ -53,21 +53,13 @@ def _token_from_link(body: str) -> str:
     return match.group(1)
 
 
-async def test_register_and_login_and_me(client: AsyncClient, verify_user) -> None:
+async def test_register_signs_in_immediately(client: AsyncClient) -> None:
+    # Steve's call: registering behaves like Google sign-in -- a full
+    # session right away, no separate login step and no wait on email
+    # verification (see test_login_still_works_when_unverified below).
     payload = {"email": "a@b.com", "password": "supersecret", "first_name": "A"}
     r = await client.post(REGISTER, json=payload)
     assert r.status_code == 201
-    body = r.json()
-    assert body["email"] == "a@b.com"
-    assert body["first_name"] == "A"
-    assert body["isadmin"] is False
-    assert body["is_verified"] is False
-    assert body["subscription"] == "standard"
-    assert body["last_rescoring_time"] is None
-
-    await verify_user("a@b.com")
-    r = await client.post(LOGIN, json={"email": "a@b.com", "password": "supersecret"})
-    assert r.status_code == 200
     tokens = r.json()
     assert tokens["token_type"] == "bearer"
 
@@ -76,7 +68,13 @@ async def test_register_and_login_and_me(client: AsyncClient, verify_user) -> No
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert r.status_code == 200
-    assert r.json()["email"] == "a@b.com"
+    body = r.json()
+    assert body["email"] == "a@b.com"
+    assert body["first_name"] == "A"
+    assert body["isadmin"] is False
+    assert body["is_verified"] is False
+    assert body["subscription"] == "standard"
+    assert body["last_rescoring_time"] is None
 
 
 async def test_duplicate_email_conflicts(client: AsyncClient) -> None:
@@ -239,7 +237,6 @@ async def test_register_queues_verification_email(client: AsyncClient) -> None:
         json={"email": "v@b.com", "password": "supersecret", "locale": "fr"},
     )
     assert r.status_code == 201
-    assert r.json()["is_verified"] is False
 
     queued = await _queued_emails("v@b.com")
     assert len(queued) == 1
@@ -250,16 +247,23 @@ async def test_register_queues_verification_email(client: AsyncClient) -> None:
     assert "/verify-email?token=" in queued[0].body_text
 
 
-async def test_login_blocked_until_verified(client: AsyncClient) -> None:
+async def test_login_still_works_when_unverified(client: AsyncClient) -> None:
+    # Verification is informational only (Steve's call) -- it must never
+    # block a login, whether that's the very first one right after
+    # registering or, as here, a later one.
     await client.post(
-        REGISTER, json={"email": "block@b.com", "password": "supersecret"}
+        REGISTER, json={"email": "unverified@b.com", "password": "supersecret"}
     )
 
     r = await client.post(
-        LOGIN, json={"email": "block@b.com", "password": "supersecret"}
+        LOGIN, json={"email": "unverified@b.com", "password": "supersecret"}
     )
-    assert r.status_code == 403
-    assert r.json()["error"]["code"] == "email_not_verified"
+    assert r.status_code == 200
+
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
+    )
+    assert me.json()["is_verified"] is False
 
 
 async def test_verify_email_then_login(client: AsyncClient) -> None:
@@ -311,6 +315,10 @@ async def test_google_login_creates_a_new_verified_user(
     r = await client.post(GOOGLE, json={"id_token": "fake-token"})
     assert r.status_code == 200
     tokens = r.json()
+    # Lets the frontend route a brand-new signup into onboarding (CV upload)
+    # instead of the dashboard -- same destination a fresh email/password
+    # registration gets.
+    assert tokens["is_new_user"] is True
 
     me = await client.get(
         ME, headers={"Authorization": f"Bearer {tokens['access_token']}"}
@@ -325,10 +333,9 @@ async def test_google_login_creates_a_new_verified_user(
 async def test_google_login_is_not_gated_by_email_verification(
     client: AsyncClient, monkeypatch
 ) -> None:
-    # Unlike password login (see test_login_blocked_until_verified), a fresh
-    # Google account must be usable immediately -- it's already verified at
-    # creation, so there's no separate "please check your email" step to
-    # get stuck behind.
+    # Password login isn't gated by verification either any more (see
+    # test_login_still_works_when_unverified), but a fresh Google account is
+    # verified from the moment it's created, regardless.
     _mock_google(monkeypatch, _google_claims("instant@b.com"))
     r = await client.post(GOOGLE, json={"id_token": "fake-token"})
     assert r.status_code == 200
@@ -347,6 +354,9 @@ async def test_google_login_signs_into_existing_account_by_email(
     r = await client.post(GOOGLE, json={"id_token": "fake-token"})
 
     assert r.status_code == 200
+    # Not a new account -- signing into the existing one, so this should
+    # land on the dashboard, not onboarding.
+    assert r.json()["is_new_user"] is False
     me = await client.get(
         ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
     )
