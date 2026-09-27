@@ -38,6 +38,16 @@ class User(BaseModel, table=True):
     # (most users never sign in with Google at all).
     google_id: str | None = Field(default=None, index=True, unique=True, nullable=True)
 
+    # From Google's ID token "picture" claim -- captured once, at the same
+    # moment google_id itself is (new Google signup, or an existing
+    # password account linking Google for the first time), never
+    # refreshed on later logins. Mirrors this file's existing pattern:
+    # first_name/last_name from Google aren't refreshed on repeat logins
+    # either (see AuthService.login_with_google). Stays None for an
+    # account that never signed in with Google -- the frontend falls back
+    # to an initials avatar in that case.
+    picture_url: str | None = Field(default=None, nullable=True)
+
     # Subscription plan — gates the manual-rescore frequency bypass (spec §6).
     # Stored as a plain string; allowed values live in `SubscriptionPlan`.
     subscription: str = Field(default=SubscriptionPlan.standard.value, nullable=False)

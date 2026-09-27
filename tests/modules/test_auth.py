@@ -370,6 +370,48 @@ async def test_google_login_signs_into_existing_account_by_email(
     assert login.status_code == 200
 
 
+async def test_google_login_new_user_captures_picture_url(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # The sidebar/profile/nav avatar reads this straight off /auth/me --
+    # a brand-new Google signup should have it from the very first login.
+    _mock_google(
+        monkeypatch,
+        _google_claims("newphoto@b.com", picture="https://example.com/ada.jpg"),
+    )
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 200
+
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
+    )
+    assert me.json()["picture_url"] == "https://example.com/ada.jpg"
+
+
+async def test_google_login_links_existing_account_captures_picture_url(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    # A password account tapping "Continuer avec Google" for the first time
+    # gets google_id AND picture_url set together (see login_with_google's
+    # "linking" branch) -- same moment, same one-time capture.
+    await client.post(
+        REGISTER, json={"email": "linkphoto@b.com", "password": "supersecret"}
+    )
+    await verify_user("linkphoto@b.com")
+
+    _mock_google(
+        monkeypatch,
+        _google_claims("linkphoto@b.com", picture="https://example.com/link.jpg"),
+    )
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 200
+
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
+    )
+    assert me.json()["picture_url"] == "https://example.com/link.jpg"
+
+
 async def test_google_login_rejects_disabled_account(
     client: AsyncClient, verify_user, monkeypatch
 ) -> None:
