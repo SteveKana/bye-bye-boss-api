@@ -4,11 +4,13 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.config import get_settings
 from app.core.dependencies import DBSession
+from app.core.exceptions import AppError
 from app.core.ratelimit import RateLimiter
 from app.modules.auth.dependencies import CurrentUser
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     EmailVerifyRequest,
+    GoogleAuthRequest,
     LoginRequest,
     MessageResponse,
     PasswordResetConfirm,
@@ -48,6 +50,16 @@ async def register(data: UserCreate, session: DBSession) -> UserRead:
 @router.post("/login", response_model=TokenPair, dependencies=[Depends(login_limit)])
 async def login(data: LoginRequest, session: DBSession) -> TokenPair:
     return await AuthService(session).login(data.email, data.password)
+
+
+@router.post("/google", response_model=TokenPair, dependencies=[Depends(login_limit)])
+async def login_with_google(data: GoogleAuthRequest, session: DBSession) -> TokenPair:
+    client_id = get_settings().GOOGLE_CLIENT_ID
+    if not client_id:
+        raise AppError("Google sign-in is not configured on this server.")
+    return await AuthService(session).login_with_google(
+        data.id_token, client_id=client_id
+    )
 
 
 @router.post(

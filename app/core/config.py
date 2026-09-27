@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     VERIFY_TOKEN_TTL_MINUTES: int = 60 * 24  # 1 day
     BCRYPT_ROUNDS: int = 12
 
+    # ---- Google Sign-In ---------------------------------------------------
+    # The OAuth 2.0 "Web application" client id from Google Cloud Console
+    # (Google Auth Platform > Clients). Public by nature -- it identifies
+    # the app to Google, it isn't a secret -- but required: it's the
+    # "audience" every Google ID token must have been issued for, so
+    # without it POST /auth/google always refuses (see
+    # google_oauth.verify_google_id_token). No client secret is needed:
+    # the frontend uses Google Identity Services' ID-token flow, not a
+    # server-side redirect exchange.
+    GOOGLE_CLIENT_ID: str | None = None
+
     # Bootstrap admin, seeded at startup if both are set and absent in DB.
     ADMIN_EMAIL: str | None = None
     ADMIN_PASSWORD: str | None = None

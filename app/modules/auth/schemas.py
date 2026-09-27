@@ -50,6 +50,14 @@ class RefreshRequest(BaseSchema):
     refresh_token: str
 
 
+class GoogleAuthRequest(BaseSchema):
+    # The ID token (a signed JWT) handed to the frontend by Google Identity
+    # Services -- verified server-side in AuthService.login_with_google
+    # (see modules/auth/google_oauth.py). Not an OAuth "authorization code":
+    # there's no exchange step, this token already carries the identity.
+    id_token: str
+
+
 class PasswordResetRequest(BaseSchema):
     email: EmailStr
     locale: Literal["fr", "en"] = "fr"

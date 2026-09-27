@@ -5,13 +5,38 @@ import re
 from httpx import AsyncClient
 from sqlmodel import select
 
+from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.modules.auth import service as auth_service
+from app.modules.auth.models import User
 from app.modules.mailer.models import EmailMessage
 
 REGISTER = "/api/v1/auth/register"
 LOGIN = "/api/v1/auth/login"
 VERIFY = "/api/v1/auth/verify-email"
 RESEND = "/api/v1/auth/resend-verification"
+GOOGLE = "/api/v1/auth/google"
+
+
+def _google_claims(email: str, *, sub: str = "google-sub-1", **overrides) -> dict:
+    return {
+        "email": email,
+        "sub": sub,
+        "given_name": "Ada",
+        "family_name": "Lovelace",
+        "email_verified": True,
+        **overrides,
+    }
+
+
+def _mock_google(monkeypatch, claims: dict) -> None:
+    # verify_google_id_token itself is covered end-to-end in
+    # test_google_oauth.py -- these tests are about what AuthService and the
+    # route do with the claims it returns, not about JWT verification again.
+    monkeypatch.setattr(get_settings(), "GOOGLE_CLIENT_ID", "test-client-id")
+    monkeypatch.setattr(
+        auth_service, "verify_google_id_token", lambda token, *, client_id: claims
+    )
 
 
 async def _queued_emails(to_email: str) -> list[EmailMessage]:
@@ -273,3 +298,135 @@ async def test_resend_verification_no_enumeration(client: AsyncClient) -> None:
     r = await client.post(RESEND, json={"email": "ghost@b.com"})
     assert r.status_code == 202
     assert await _queued_emails("ghost@b.com") == []
+
+
+# ---- Google sign-in -------------------------------------------------------
+
+
+async def test_google_login_creates_a_new_verified_user(
+    client: AsyncClient, monkeypatch
+) -> None:
+    _mock_google(monkeypatch, _google_claims("newgoogle@b.com"))
+
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 200
+    tokens = r.json()
+
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {tokens['access_token']}"}
+    )
+    assert me.json()["email"] == "newgoogle@b.com"
+    assert me.json()["first_name"] == "Ada"
+    # Google already verified the address -- no confirmation email detour.
+    assert me.json()["is_verified"] is True
+    assert await _queued_emails("newgoogle@b.com") == []
+
+
+async def test_google_login_is_not_gated_by_email_verification(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # Unlike password login (see test_login_blocked_until_verified), a fresh
+    # Google account must be usable immediately -- it's already verified at
+    # creation, so there's no separate "please check your email" step to
+    # get stuck behind.
+    _mock_google(monkeypatch, _google_claims("instant@b.com"))
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 200
+
+
+async def test_google_login_signs_into_existing_account_by_email(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    # A candidate who registered with a password, then later taps "Continuer
+    # avec Google" with that same address, lands on the SAME account --
+    # never a second, duplicate one (Steve's call).
+    await client.post(REGISTER, json={"email": "both@b.com", "password": "supersecret"})
+    await verify_user("both@b.com")
+
+    _mock_google(monkeypatch, _google_claims("both@b.com"))
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+
+    assert r.status_code == 200
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
+    )
+    body = me.json()
+    assert body["email"] == "both@b.com"
+
+    # Still only one account: the password set at registration still works.
+    login = await client.post(
+        LOGIN, json={"email": "both@b.com", "password": "supersecret"}
+    )
+    assert login.status_code == 200
+
+
+async def test_google_login_rejects_disabled_account(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    await client.post(
+        REGISTER, json={"email": "disabled@b.com", "password": "supersecret"}
+    )
+    await verify_user("disabled@b.com")
+    async with AsyncSessionLocal() as session:
+        result = await session.exec(select(User).where(User.email == "disabled@b.com"))
+        user = result.one()
+        user.is_active = False
+        session.add(user)
+        await session.commit()
+
+    _mock_google(monkeypatch, _google_claims("disabled@b.com"))
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+
+    assert r.status_code == 401
+
+
+async def test_google_sign_in_not_configured_returns_clear_error(
+    client: AsyncClient, monkeypatch
+) -> None:
+    monkeypatch.setattr(get_settings(), "GOOGLE_CLIENT_ID", None)
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 500
+
+
+async def test_password_login_rejects_google_only_account(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # An account created via Google (password_hash is None) must not be
+    # attackable -- or even usable -- through the password endpoint.
+    _mock_google(monkeypatch, _google_claims("googleonly@b.com"))
+    await client.post(GOOGLE, json={"id_token": "fake-token"})
+
+    r = await client.post(
+        LOGIN, json={"email": "googleonly@b.com", "password": "anything"}
+    )
+    assert r.status_code == 401
+
+
+async def test_change_password_rejects_google_only_account_cleanly(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # Must fail like a wrong current password, not crash (password_hash is
+    # None here, and bcrypt can't check a password against nothing).
+    _mock_google(monkeypatch, _google_claims("googlechangepw@b.com"))
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    r = await client.post(
+        CHANGE_PASSWORD,
+        json={"current_password": "anything", "new_password": "brandnewpass1"},
+        headers=headers,
+    )
+    assert r.status_code == 401
+
+    # The reset-password flow (not change-password) is how such a user sets
+    # their first password.
+    reset = await client.post(RESET_REQUEST, json={"email": "googlechangepw@b.com"})
+    token = reset.json()["reset_token"]
+    confirm = await client.post(
+        RESET_CONFIRM, json={"token": token, "new_password": "brandnewpass1"}
+    )
+    assert confirm.status_code == 200
+    login = await client.post(
+        LOGIN, json={"email": "googlechangepw@b.com", "password": "brandnewpass1"}
+    )
+    assert login.status_code == 200

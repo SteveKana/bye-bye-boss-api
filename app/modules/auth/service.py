@@ -18,6 +18,7 @@ from app.core.security import (
 )
 from app.modules.auth.emails import build_reset_email, build_verification_email
 from app.modules.auth.events import UserRegistered
+from app.modules.auth.google_oauth import verify_google_id_token
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.schemas import TokenPair, UserCreate, UserUpdate
@@ -76,7 +77,16 @@ class AuthService:
 
     async def authenticate(self, email: str, password: str) -> User:
         user = await self.users.get_by_email(email)
-        if not user or not verify_password(password, user.password_hash):
+        # password_hash is None for an account created via Google sign-in
+        # that never went through "mot de passe oublié" to set one -- there
+        # is nothing to check a password against, so this must fail the
+        # same way a wrong password would (not a 500 from bcrypt choking on
+        # None), without hinting to the caller which case it hit. Split into
+        # two checks (rather than one `or`-chain) so the password_hash is
+        # str, not str | None, by the time verify_password sees it.
+        if not user or not user.password_hash:
+            raise UnauthorizedError("Invalid credentials.")
+        if not verify_password(password, user.password_hash):
             raise UnauthorizedError("Invalid credentials.")
         if not user.is_active:
             raise UnauthorizedError("Account is disabled.")
@@ -98,6 +108,65 @@ class AuthService:
 
     async def login(self, email: str, password: str) -> TokenPair:
         user = await self.authenticate(email, password)
+        return self.issue_tokens(user)
+
+    async def login_with_google(self, id_token: str, *, client_id: str) -> TokenPair:
+        """Verifies the Google ID token, then either logs into or creates the
+        matching account, keyed by email.
+
+        Matching by email rather than only by Google's own subject id is a
+        deliberate choice (Steve's call): Google already vouches for the
+        email's ownership, so a visitor who originally registered with a
+        password and later taps "Continuer avec Google" with that same
+        address gets signed into that same account rather than blocked or
+        silently given a second one -- there is exactly one account per
+        email in this system, full stop.
+        """
+        claims = verify_google_id_token(id_token, client_id=client_id)
+        email = claims["email"]
+        google_id = claims["sub"]
+
+        user = await self.users.get_by_email(email)
+        # Checked before touching anything: a disabled account shouldn't
+        # gain a Google link (or any other side effect) just from a rejected
+        # sign-in attempt.
+        if user is not None and not user.is_active:
+            raise UnauthorizedError("Account is disabled.")
+
+        if user is None:
+            user = await self.users.create(
+                User(
+                    email=email,
+                    password_hash=None,
+                    first_name=claims.get("given_name"),
+                    last_name=claims.get("family_name"),
+                    # Google already verified this address -- our own
+                    # verification email would be redundant.
+                    is_verified=True,
+                    google_id=google_id,
+                )
+            )
+            await self.session.commit()
+            logger.info(
+                "user_registered_via_google", user_id=str(user.id), email=user.email
+            )
+            await event_bus.emit(
+                UserRegistered(
+                    user_id=user.id,
+                    email=user.email,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                )
+            )
+        elif user.google_id != google_id:
+            # Existing account (password-based, or linked to a different
+            # Google identity) signing in with Google for the first time --
+            # record the link for next time, don't touch anything else.
+            user.google_id = google_id
+            self.session.add(user)
+            await self.session.commit()
+            logger.info("google_account_linked", user_id=str(user.id))
+
         return self.issue_tokens(user)
 
     async def refresh(self, refresh_token: str) -> TokenPair:
@@ -146,7 +215,12 @@ class AuthService:
         return user
 
     async def change_password(self, user: User, current: str, new: str) -> None:
-        if not verify_password(current, user.password_hash):
+        # A Google-only account (password_hash is None) has no current
+        # password to check against -- rather than crashing on None, this
+        # rejects the same way a wrong password would. Such a user still has
+        # a path to a first password: the "mot de passe oublié" / reset flow
+        # (confirm_password_reset below) sets one unconditionally.
+        if not user.password_hash or not verify_password(current, user.password_hash):
             raise UnauthorizedError("Current password is incorrect.")
         user.password_hash = hash_password(new)
         self.session.add(user)
