@@ -131,6 +131,11 @@ class CvService:
     ) -> CandidateProfile:
         profile = await self.get_for_user(user_id)
         updates = {k: v for k, v in data.items() if v is not None}
+        # Marks that this profile has been through the verification step at
+        # least once -- see the field's docstring in models.py for why this
+        # is a plain "last saved" timestamp rather than something cleared on
+        # re-import.
+        updates["verification_completed_at"] = utcnow()
         # Only one of availability_date / notice_period_months is ever
         # meaningful, matching whichever status was just set — clear the
         # other explicitly, since the generic filter above drops None values

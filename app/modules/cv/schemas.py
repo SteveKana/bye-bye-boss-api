@@ -49,6 +49,12 @@ class CandidateProfileRead(BaseSchema):
     # "Dernière mise à jour" next to the CV download button means "last time
     # we reprocessed your CV", so it reads this field, not `updated_at`.
     cv_analyzed_at: datetime | None
+    # Non-null once the verification step (or a later /profile edit, which
+    # reuses the same endpoint) has been saved at least once -- lets the
+    # frontend tell "just imported, not yet verified" apart from "verified,
+    # preferences not saved" (both are status == "draft"). See
+    # CvService.apply_verification and models.py's docstring on the column.
+    verification_completed_at: datetime | None
     first_name: str | None
     last_name: str | None
     headline: str | None
