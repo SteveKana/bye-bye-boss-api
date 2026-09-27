@@ -93,6 +93,13 @@ class TokenPair(BaseSchema):
     token_type: str = "bearer"
 
 
+class GoogleAuthResponse(TokenPair):
+    # Lets the frontend send a brand-new Google signup into onboarding
+    # (CV upload) instead of the dashboard, same as a fresh email/password
+    # registration -- see AuthService.login_with_google.
+    is_new_user: bool
+
+
 class PublicUser(BaseSchema):
     """Minimal user projection exposed to other modules via the gateway."""
 

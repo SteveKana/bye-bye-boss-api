@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import event_bus
-from app.core.exceptions import ConflictError, ForbiddenError, UnauthorizedError
+from app.core.exceptions import ConflictError, UnauthorizedError
 from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
@@ -37,7 +37,17 @@ class AuthService:
 
     async def register(
         self, data: UserCreate, *, isadmin: bool = False, auto_verify: bool = False
-    ) -> User:
+    ) -> TokenPair:
+        """Creates the account and signs it straight in.
+
+        Steve's call: registering behaves exactly like Google sign-in --
+        a full session immediately, no wait for email verification. The
+        verification email is still queued and is_verified still gets set
+        by the normal verify-email flow, but nothing here or in
+        `authenticate` blocks on it anymore; it's informational only. This
+        is what lets the frontend send a fresh signup straight into
+        onboarding (CV upload) without a "check your email" detour.
+        """
         if await self.users.get_by_email(data.email):
             raise ConflictError("A user with this email already exists.")
         user = await self.users.create(
@@ -66,7 +76,7 @@ class AuthService:
                 last_name=user.last_name,
             )
         )
-        return user
+        return self.issue_tokens(user)
 
     async def _queue_verification_email(self, user: User, locale: str) -> None:
         token = create_verify_token(str(user.id))
@@ -90,10 +100,9 @@ class AuthService:
             raise UnauthorizedError("Invalid credentials.")
         if not user.is_active:
             raise UnauthorizedError("Account is disabled.")
-        if not user.is_verified:
-            raise ForbiddenError(
-                "Please verify your email address first.", code="email_not_verified"
-            )
+        # is_verified is no longer a login gate (Steve's call): registering
+        # signs the user in immediately, same as Google, so a not-yet-verified
+        # account must still be able to log back in afterwards.
         return user
 
     def issue_tokens(self, user: User) -> TokenPair:
@@ -110,9 +119,14 @@ class AuthService:
         user = await self.authenticate(email, password)
         return self.issue_tokens(user)
 
-    async def login_with_google(self, id_token: str, *, client_id: str) -> TokenPair:
+    async def login_with_google(
+        self, id_token: str, *, client_id: str
+    ) -> tuple[TokenPair, bool]:
         """Verifies the Google ID token, then either logs into or creates the
-        matching account, keyed by email.
+        matching account, keyed by email. Returns the tokens plus whether
+        this created a brand-new account, so the frontend can send a first-
+        time Google signup into onboarding (CV upload) instead of the
+        dashboard -- the same destination a fresh email/password signup gets.
 
         Matching by email rather than only by Google's own subject id is a
         deliberate choice (Steve's call): Google already vouches for the
@@ -133,6 +147,7 @@ class AuthService:
         if user is not None and not user.is_active:
             raise UnauthorizedError("Account is disabled.")
 
+        is_new_user = user is None
         if user is None:
             user = await self.users.create(
                 User(
@@ -167,7 +182,7 @@ class AuthService:
             await self.session.commit()
             logger.info("google_account_linked", user_id=str(user.id))
 
-        return self.issue_tokens(user)
+        return self.issue_tokens(user), is_new_user
 
     async def refresh(self, refresh_token: str) -> TokenPair:
         payload = decode_token(refresh_token, expected_type="refresh")

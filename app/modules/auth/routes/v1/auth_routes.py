@@ -11,6 +11,7 @@ from app.modules.auth.schemas import (
     ChangePasswordRequest,
     EmailVerifyRequest,
     GoogleAuthRequest,
+    GoogleAuthResponse,
     LoginRequest,
     MessageResponse,
     PasswordResetConfirm,
@@ -38,13 +39,14 @@ verify_limit = RateLimiter(times=10, seconds=60, scope="auth:verify")
 
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=TokenPair,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(register_limit)],
 )
-async def register(data: UserCreate, session: DBSession) -> UserRead:
-    user = await AuthService(session).register(data)
-    return UserRead.model_validate(user)
+async def register(data: UserCreate, session: DBSession) -> TokenPair:
+    # Signs the user straight in (see AuthService.register) so the frontend
+    # can send them directly into onboarding, same as a Google signup.
+    return await AuthService(session).register(data)
 
 
 @router.post("/login", response_model=TokenPair, dependencies=[Depends(login_limit)])
@@ -52,14 +54,19 @@ async def login(data: LoginRequest, session: DBSession) -> TokenPair:
     return await AuthService(session).login(data.email, data.password)
 
 
-@router.post("/google", response_model=TokenPair, dependencies=[Depends(login_limit)])
-async def login_with_google(data: GoogleAuthRequest, session: DBSession) -> TokenPair:
+@router.post(
+    "/google", response_model=GoogleAuthResponse, dependencies=[Depends(login_limit)]
+)
+async def login_with_google(
+    data: GoogleAuthRequest, session: DBSession
+) -> GoogleAuthResponse:
     client_id = get_settings().GOOGLE_CLIENT_ID
     if not client_id:
         raise AppError("Google sign-in is not configured on this server.")
-    return await AuthService(session).login_with_google(
+    tokens, is_new_user = await AuthService(session).login_with_google(
         data.id_token, client_id=client_id
     )
+    return GoogleAuthResponse(**tokens.model_dump(), is_new_user=is_new_user)
 
 
 @router.post(

@@ -52,8 +52,10 @@ async def client() -> AsyncClient:
 
 @pytest_asyncio.fixture
 def verify_user():
-    """Mark an account as email-verified (email delivery is out of band in tests,
-    and login is blocked until verification)."""
+    """Mark an account as email-verified (email delivery is out of band in
+    tests). Verification no longer gates login -- registering signs the user
+    in immediately -- but several tests still exercise the verified state
+    itself (e.g. that /me reflects it, or that re-verifying is a no-op)."""
 
     async def _verify(email: str) -> None:
         async with AsyncSessionLocal() as session:
