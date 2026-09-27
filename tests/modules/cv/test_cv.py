@@ -187,6 +187,40 @@ async def test_verification_update_overrides_extracted_fields(
     assert body["last_name"] == "Martin"
 
 
+async def test_verification_update_sets_verification_completed_at(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """This is the signal the frontend's onboarding guard reads to tell
+    "just imported, not yet verified" apart from "verified, preferences not
+    saved" -- both are status == "draft" (see models.py's docstring on the
+    field)."""
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+
+    before = await client.get(PROFILE, headers=auth_headers)
+    assert before.json()["verification_completed_at"] is None
+
+    r = await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
+    assert r.json()["verification_completed_at"] is not None
+
+
+async def test_verification_completed_at_survives_a_cv_reimport(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Deliberately NOT cleared on re-import (unlike most other extracted
+    fields) -- see models.py's docstring: the profile page's "reupload CV"
+    shortcut must keep working without bouncing an already-verified
+    candidate back into the onboarding wizard."""
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
+
+    # Re-import (the profile page's "reupload" shortcut) -- resets `status`
+    # back to draft, per CvService.import_cv, but must leave verification
+    # alone.
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.json()["status"] == "draft"
+    assert r.json()["verification_completed_at"] is not None
+
+
 async def test_preferences_update_completes_onboarding(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

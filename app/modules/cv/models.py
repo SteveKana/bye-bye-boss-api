@@ -140,6 +140,21 @@ class CandidateProfile(BaseModel, table=True):
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
 
+    # Set by CvService.apply_verification every time the user saves the
+    # verification step (or, later, an edit from the standalone /profile
+    # page, which reuses the same endpoint) -- never cleared on a CV
+    # re-import, unlike most fields above. That's deliberate: once a
+    # profile has been through verification at least once, re-importing a
+    # CV from the profile page's "reupload" shortcut must keep working
+    # without bouncing the user back into the onboarding wizard (see
+    # frontend middleware/onboarding-complete.js, which reads this field to
+    # decide whether a visitor still needs the verification step -- it
+    # checks `status == "complete"` first precisely so this one-way flag
+    # never gets in the way of an otherwise-finished profile).
+    verification_completed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+
     # Texte brut extrait du fichier, conservé pour permettre un nouveau
     # passage de parsing (ex. changement de prompt) sans redemander le CV.
     raw_text: str | None = Field(default=None)
