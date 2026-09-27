@@ -152,19 +152,31 @@ class CvService:
 
     async def apply_preferences(
         self, *, user_id: uuid.UUID, data: PreferencesUpdate
-    ) -> CandidateProfile:
+    ) -> tuple[CandidateProfile, bool]:
+        """Returns (profile, is_first_completion). `is_first_completion` is
+        True only the very first time this account ever completes
+        onboarding -- tracked by `onboarding_matched_at` (set once,
+        permanently, right here) rather than by comparing against
+        ProfileStatus.complete: status alone flips back to draft on every
+        CV re-import (see import_cv above), which would let a candidate
+        force repeat, LLM-costed immediate matching runs just by
+        re-importing their CV and resaving preferences. See
+        cv.routes.v1.cv_routes.update_preferences, which uses this to fire
+        that immediate, one-off matching run exactly once per account,
+        ever."""
         profile = await self.get_for_user(user_id)
-        profile = await self.profiles.update(
-            profile,
-            {
-                "contract_types": data.contract_types,
-                "remote_preferences": data.remote_preferences,
-                "mobility": data.mobility,
-                "mobility_region": data.mobility_region,
-                "salary_target": data.salary_target,
-                "daily_rate": data.daily_rate,
-                "status": ProfileStatus.complete.value,
-            },
-        )
+        is_first_completion = profile.onboarding_matched_at is None
+        updates = {
+            "contract_types": data.contract_types,
+            "remote_preferences": data.remote_preferences,
+            "mobility": data.mobility,
+            "mobility_region": data.mobility_region,
+            "salary_target": data.salary_target,
+            "daily_rate": data.daily_rate,
+            "status": ProfileStatus.complete.value,
+        }
+        if is_first_completion:
+            updates["onboarding_matched_at"] = utcnow()
+        profile = await self.profiles.update(profile, updates)
         await self.session.commit()
-        return profile
+        return profile, is_first_completion

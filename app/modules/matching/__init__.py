@@ -25,11 +25,13 @@ from fastapi import APIRouter
 
 from app.core.module import Module
 
-# Import side effects: register the models (Alembic) and the scheduled job.
+# Import side effects: register the models (Alembic), the scheduled job,
+# and the event listeners (reacts to cv's ProfileOnboardingCompleted).
 from app.modules.matching import (
     cv_optimization_models as cv_optimization_models,  # noqa: F401
 )
 from app.modules.matching import jobs as jobs  # noqa: F401
+from app.modules.matching import listeners as listeners  # noqa: F401
 from app.modules.matching import models as models  # noqa: F401
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
