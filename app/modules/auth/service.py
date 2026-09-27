@@ -183,6 +183,17 @@ class AuthService:
             self.session.add(user)
             await self.session.commit()
             logger.info("google_account_linked", user_id=str(user.id))
+        elif user.picture_url is None:
+            # Backfill for an account that already linked Google before this
+            # field existed -- the branch above only fires once, at the
+            # moment google_id is first set, so an account linked before
+            # picture_url was introduced would otherwise never get one.
+            # Still captured only once: once set, later logins don't touch
+            # it again (same "set once" rule as the two branches above).
+            user.picture_url = claims.get("picture")
+            self.session.add(user)
+            await self.session.commit()
+            logger.info("google_picture_url_backfilled", user_id=str(user.id))
 
         return self.issue_tokens(user), is_new_user
 

@@ -412,6 +412,59 @@ async def test_google_login_links_existing_account_captures_picture_url(
     assert me.json()["picture_url"] == "https://example.com/link.jpg"
 
 
+async def test_google_login_backfills_picture_url_for_already_linked_account(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # An account that linked Google BEFORE picture_url existed has
+    # google_id already matching on every later login, so the "linking"
+    # branch above never fires again for it -- without this backfill, such
+    # an account would never get a photo. This is exactly Steve's own
+    # account's situation (reported live): already signed in with Google,
+    # still saw the initials fallback after picture_url shipped.
+    _mock_google(monkeypatch, _google_claims("oldgoogle@b.com", picture=None))
+    first = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {first.json()['access_token']}"}
+    )
+    assert me.json()["picture_url"] is None
+
+    # Same account, same google_id, logging in again -- now Google's claim
+    # includes a picture (or it always did, but our own record never
+    # captured it before this fix existed).
+    _mock_google(
+        monkeypatch,
+        _google_claims("oldgoogle@b.com", picture="https://example.com/backfilled.jpg"),
+    )
+    second = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    me2 = await client.get(
+        ME, headers={"Authorization": f"Bearer {second.json()['access_token']}"}
+    )
+    assert me2.json()["picture_url"] == "https://example.com/backfilled.jpg"
+
+
+async def test_google_login_does_not_overwrite_existing_picture_url(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # Once set (by any of the three paths), picture_url is never refreshed
+    # again -- same "set once" rule as first_name/last_name. A later login
+    # with a different photo in the claims must not change it.
+    _mock_google(
+        monkeypatch,
+        _google_claims("stablephoto@b.com", picture="https://example.com/first.jpg"),
+    )
+    await client.post(GOOGLE, json={"id_token": "fake-token"})
+
+    _mock_google(
+        monkeypatch,
+        _google_claims("stablephoto@b.com", picture="https://example.com/changed.jpg"),
+    )
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    me = await client.get(
+        ME, headers={"Authorization": f"Bearer {r.json()['access_token']}"}
+    )
+    assert me.json()["picture_url"] == "https://example.com/first.jpg"
+
+
 async def test_google_login_rejects_disabled_account(
     client: AsyncClient, verify_user, monkeypatch
 ) -> None:
