@@ -29,6 +29,10 @@ class UserRead(BaseSchema):
     subscription: str
     last_rescoring_time: datetime | None
     created_at: datetime
+    # From Google's ID token "picture" claim -- None for an account that
+    # never signed in with Google (see AuthService.login_with_google and
+    # models.py's docstring on the column).
+    picture_url: str | None
 
 
 class UserUpdate(BaseSchema):

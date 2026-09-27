@@ -159,6 +159,7 @@ class AuthService:
                     # verification email would be redundant.
                     is_verified=True,
                     google_id=google_id,
+                    picture_url=claims.get("picture"),
                 )
             )
             await self.session.commit()
@@ -178,6 +179,7 @@ class AuthService:
             # Google identity) signing in with Google for the first time --
             # record the link for next time, don't touch anything else.
             user.google_id = google_id
+            user.picture_url = claims.get("picture")
             self.session.add(user)
             await self.session.commit()
             logger.info("google_account_linked", user_id=str(user.id))
