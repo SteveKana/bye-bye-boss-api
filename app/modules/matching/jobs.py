@@ -22,7 +22,10 @@ import uuid
 from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.scheduler import scheduled
+from app.modules.auth import UserRepository
 from app.modules.cv import CandidateProfileRepository
+from app.modules.mailer import MailerGateway
+from app.modules.matching.emails import build_first_matches_ready_email
 from app.modules.matching.service import MatchingService
 
 logger = get_logger("matching.worker")
@@ -62,9 +65,40 @@ async def run_matching_for_new_profile(profile_id: uuid.UUID) -> None:
             profile = await CandidateProfileRepository(session).get(profile_id)
             if profile is None:
                 return
-            await MatchingService(session).run_for_profile(profile)
+            report = await MatchingService(session).run_for_profile(profile)
         except Exception:
             logger.exception(
                 "immediate_matching_for_new_profile_failed",
+                profile_id=str(profile_id),
+            )
+            return
+
+        # Best-effort notification, in its own try/except so a mail problem
+        # never makes this look like a failed matching run (the run itself
+        # already succeeded and committed above). Always sent, even with
+        # pairs_scored == 0 -- Steve's explicit call: a candidate who lands
+        # on an empty dashboard should still hear that their analysis
+        # finished, not silence. `pairs_scored` is a safe proxy for "matches
+        # now visible on the dashboard" ONLY here, on this first-ever run for
+        # a brand-new profile: nothing can already be fresh/skipped (see
+        # `_run_for_profile`'s to_score logic), so every scored pair is a
+        # newly created CandidateMatch row.
+        try:
+            user = await UserRepository(session).get(profile.user_id)
+            if user is None:
+                return
+            mail = build_first_matches_ready_email(
+                "fr", match_count=report.pairs_scored
+            )
+            await MailerGateway(session).enqueue(
+                to_email=user.email,
+                subject=mail.subject,
+                text=mail.text,
+                html=mail.html,
+            )
+            await session.commit()
+        except Exception:
+            logger.exception(
+                "first_matches_ready_email_failed",
                 profile_id=str(profile_id),
             )

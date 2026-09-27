@@ -19,6 +19,7 @@ from app.modules.auth.dependencies import AdminUser, CurrentUser, get_current_us
 from app.modules.auth.events import UserDeleted, UserRegistered
 from app.modules.auth.gateway import AuthGateway
 from app.modules.auth.models import SubscriptionPlan
+from app.modules.auth.repository import UserRepository
 from app.modules.auth.routes.v1 import auth_routes, user_routes
 from app.modules.auth.schemas import PublicUser
 from app.modules.auth.seed import seed_admin
@@ -46,4 +47,5 @@ __all__ = [
     "SubscriptionPlan",
     "UserRegistered",
     "UserDeleted",
+    "UserRepository",
 ]

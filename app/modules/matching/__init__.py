@@ -9,7 +9,9 @@ Runs entirely in the background (see jobs.py): a cheap keyword-overlap
 pre-filter (shortlist.py) narrows the offer pool per candidate before any
 LLM call happens, and results are stored in `candidate_matches` so the
 dashboard only ever reads, never waits on the LLM. Depends on `cv` (the
-candidate's extracted CV text) and `offers` (the pool to match against).
+candidate's extracted CV text), `offers` (the pool to match against), and
+`mailer` (to send the "first matches ready" email after a brand-new
+profile's immediate matching run -- see emails.py and jobs.py).
 
 The Regret Index (employee-sentiment risk score) is deliberately NOT
 computed here. MatchCareer's own review-data sourcing options were reviewed
@@ -46,7 +48,7 @@ module = Module(
     name="matching",
     router=_router,
     order=50,
-    depends_on=["auth", "cv", "offers"],
+    depends_on=["auth", "cv", "offers", "mailer"],
     tags=["matching"],
 )
 

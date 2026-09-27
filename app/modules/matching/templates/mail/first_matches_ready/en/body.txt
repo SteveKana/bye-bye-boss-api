@@ -1,0 +1,13 @@
+Hi,
+
+Your CV has been analyzed and compared against the offers available on {{ brand }}.
+{% if match_count > 0 %}
+{{ match_count }} opportunit{{ 'ies' if match_count > 1 else 'y' }} matching your profile {{ 'are' if match_count > 1 else 'is' }} already waiting for you, with an ATS score, a career score, and the fit details for each one.
+{% else %}
+No offer matches your profile closely enough yet, but we keep analyzing new ones every day -- you'll be notified as soon as a match appears.
+{% endif %}
+Check your dashboard:
+
+{{ link }}
+
+The {{ brand }} team
