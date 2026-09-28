@@ -22,14 +22,18 @@ offer's own title/company/score/link -- a candidate with 3 new matches
 today gets 3 separate WhatsApp messages, each linking straight to one real
 offer.
 
-The pre-approved template (WHATSAPP_TEMPLATE_NAME, "job_offer_alert" in
-Meta Business Manager) uses NAMED body variables, not positional ones --
-its parameter_format is "NAMED" (confirmed via GET .../message_templates),
-so every parameter sent below must carry a "parameter_name" matching the
-template's own placeholder name, or Meta rejects the send with "(#100)
-Invalid parameter" / "Parameter name is missing or empty". The template
-has exactly 5 named body variables, in this order: first_name, job_title,
-company_name, match_score, offer_link.
+The pre-approved template (WHATSAPP_TEMPLATE_NAME) uses POSITIONAL body
+variables ({{1}}..{{5}}), not named ones -- its parameter_format is
+"POSITIONAL" (this replaced an earlier NAMED-format Marketing template;
+see git history if the category ever needs revisiting). Meta identifies a
+positional parameter purely by its position in the `parameters` array
+against the template's own {{1}}, {{2}}... placeholders, so none of the
+parameter objects below carry a "parameter_name" key -- adding one back
+would be the same class of bug as before (payload shape not matching the
+template's own parameter_format), just in the opposite direction: Meta
+would reject with "(#100) Invalid parameter". The template has exactly 5
+body variables, in this order: first_name, job_title, company_name,
+match_score, offer_link.
 
 The "match_score" placeholder's name is fixed on Meta's side (renaming it
 means re-submitting the template for review), but the value we send under
@@ -74,31 +78,29 @@ def _build_payload(
             "components": [
                 {
                     "type": "body",
+                    # Positional format (see module docstring): order here
+                    # is what maps each value to {{1}}..{{5}} in the
+                    # template body -- no "parameter_name" key.
                     "parameters": [
                         {
                             "type": "text",
-                            "parameter_name": "first_name",
                             "text": first_name or "candidat",
                         },
                         {
                             "type": "text",
-                            "parameter_name": "job_title",
                             "text": item.title,
                         },
                         {
                             "type": "text",
-                            "parameter_name": "company_name",
                             "text": item.company_name,
                         },
                         {
                             "type": "text",
-                            "parameter_name": "match_score",
                             # Not career_score -- see module docstring.
                             "text": str(item.ats_potential),
                         },
                         {
                             "type": "text",
-                            "parameter_name": "offer_link",
                             "text": item.url,
                         },
                     ],
