@@ -74,13 +74,31 @@ class CvService:
         # new raw_text, the next time matching runs for this profile (see
         # MatchingService._run_for_profile). Never left stale here.
         values["embedding"] = None
-        values["status"] = ProfileStatus.draft.value
         values["cv_filename"] = filename
         values["cv_content_type"] = content_type
         # This is the one place a CV is actually (re-)parsed -- see the
         # field's docstring in models.py for why it's kept apart from the
         # generic, always-bumped `updated_at`.
         values["cv_analyzed_at"] = utcnow()
+
+        # A re-import bounces the candidate back to "draft" so they
+        # re-confirm the freshly-extracted info -- but only while they've
+        # never actually finished onboarding yet (`onboarding_matched_at`
+        # still unset, see that field's docstring). Once a profile has
+        # completed onboarding at least once, re-importing a CV instead
+        # refreshes the CV-derived fields in place and leaves status alone
+        # ("complete"): bouncing an already-onboarded candidate back to the
+        # preferences step on every CV update served no purpose once
+        # `onboarding_matched_at` already guards, on its own, against a
+        # candidate forcing repeat LLM-costed matching runs (see
+        # ProfileOnboardingCompleted) -- it only forced a redundant
+        # reconfirmation click (Steve, 2026-09-29: "ça n'a aucun sens").
+        # Their matches still get refreshed against the new CV, just not
+        # instantly: the next scheduled sync (see matching.jobs.sync_matches)
+        # naturally re-scores this profile, since a re-import always bumps
+        # `updated_at` and clears the cached embedding above.
+        if profile is None or profile.onboarding_matched_at is None:
+            values["status"] = ProfileStatus.draft.value
 
         if profile is None:
             # availability_status defaults to "immediate" on the column
