@@ -221,6 +221,39 @@ async def test_verification_completed_at_survives_a_cv_reimport(
     assert r.json()["verification_completed_at"] is not None
 
 
+async def test_cv_reimport_after_onboarding_completion_keeps_status_complete(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Steve, 2026-09-29: bouncing an already-onboarded candidate back to
+    the preferences step on every CV update made no sense -- `status` only
+    ever needs to protect the *first* trip through onboarding.
+    `onboarding_matched_at` (set once, permanently, by apply_preferences)
+    already guards on its own against repeat LLM-costed matching runs, so
+    once it's set a re-import can safely refresh the CV-derived fields
+    without touching `status`. Contrast with
+    test_verification_completed_at_survives_a_cv_reimport above, where
+    onboarding was never completed and status must still reset to draft."""
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
+    await client.put(
+        PREFERENCES,
+        json={
+            "contract_types": ["CDI"],
+            "remote_preferences": ["Sur site"],
+            "mobility": "France entière",
+        },
+        headers=auth_headers,
+    )
+
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "complete"
+    # The CV-derived fields are still refreshed from the new import --
+    # only `status` is left alone.
+    assert body["first_name"] == "Thomas"
+
+
 async def test_preferences_update_completes_onboarding(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
