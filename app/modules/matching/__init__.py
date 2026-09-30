@@ -13,12 +13,12 @@ candidate's extracted CV text), `offers` (the pool to match against), and
 `mailer` (to send the "first matches ready" email after a brand-new
 profile's immediate matching run -- see emails.py and jobs.py).
 
-The Regret Index (employee-sentiment risk score) is deliberately NOT
-computed here. MatchCareer's own review-data sourcing options were reviewed
-and none were legitimate enough to ship yet (no scraping, and the API
-options considered either require negotiated commercial terms or lack
-structured ratings) -- every CandidateMatch instead reports
-regret_availability="unavailable" until a real source is wired in.
+The Regret Index (employee-sentiment risk score) is computed via
+regret_service.py from Reddit mentions of the offer's employer (see
+CompanyRegretProfile's docstring for the sourcing decision and its
+disclosed legal tradeoffs, Steve, 2026-09-30). It still reports
+regret_availability="unavailable" whenever there isn't enough real signal
+to score -- never a fabricated number.
 """
 
 from __future__ import annotations

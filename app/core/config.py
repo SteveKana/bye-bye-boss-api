@@ -225,6 +225,32 @@ class Settings(BaseSettings):
     # "still relevant" offers) bounded as the offers table grows.
     MATCHING_MAX_OFFER_POOL_DAYS: int = 30
 
+    # ---- Regret Index (Reddit-sourced employee sentiment) -----------------
+    # Steve's call (2026-09-30), after confirming no legitimate structured
+    # employee-review API exists (Glassdoor/Indeed/ChooseMyCompany) and
+    # accepting the ToS risk of an alternative: scrape signal from Reddit
+    # instead. Uses Reddit's own free OAuth2 API (see reddit_gateway.py),
+    # not raw HTML scraping -- narrower risk than sitewide scraping, but
+    # still not risk-free; nobody involved here is a lawyer. Register a
+    # free "script" app at reddit.com/prefs/apps to get the two values below.
+    REDDIT_CLIENT_ID: str | None = None
+    REDDIT_CLIENT_SECRET: str | None = None
+    REDDIT_USER_AGENT: str = "byebyeboss-regret-index/1.0"
+    # Same OPENAI_API_KEY as everywhere else, own cheap model: turning a
+    # handful of Reddit posts into a score is closer to the cv module's
+    # fixed-extraction task than to matching's heavier judgment call.
+    REGRET_OPENAI_MODEL: str = "gpt-5-mini"
+    REGRET_OPENAI_TIMEOUT_SECONDS: int = 60
+    # A company's regret score is cached this long before being recomputed --
+    # Reddit sentiment doesn't shift day to day, and this bounds both Reddit
+    # API calls and LLM spend to roughly one per company per window rather
+    # than once per candidate match.
+    REGRET_CACHE_TTL_DAYS: int = 30
+    # Below this many relevant Reddit mentions, the score stays "unavailable"
+    # rather than asking the LLM to guess from too little material (see
+    # regret_prompt.py's "insufficient" rule -- this is the pre-LLM gate).
+    REGRET_MIN_MENTIONS: int = 3
+
     # ---- CV optimization ("Adapter mon CV pour cette offre") --------------
     # A separate, on-demand LLM call (see matching/cv_optimization_gateway.py)
     # -- unlike the matching call above, this one is triggered by the

@@ -48,10 +48,13 @@ class CandidateMatch(BaseModel, table=True):
     in the background (see jobs.py): the dashboard only ever reads rows this
     table already has, so opening it never waits on an LLM call.
 
-    The Regret Index is intentionally NOT computed here: MatchCareer defers
-    it until a legitimate employee-review data source exists (see the
-    `matching` module's docstring) -- `regret_availability` is always
-    "unavailable" for now, never a fabricated score.
+    `regret_availability`/`regret_score` are filled in by RegretService (see
+    regret_service.py) from CompanyRegretProfile below -- looked up by
+    company name at upsert time, never computed inline here. Still
+    "unavailable" whenever that lookup has nothing solid to go on: see
+    CompanyRegretProfile's own docstring for what "solid" means and why this
+    is a real product/legal tradeoff, not a purely technical one (Steve,
+    2026-09-30).
     """
 
     __tablename__ = "candidate_matches"
@@ -104,3 +107,55 @@ class CandidateMatch(BaseModel, table=True):
     # it silently flipped back to "applied" the next time they revisit the
     # same offer and click "Voir l'offre" again.
     application_manually_corrected: bool = Field(default=False, nullable=False)
+
+
+class CompanyRegretProfile(BaseModel, table=True):
+    """A cached Regret Index for one employer, keyed by normalized company
+    name -- shared across every candidate matched to that employer, so a
+    popular employer is only ever looked up once per REGRET_CACHE_TTL_DAYS
+    window, not once per candidate x offer pair.
+
+    IMPORTANT CONTEXT (read before touching regret_service.py/reddit_gateway.py):
+    this table exists because Steve explicitly asked (2026-09-30) to scrape
+    Reddit for employee sentiment after being told, and after independently
+    confirming, that no legitimate/structured review API exists at a cost or
+    access level this project can use (Glassdoor: no public API left, partner
+    terms only; Indeed: partner API covers job postings, not reviews;
+    ChooseMyCompany: a widget for their own paying clients' career sites, not
+    a third-party read API). Reddit's read API is Reddit's own official,
+    free-tier, self-serve product (see reddit_gateway.py) -- not scraping in
+    the same sense as the `offers` module explicitly refuses to do for
+    LinkedIn/Indeed/Glassdoor -- but using it to publish a per-employer score
+    still sits under Reddit's Developer/Data API Terms, which restrict some
+    commercial redistribution uses; nobody involved in writing this is a
+    lawyer, and that risk was accepted as a product decision, not resolved.
+    If that decision ever changes, this table (and regret_service.py's call
+    site in MatchingService._upsert) is the one place to revert.
+
+    "unavailable" is still a real outcome, not just a placeholder for the
+    pre-scraping era: fewer than settings.REGRET_MIN_MENTIONS relevant Reddit
+    hits for a company means regret_availability stays "unavailable" rather
+    than asking the LLM to invent a score from thin/unrepresentative text --
+    same never-fabricate principle CandidateMatch's docstring already held,
+    just no longer applied unconditionally to every company.
+    """
+
+    __tablename__ = "company_regret_profiles"
+
+    # Folded (core.text.fold) company name -- accent/case-insensitive so
+    # "Capgemini" and "CAPGEMINI" share one row. Not a strict identity match
+    # (two differently-named legal entities of the same group won't merge),
+    # but JobOffer/CandidateMatch only ever carry a free-text company name
+    # anyway, so this is the best key available without a company registry.
+    company_name_key: str = Field(index=True, unique=True, nullable=False)
+    # Original casing, kept only for admin/debugging readability.
+    company_name: str = Field(default="")
+
+    regret_availability: str = Field(default="unavailable", nullable=False)
+    regret_score: int | None = Field(default=None)
+    # How many Reddit posts/comments the score (if any) was actually based
+    # on -- lets a future admin view distinguish "score from 2 mentions" from
+    # "score from 40", without re-running the search.
+    mention_count: int = Field(default=0, nullable=False)
+
+    computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))

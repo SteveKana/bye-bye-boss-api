@@ -6,7 +6,11 @@ from collections.abc import Sequence
 from sqlmodel import desc
 
 from app.core.repository import BaseRepository
-from app.modules.matching.models import ApplicationStatus, CandidateMatch
+from app.modules.matching.models import (
+    ApplicationStatus,
+    CandidateMatch,
+    CompanyRegretProfile,
+)
 
 
 class CandidateMatchRepository(BaseRepository[CandidateMatch]):
@@ -68,3 +72,10 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
             .order_by(desc(CandidateMatch.application_status_updated_at))
         )
         return (await self.session.exec(stmt)).all()
+
+
+class CompanyRegretRepository(BaseRepository[CompanyRegretProfile]):
+    model = CompanyRegretProfile
+
+    async def get_by_key(self, company_name_key: str) -> CompanyRegretProfile | None:
+        return await self.find_one(company_name_key=company_name_key)
