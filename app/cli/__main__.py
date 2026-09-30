@@ -140,13 +140,21 @@ def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
     computes it directly from each such match's already-stored company_name,
     without re-running the (expensive) LLM match analysis at all. Safe to
     re-run: only touches matches still at the default "unavailable", and
-    CompanyRegretProfile's own cache means a company shared by many matches
-    is only actually looked up on SimplyHired once. Paced the same way as
-    regret_jobs.py's monthly refresh (a random 1.5-3.5s pause between
-    matches): the first production run of this command fired ~120 requests
-    inside 2 seconds with no pacing at all and SimplyHired 403'd every
-    single one -- an unpaced one-off backfill is exactly as bot-shaped as
-    an unpaced monthly job."""
+    within one run, CompanyRegretProfile's own cache means a company shared
+    by many matches is only actually looked up on SimplyHired once. Paced
+    the same way as regret_jobs.py's monthly refresh (a random 1.5-3.5s
+    pause between matches): the first production run of this command fired
+    ~120 requests inside 2 seconds with no pacing at all and SimplyHired
+    403'd every single one.
+
+    Passes force=True for the same reason regret_jobs.py's monthly job
+    does: without it, get_or_compute's 30-day TTL means a SECOND run of
+    this exact command -- e.g. right after fixing whatever made SimplyHired
+    reject the first attempt -- just replays the cached "unavailable" from
+    the failed run and never retries at all (this is exactly what happened
+    testing the pacing fix above: a re-run came back instantly with zero
+    fetch attempts, purely from cache). A one-off retry tool defeats its
+    own purpose if it trusts a cache written by the failure it's retrying."""
     import asyncio
     import random
 
@@ -165,7 +173,9 @@ def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
             for index, match in enumerate(candidates):
                 if index > 0:
                     await asyncio.sleep(random.uniform(1.5, 3.5))
-                availability, score = await regret.get_or_compute(match.company_name)
+                availability, score = await regret.get_or_compute(
+                    match.company_name, force=True
+                )
                 if (
                     availability != match.regret_availability
                     or score != match.regret_score
