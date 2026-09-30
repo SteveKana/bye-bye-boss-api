@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlmodel import desc, or_
+from sqlmodel import desc, or_, select
 
 from app.core.repository import BaseRepository
 from app.modules.offers.models import JobOffer
@@ -38,4 +38,23 @@ class JobOfferRepository(BaseRepository[JobOffer]):
             .where(JobOffer.created_at >= since)
             .order_by(desc(JobOffer.published_at))
         )
+        return (await self.session.exec(stmt)).all()
+
+    async def list_distinct_company_names(self) -> Sequence[str]:
+        """Every distinct non-blank employer name across all known offers --
+        backs regret_jobs.py's monthly Regret Index bulk refresh, which
+        needs "every company we've ever seen", not just the ones a candidate
+        currently matches (this table, not candidate_matches, is the
+        complete set: an employer stays known here even once its offers age
+        out of MATCHING_MAX_OFFER_POOL_DAYS)."""
+        stmt = (
+            select(JobOffer.company_name)
+            .where(
+                JobOffer.company_name.is_not(None),  # type: ignore[attr-defined]
+                JobOffer.company_name != "",
+            )
+            .distinct()
+        )
+        if self._soft_delete:
+            stmt = stmt.where(JobOffer.deleted_at.is_(None))  # type: ignore[attr-defined]
         return (await self.session.exec(stmt)).all()

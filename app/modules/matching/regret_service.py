@@ -1,0 +1,109 @@
+"""Orchestrates the Regret Index for one company: cache lookup, SimplyHired
+fetch, score conversion, cache write. Called from MatchingService._upsert
+for every scored pair (see service.py), and from regret_jobs.py's monthly
+bulk refresh -- kept as its own class so it gets its own repository/session
+wiring, same convention as MatchingService itself.
+
+Was Reddit + an LLM scoring step (see reddit_gateway.py/regret_gateway.py,
+kept but no longer called); SimplyHired's rating is already a structured
+number, so `_compute` below is a direct conversion, no LLM involved.
+
+Never raises: any failure anywhere in the chain (no SimplyHired page found
+for the company, request error, too few reviews) lands on
+("unavailable", None), exactly like the "not enough signal" case -- callers
+never need to distinguish "broken" from "no signal", since neither is a
+legitimate basis for showing a candidate a number.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, timedelta
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.core.logging import get_logger
+from app.core.models import utcnow
+from app.core.text import fold
+from app.modules.matching import simplyhired_gateway
+from app.modules.matching.models import CompanyRegretProfile
+from app.modules.matching.repository import CompanyRegretRepository
+
+logger = get_logger("matching.regret_service")
+
+
+class RegretService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.repo = CompanyRegretRepository(session)
+
+    async def get_or_compute(
+        self, company_name: str | None, *, force: bool = False
+    ) -> tuple[str, int | None]:
+        """Returns (regret_availability, regret_score) for `company_name`.
+        Empty/missing company name -> unavailable, no fetch attempted.
+
+        `force` skips the TTL check and always refetches -- used by
+        regret_jobs.py's monthly bulk refresh, which is the primary refresh
+        mechanism now (this TTL mostly matters for a company first
+        encountered between two monthly runs, via the normal per-match call
+        below)."""
+        if not company_name or not company_name.strip():
+            return "unavailable", None
+
+        key = fold(company_name)
+        settings = get_settings()
+        existing = await self.repo.get_by_key(key)
+        if existing is not None and not force:
+            # SQLite drops tzinfo on round-trip even for a DateTime(timezone=
+            # True) column (Postgres doesn't) -- normalize defensively so
+            # this comparison works the same in tests and in production.
+            computed_at = existing.computed_at
+            if computed_at.tzinfo is None:
+                computed_at = computed_at.replace(tzinfo=UTC)
+            fresh_until = computed_at + timedelta(days=settings.REGRET_CACHE_TTL_DAYS)
+            if utcnow() < fresh_until:
+                return existing.regret_availability, existing.regret_score
+
+        values = await self._compute(company_name)
+        values["company_name"] = company_name
+        values["computed_at"] = utcnow()
+
+        if existing is None:
+            await self.repo.create(CompanyRegretProfile(company_name_key=key, **values))
+        else:
+            await self.repo.update(existing, values)
+
+        return values["regret_availability"], values["regret_score"]
+
+    async def _compute(self, company_name: str) -> dict:
+        settings = get_settings()
+        ratings = await simplyhired_gateway.fetch_company_ratings(company_name)
+        if ratings is None or ratings.review_count < settings.REGRET_MIN_REVIEWS:
+            return {
+                "regret_availability": "unavailable",
+                "regret_score": None,
+                "mention_count": ratings.review_count if ratings else 0,
+                "overall_rating": ratings.overall_rating if ratings else None,
+                "category_scores": ratings.category_scores if ratings else {},
+                "satisfaction_percent": (
+                    ratings.satisfaction_percent if ratings else None
+                ),
+                "source_url": ratings.source_url if ratings else "",
+            }
+
+        # SimplyHired's rating is "how good is this employer" (5 = best);
+        # the Regret Index is "how likely is a candidate to regret joining"
+        # (0 = best) -- a direct linear inversion, clamped for safety even
+        # though a valid rating is always within [0, 5].
+        score = round((5 - ratings.overall_rating) / 5 * 100)
+        score = max(0, min(100, score))
+
+        return {
+            "regret_availability": "available",
+            "regret_score": score,
+            "mention_count": ratings.review_count,
+            "overall_rating": ratings.overall_rating,
+            "category_scores": ratings.category_scores,
+            "satisfaction_percent": ratings.satisfaction_percent,
+            "source_url": ratings.source_url,
+        }

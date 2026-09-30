@@ -13,12 +13,14 @@ candidate's extracted CV text), `offers` (the pool to match against), and
 `mailer` (to send the "first matches ready" email after a brand-new
 profile's immediate matching run -- see emails.py and jobs.py).
 
-The Regret Index (employee-sentiment risk score) is deliberately NOT
-computed here. MatchCareer's own review-data sourcing options were reviewed
-and none were legitimate enough to ship yet (no scraping, and the API
-options considered either require negotiated commercial terms or lack
-structured ratings) -- every CandidateMatch instead reports
-regret_availability="unavailable" until a real source is wired in.
+The Regret Index (employee-sentiment risk score) is computed via
+regret_service.py from SimplyHired.fr's public company-review pages (see
+CompanyRegretProfile's docstring for the sourcing decision and its
+disclosed legal tradeoffs, Steve, 2026-09-30), refreshed for every known
+employer once a month (regret_jobs.py) and computed on-demand for a
+brand-new one the first time it's matched. It still reports
+regret_availability="unavailable" whenever there isn't enough real signal
+to score -- never a fabricated number.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from fastapi import APIRouter
 
 from app.core.module import Module
 
-# Import side effects: register the models (Alembic), the scheduled job,
+# Import side effects: register the models (Alembic), the scheduled jobs,
 # and the event listeners (reacts to cv's ProfileOnboardingCompleted).
 from app.modules.matching import (
     cv_optimization_models as cv_optimization_models,  # noqa: F401
@@ -35,6 +37,7 @@ from app.modules.matching import (
 from app.modules.matching import jobs as jobs  # noqa: F401
 from app.modules.matching import listeners as listeners  # noqa: F401
 from app.modules.matching import models as models  # noqa: F401
+from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
 from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
