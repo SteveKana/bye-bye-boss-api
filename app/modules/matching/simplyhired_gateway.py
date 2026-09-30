@@ -35,9 +35,13 @@ Two things make this scrape inherently best-effort:
    not necessarily true of the production server). So parsing works off
    visible French text patterns (regex over the page's rendered text) rather
    than CSS selectors, which is both more resilient to a markup change and
-   the only option available here -- but it hasn't been run against live
-   traffic. Treat the first production runs as the real test; adjust the
-   patterns below if SimplyHired's actual wording differs.
+   the only option available here. Still unconfirmed against real traffic
+   at scale: the first production backfill (2026-09-30) got a 403 on every
+   single company before parsing ever ran, traced to an unpaced ~120
+   requests in 2 seconds (see regret_jobs.py's _PACE_SECONDS) rather than
+   anything about the headers or the parsing itself -- once a request
+   actually gets a 200 back, treat THAT as the real first test of the
+   patterns below, and adjust them if SimplyHired's actual wording differs.
 
 Never raises: any failure (network, 404, unparseable page) returns None,
 exactly like Reddit's gateway returned [] -- regret_service.py treats that
@@ -147,13 +151,33 @@ async def fetch_company_ratings(company_name: str) -> SimplyHiredRatings | None:
         return None
     url = f"{settings.SIMPLYHIRED_BASE_URL}/browse-jobs/companies/{slug}"
 
+    # A real browser never sends just a User-Agent -- a request with only
+    # that one header, fired the instant the process starts, is itself a
+    # bot signature many WAFs key on. This is still "identify honestly"
+    # (see module docstring), not a CAPTCHA/fingerprint bypass: it's the
+    # same header set Chrome sends on a normal navigation.
+    _headers = {
+        "User-Agent": settings.SIMPLYHIRED_USER_AGENT,
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+    }
+
     try:
         async with httpx.AsyncClient(
             timeout=settings.SIMPLYHIRED_REQUEST_TIMEOUT_SECONDS
         ) as client:
             response = await client.get(
                 url,
-                headers={"User-Agent": settings.SIMPLYHIRED_USER_AGENT},
+                headers=_headers,
                 follow_redirects=True,
             )
             if response.status_code == 404:
