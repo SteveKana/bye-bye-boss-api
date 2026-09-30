@@ -8,6 +8,9 @@ Commands:
     run-matching                  score complete profiles against offers now
     backfill-contract-type        guess contract_type for already-stored offers
                                    that have none (one-off, safe to re-run)
+    backfill-regret-index         compute the Regret Index for already-stored
+                                   matches that predate it (one-off, safe to
+                                   re-run)
 """
 
 from __future__ import annotations
@@ -124,6 +127,54 @@ def _cmd_backfill_contract_type(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
+    """One-off: RegretService.get_or_compute only runs at match-(re)scoring
+    time (see matching/service.py's `_upsert`), which itself only fires when
+    a pair is no longer "fresh" (profile/offer unchanged since last scored --
+    see `_run_for_profile`'s to_score logic). A match scored before the
+    Regret Index existed (Reddit era or the later SimplyHired pivot) stays
+    "fresh" forever from the matching engine's point of view, since neither
+    the candidate's profile nor the offer itself changed -- so it silently
+    keeps its default regret_availability="unavailable" until something
+    else invalidates it, which may never happen for an older listing. This
+    computes it directly from each such match's already-stored company_name,
+    without re-running the (expensive) LLM match analysis at all. Safe to
+    re-run: only touches matches still at the default "unavailable", and
+    CompanyRegretProfile's own cache means a company shared by many matches
+    is only actually looked up on SimplyHired once."""
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.matching.regret_service import RegretService
+    from app.modules.matching.repository import CandidateMatchRepository
+
+    async def _run() -> None:
+        available = 0
+        async with AsyncSessionLocal() as session:
+            matches = CandidateMatchRepository(session)
+            candidates = await matches.list(
+                filters={"regret_availability": "unavailable"}
+            )
+            regret = RegretService(session)
+            for match in candidates:
+                availability, score = await regret.get_or_compute(match.company_name)
+                if (
+                    availability != match.regret_availability
+                    or score != match.regret_score
+                ):
+                    await matches.update(
+                        match,
+                        {"regret_availability": availability, "regret_score": score},
+                    )
+                if availability == "available":
+                    available += 1
+            await session.commit()
+        print(f"checked={len(candidates)} now_available={available}")
+
+    asyncio.run(_run())
+    return 0
+
+
 def _cmd_run_matching(_: argparse.Namespace) -> int:
     import asyncio
 
@@ -168,6 +219,10 @@ def main(argv: list[str] | None = None) -> int:
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
     ).set_defaults(func=_cmd_backfill_contract_type)
+    sub.add_parser(
+        "backfill-regret-index",
+        help="compute the Regret Index for already-stored matches that predate it",
+    ).set_defaults(func=_cmd_backfill_regret_index)
 
     args = parser.parse_args(argv)
     return args.func(args)
