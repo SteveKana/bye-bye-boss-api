@@ -141,8 +141,14 @@ def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
     without re-running the (expensive) LLM match analysis at all. Safe to
     re-run: only touches matches still at the default "unavailable", and
     CompanyRegretProfile's own cache means a company shared by many matches
-    is only actually looked up on SimplyHired once."""
+    is only actually looked up on SimplyHired once. Paced the same way as
+    regret_jobs.py's monthly refresh (a random 1.5-3.5s pause between
+    matches): the first production run of this command fired ~120 requests
+    inside 2 seconds with no pacing at all and SimplyHired 403'd every
+    single one -- an unpaced one-off backfill is exactly as bot-shaped as
+    an unpaced monthly job."""
     import asyncio
+    import random
 
     from app.core.database import AsyncSessionLocal
     from app.modules.matching.regret_service import RegretService
@@ -156,7 +162,9 @@ def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
                 filters={"regret_availability": "unavailable"}
             )
             regret = RegretService(session)
-            for match in candidates:
+            for index, match in enumerate(candidates):
+                if index > 0:
+                    await asyncio.sleep(random.uniform(1.5, 3.5))
                 availability, score = await regret.get_or_compute(match.company_name)
                 if (
                     availability != match.regret_availability

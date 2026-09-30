@@ -16,15 +16,23 @@ all). This job forces a refresh regardless of REGRET_CACHE_TTL_DAYS
 if its existing row is technically still "fresh" by that TTL.
 
 One SimplyHired request per company, sequentially -- deliberately not
-parallelized. This project already refuses to build anti-bot-bypass code
-for Glassdoor/Google; hammering SimplyHired with concurrent requests once a
-month would cut against the same spirit even though SimplyHired itself
-isn't declined outright (see simplyhired_gateway.py's docstring). A failure
-on one company is logged and skipped -- never lets one bad company_name
-(or one blocked/changed page) abort the run for the rest.
+parallelized, AND deliberately paced (see _PACE_SECONDS below). The first
+real production run of this pivot (2026-09-30) hit every single company
+with a 403: no artificial delay meant ~120 sequential-but-back-to-back
+requests landed inside about 2 seconds, which reads exactly like a bot to
+any rate-limiting on SimplyHired's side, independent of headers/UA. This
+project already refuses to build anti-bot-bypass code for Glassdoor/
+Google; a random pause between honestly-identified requests isn't that --
+it's just not hammering the target, in the same spirit as staying
+sequential (see simplyhired_gateway.py's docstring). A failure on one
+company is logged and skipped -- never lets one bad company_name (or one
+blocked/changed page) abort the run for the rest.
 """
 
 from __future__ import annotations
+
+import asyncio
+import random
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
@@ -34,6 +42,11 @@ from app.modules.matching.regret_service import RegretService
 from app.modules.offers import JobOfferRepository
 
 logger = get_logger("matching.regret_jobs")
+
+# Randomized pause between companies -- a monthly job has hours of slack,
+# so there's no cost to spacing ~1-3s between requests, only upside for not
+# looking like a scraper hammering the site.
+_PACE_SECONDS = (1.5, 3.5)
 
 
 @scheduled(
@@ -51,7 +64,9 @@ async def refresh_all_company_regret_profiles() -> None:
 
     refreshed = 0
     failed = 0
-    for company_name in company_names:
+    for index, company_name in enumerate(company_names):
+        if index > 0:
+            await asyncio.sleep(random.uniform(*_PACE_SECONDS))
         try:
             async with AsyncSessionLocal() as session:
                 await RegretService(session).get_or_compute(company_name, force=True)
