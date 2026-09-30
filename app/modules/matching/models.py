@@ -115,32 +115,37 @@ class CompanyRegretProfile(BaseModel, table=True):
     popular employer is only ever looked up once per REGRET_CACHE_TTL_DAYS
     window, not once per candidate x offer pair.
 
-    IMPORTANT CONTEXT (read before touching regret_service.py/reddit_gateway.py):
-    this table exists because Steve explicitly asked (2026-09-30) to scrape
-    Reddit for employee sentiment after being told, and after independently
-    confirming, that no legitimate/structured review API exists at a cost or
-    access level this project can use (Glassdoor: no public API left, partner
-    terms only; Indeed: partner API covers job postings, not reviews;
-    ChooseMyCompany: a widget for their own paying clients' career sites, not
-    a third-party read API). Originally built against Reddit's own official,
-    free-tier OAuth2 API -- but Reddit locked down self-serve app creation
-    the same day (see reddit_gateway.py's docstring), so this now hits
-    Reddit's public, unauthenticated search endpoint instead. That is closer
-    to the raw scraping the `offers` module already refuses to do for
-    LinkedIn/Indeed than the original version was; Steve chose Reddit over
-    Glassdoor anyway (2026-09-30) after being told Glassdoor's login
-    wall/anti-bot measures make it an even worse scraping target. Nobody
-    involved in writing this is a lawyer, and that risk was accepted as a
-    product decision, not resolved. If that decision ever changes, this
-    table (and regret_service.py's call site in MatchingService._upsert) is
-    the one place to revert.
+    IMPORTANT CONTEXT (read before touching regret_service.py/
+    simplyhired_gateway.py): this table exists because Steve explicitly
+    asked (2026-09-30) for employee sentiment on each employer, after being
+    told, and independently confirming, that no legitimate/structured
+    review API exists at a cost or access level this project can use
+    (Glassdoor/Google: scraping either means defeating CAPTCHA/anti-bot
+    protection, refused outright regardless of the request; Indeed: partner
+    API covers job postings only, no reviews; ChooseMyCompany: a real,
+    documented API exists but is access-gated, contact-only). This started
+    against Reddit (first its OAuth2 API, then -- after Reddit locked down
+    self-serve app creation the same day -- its public search endpoint, an
+    LLM turning raw posts into a score), kept in reddit_gateway.py/
+    regret_gateway.py/regret_prompt.py/regret_schema.py for reference but no
+    longer called. As of 2026-09-30 this is populated from SimplyHired.fr's
+    public company-review pages instead (see simplyhired_gateway.py) --
+    already-structured data (a star rating, category breakdowns, a review
+    count), so no LLM step is needed; `regret_score` is a direct conversion
+    of the star rating. Nobody involved in writing this is a lawyer, and
+    scraping SimplyHired -- republishing their own computed rating rather
+    than our own transformative analysis of raw text, as the Reddit approach
+    was -- was accepted as a product decision (Steve, 2026-09-30), not
+    resolved. If that decision ever changes, this table (and
+    regret_service.py's call site in MatchingService._upsert) is the one
+    place to revert.
 
     "unavailable" is still a real outcome, not just a placeholder for the
-    pre-scraping era: fewer than settings.REGRET_MIN_MENTIONS relevant Reddit
-    hits for a company means regret_availability stays "unavailable" rather
-    than asking the LLM to invent a score from thin/unrepresentative text --
-    same never-fabricate principle CandidateMatch's docstring already held,
-    just no longer applied unconditionally to every company.
+    pre-scraping era: no SimplyHired page found for a company, or fewer than
+    settings.REGRET_MIN_REVIEWS reviews behind its rating, means
+    regret_availability stays "unavailable" rather than showing a candidate
+    a number built on a guessed company match or too little material -- same
+    never-fabricate principle CandidateMatch's docstring already held.
     """
 
     __tablename__ = "company_regret_profiles"
@@ -156,9 +161,30 @@ class CompanyRegretProfile(BaseModel, table=True):
 
     regret_availability: str = Field(default="unavailable", nullable=False)
     regret_score: int | None = Field(default=None)
-    # How many Reddit posts/comments the score (if any) was actually based
-    # on -- lets a future admin view distinguish "score from 2 mentions" from
-    # "score from 40", without re-running the search.
+    # How many reviews the score (if any) was actually based on -- named
+    # generically (not "review_count") because this table briefly held
+    # Reddit *mention* counts before the SimplyHired pivot; lets a future
+    # admin view distinguish "score from 5 reviews" from "score from 80"
+    # without re-scraping.
     mention_count: int = Field(default=0, nullable=False)
+
+    # ---- SimplyHired-specific detail, added 2026-09-30 ---------------------
+    # The raw star rating (out of 5) regret_score was derived from -- kept
+    # alongside the derived score so an admin view can show "3.5/5" rather
+    # than just the converted 0-100 number.
+    overall_rating: float | None = Field(default=None)
+    # Per-category breakdown as SimplyHired shows it (work_life_balance,
+    # compensation, job_security, management, culture -> a 0-5 float) --
+    # see simplyhired_gateway.py's _CATEGORY_LABELS for the exact French
+    # labels each key comes from. Empty when a category wasn't found on the
+    # page (parsing is best-effort, see that module's docstring).
+    category_scores: dict = Field(default_factory=dict, sa_column=Column(_JsonColumn))
+    # SimplyHired's "% of employees satisfied with their salary" stat, kept
+    # as-is (not folded into regret_score) since it measures something more
+    # specific than overall regret. None when not found on the page.
+    satisfaction_percent: int | None = Field(default=None)
+    # The exact SimplyHired URL this row was scraped from -- admin/debugging
+    # readability, same spirit as company_name above.
+    source_url: str = Field(default="")
 
     computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))

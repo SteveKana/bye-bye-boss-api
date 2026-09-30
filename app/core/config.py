@@ -225,30 +225,58 @@ class Settings(BaseSettings):
     # "still relevant" offers) bounded as the offers table grows.
     MATCHING_MAX_OFFER_POOL_DAYS: int = 30
 
-    # ---- Regret Index (Reddit-sourced employee sentiment) -----------------
+    # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
-    # employee-review API exists (Glassdoor/Indeed/ChooseMyCompany). Originally
-    # built against Reddit's official OAuth2 API, but Reddit locked down
-    # self-serve app creation the same day ("Responsible Builder Policy" --
-    # see reddit_gateway.py's docstring), so this now hits Reddit's public,
-    # unauthenticated search endpoint instead -- closer to real scraping,
-    # not risk-free, nobody here is a lawyer. No credentials needed; only a
-    # descriptive User-Agent (Reddit is more likely to rate-limit/block an
-    # unidentified one).
+    # employee-review API exists at a cost/access level this project can use
+    # (Glassdoor/Google: no usable public API, and getting one requires
+    # defeating CAPTCHA/anti-bot measures -- refused outright, see
+    # simplyhired_gateway.py's docstring; Indeed: partner API covers job
+    # postings only, no reviews; ChooseMyCompany: real API exists but is
+    # access-gated, contact-only). Originally built against Reddit (first its
+    # OAuth2 API, then -- after Reddit locked down self-serve app creation --
+    # its public search endpoint), kept in reddit_gateway.py/regret_gateway.py
+    # for reference but no longer called: Steve moved to SimplyHired.fr's
+    # public company-review pages instead, which publish an aggregate star
+    # rating, category breakdowns and a review count with no CAPTCHA/login
+    # wall observed, and need no LLM step since the data is already
+    # structured (see simplyhired_gateway.py).
+    SIMPLYHIRED_BASE_URL: str = "https://www.simplyhired.fr"
+    # A descriptive-but-browser-like User-Agent -- SimplyHired serves HTML
+    # for browsers, not a JSON API, so an httpx-default UA is more likely to
+    # be treated as a bot than a real one; this identifies the client
+    # honestly without doing anything to defeat detection.
+    SIMPLYHIRED_USER_AGENT: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    )
+    SIMPLYHIRED_REQUEST_TIMEOUT_SECONDS: int = 20
+    # A company's regret score is cached this long before being
+    # recomputed -- employee sentiment doesn't shift day to day, and this
+    # bounds scraping to roughly once per company per window rather than
+    # once per candidate match. Also the effective cadence for the lazy,
+    # on-demand path (MatchingService._upsert); the monthly bulk job in
+    # regret_jobs.py is the primary refresh mechanism and forces a refresh
+    # regardless of this TTL, so this mostly matters between two monthly runs
+    # or for a company first encountered outside of one.
+    REGRET_CACHE_TTL_DAYS: int = 30
+    # Below this many SimplyHired reviews, the score stays "unavailable"
+    # rather than treating a handful of reviews as representative.
+    REGRET_MIN_REVIEWS: int = 5
+    # Gates regret_jobs.py's monthly bulk refresh, same convention as
+    # SCHEDULER_ENABLED itself -- lets this be switched off independently
+    # (e.g. in a review-heavy dev/staging run) without touching the daily
+    # matching sync.
+    REGRET_MONTHLY_REFRESH_ENABLED: bool = True
+
+    # ---- Regret Index, Reddit-era settings (kept, unused) ------------------
+    # reddit_gateway.py/regret_gateway.py/regret_prompt.py/regret_schema.py
+    # still exist and still read these, but nothing calls them any more
+    # (regret_service.py now goes through simplyhired_gateway.py above) --
+    # kept only so that code still runs as-is if this is ever reverted,
+    # rather than leaving it silently broken.
     REDDIT_USER_AGENT: str = "byebyeboss-regret-index/1.0"
-    # Same OPENAI_API_KEY as everywhere else, own cheap model: turning a
-    # handful of Reddit posts into a score is closer to the cv module's
-    # fixed-extraction task than to matching's heavier judgment call.
     REGRET_OPENAI_MODEL: str = "gpt-5-mini"
     REGRET_OPENAI_TIMEOUT_SECONDS: int = 60
-    # A company's regret score is cached this long before being recomputed --
-    # Reddit sentiment doesn't shift day to day, and this bounds both Reddit
-    # API calls and LLM spend to roughly one per company per window rather
-    # than once per candidate match.
-    REGRET_CACHE_TTL_DAYS: int = 30
-    # Below this many relevant Reddit mentions, the score stays "unavailable"
-    # rather than asking the LLM to guess from too little material (see
-    # regret_prompt.py's "insufficient" rule -- this is the pre-LLM gate).
     REGRET_MIN_MENTIONS: int = 3
 
     # ---- CV optimization ("Adapter mon CV pour cette offre") --------------

@@ -29,6 +29,10 @@ dependencies = [
     "pypdf>=4.3",
     "python-docx>=1.1",
     "openai>=1.40.0",
+    # HTML parsing for the Regret Index's SimplyHired scrape
+    # (simplyhired_gateway.py) -- html.parser backend, no lxml/C-extension
+    # needed.
+    "beautifulsoup4>=4.12",
     # PDF generation for "Créer cette variante de CV" (cv_pdf.py) -- pure
     # Python, no system-level libraries to install on the server (unlike an
     # HTML-to-PDF renderer such as WeasyPrint, which needs Cairo/Pango).
