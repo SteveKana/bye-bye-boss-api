@@ -2,21 +2,37 @@
 raw material for the Regret Index (see CompanyRegretProfile's docstring for
 the full context on why this exists and what it doesn't settle).
 
-Uses Reddit's own official, self-serve OAuth2 API (a free "script" app,
-registered at reddit.com/prefs/apps) -- not raw HTML scraping. This is a
-narrower risk than what the `offers` module explicitly refuses to do for
-LinkedIn/Indeed/Glassdoor (there's no equivalent official read API for those
-at all), but it is not risk-free: redistributing per-employer scores derived
-from this data still falls under Reddit's Developer/Data API Terms, which
-restrict some commercial uses. That tradeoff was accepted by Steve as a
-product decision (2026-09-30), not resolved by using the official API
-instead of scraping -- reusing the official endpoint just makes the result
-far less fragile than parsing Reddit's rendered HTML would be.
+UPDATE 2026-09-30 (same day as the original decision): Reddit locked down
+self-serve OAuth2 app creation shortly after this module was first written
+against it (their "Responsible Builder Policy" -- `reddit.com/prefs/apps`'s
+"create app" button now just reloads the page without ever issuing
+credentials; this is a known, widely reported change, not a bug on our
+side). No client_id/client_secret is obtainable through the normal signup
+flow any more, so this module was rewritten to hit Reddit's public,
+unauthenticated search endpoint (the same JSON data Reddit's own website
+fetches when you search on reddit.com, reachable by appending `.json` to a
+reddit.com URL) instead of the OAuth API.
+
+This is a step closer to the raw scraping the `offers` module already
+refuses to do for LinkedIn/Indeed/Glassdoor than the original OAuth version
+was -- there is no developer agreement covering this endpoint, and Reddit's
+Terms of Use restrict automated access generally. Steve explicitly chose
+this (2026-09-30, after being told Glassdoor's anti-bot/login wall makes it
+an even worse target) over the alternative of doing nothing; nobody involved
+in writing this is a lawyer, and that risk was accepted as a product
+decision, not resolved by hitting a "public" URL instead of a documented
+API. If that decision ever changes, this file (and regret_service.py's call
+site in MatchingService._upsert) is the one place to revert.
+
+Practical consequence of the switch: this endpoint only searches post
+titles/selftext, not comments (comment search was only ever available
+through the OAuth API) -- so coverage is narrower than the original version,
+on top of being legally shakier. Still: [] on any failure/unconfigured
+state, never raises -- same convention as every other provider gateway in
+this codebase.
 """
 
 from __future__ import annotations
-
-import time
 
 import httpx
 
@@ -25,105 +41,61 @@ from app.core.logging import get_logger
 
 logger = get_logger("matching.reddit")
 
-_TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
-_SEARCH_URL = "https://oauth.reddit.com/search"
+_SEARCH_URL = "https://www.reddit.com/search.json"
 
 # Subreddits where French employees/candidates actually discuss employers --
 # restricting to these (rather than a sitewide search) keeps results
-# relevant and keeps the query volume Reddit sees from this app small.
+# relevant and keeps the request volume this sends to Reddit small.
 _SUBREDDITS = ("france", "vosfinances", "developpeurs", "ChoisirSonPoste")
 
 
-class _TokenCache:
-    """A single app-level OAuth2 token, refreshed only once it's actually
-    close to expiring -- client_credentials tokens are valid ~1h, and this
-    job runs at most once a day per company (see REGRET_CACHE_TTL_DAYS), so
-    there's no real concurrency to worry about here."""
-
-    def __init__(self) -> None:
-        self._token: str | None = None
-        self._expires_at: float = 0.0
-
-    async def get(self, client: httpx.AsyncClient) -> str | None:
-        settings = get_settings()
-        if not (settings.REDDIT_CLIENT_ID and settings.REDDIT_CLIENT_SECRET):
-            return None
-        if self._token and time.monotonic() < self._expires_at:
-            return self._token
-
-        try:
-            response = await client.post(
-                _TOKEN_URL,
-                data={"grant_type": "client_credentials"},
-                auth=(settings.REDDIT_CLIENT_ID, settings.REDDIT_CLIENT_SECRET),
-                headers={"User-Agent": settings.REDDIT_USER_AGENT},
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except httpx.HTTPError as exc:
-            logger.warning("reddit_token_failed", error=str(exc))
-            return None
-
-        self._token = payload.get("access_token")
-        # Refresh 60s before actual expiry rather than cutting it exactly at
-        # the wire -- avoids a request failing mid-flight over a few seconds
-        # of clock drift.
-        self._expires_at = time.monotonic() + max(payload.get("expires_in", 0) - 60, 0)
-        return self._token
-
-
-_token_cache = _TokenCache()
-
-
 async def search_mentions(company_name: str, *, limit: int = 20) -> list[dict]:
-    """Recent posts/comments across `_SUBREDDITS` mentioning `company_name`.
-    Returns [] whenever the app isn't configured, the search errors, or
-    nothing comes back -- callers (regret_service.py) treat an empty list
-    exactly like "no signal", never differently from a hard failure, since
-    neither case is a legitimate basis for a score.
+    """Recent posts across `_SUBREDDITS` mentioning `company_name`, via
+    Reddit's public search JSON (no auth). Returns [] whenever the request
+    errors, is rate-limited/blocked, or nothing comes back -- callers
+    (regret_service.py) treat an empty list exactly like "no signal", never
+    differently from a hard failure, since neither case is a legitimate
+    basis for a score.
 
     Each item is `{"title": str, "body": str, "permalink": str}` -- enough
     for the LLM prompt in regret_prompt.py, nothing else is kept."""
     settings = get_settings()
-    async with httpx.AsyncClient(timeout=15) as client:
-        token = await _token_cache.get(client)
-        if not token:
-            return []
+    query = f'"{company_name}" subreddit:({" OR ".join(_SUBREDDITS)})'
 
-        query = f'"{company_name}" subreddit:({" OR ".join(_SUBREDDITS)})'
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(
                 _SEARCH_URL,
                 params={
                     "q": query,
                     "sort": "new",
                     "limit": limit,
-                    "type": "link,comment",
+                    "restrict_sr": "off",
                 },
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "User-Agent": settings.REDDIT_USER_AGENT,
-                },
+                headers={"User-Agent": settings.REDDIT_USER_AGENT},
             )
             response.raise_for_status()
             payload = response.json()
-        except httpx.HTTPError as exc:
-            logger.warning("reddit_search_failed", company=company_name, error=str(exc))
-            return []
+    except httpx.HTTPError as exc:
+        # Covers rate-limiting (429) and outright blocks (403) the same way
+        # as a network error -- there's nothing this caller can do about
+        # either beyond trying again on the next scheduled run.
+        logger.warning("reddit_search_failed", company=company_name, error=str(exc))
+        return []
 
-        children = payload.get("data", {}).get("children", [])
-        results = []
-        for child in children:
-            data = child.get("data", {})
-            title = data.get("title") or ""
-            body = data.get("body") or data.get("selftext") or ""
-            if not (title or body):
-                continue
-            results.append(
-                {
-                    "title": title,
-                    "body": body,
-                    "permalink": data.get("permalink", ""),
-                }
-            )
-        return results
+    children = payload.get("data", {}).get("children", [])
+    results = []
+    for child in children:
+        data = child.get("data", {})
+        title = data.get("title") or ""
+        body = data.get("selftext") or ""
+        if not (title or body):
+            continue
+        results.append(
+            {
+                "title": title,
+                "body": body,
+                "permalink": data.get("permalink", ""),
+            }
+        )
+    return results

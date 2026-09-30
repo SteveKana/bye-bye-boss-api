@@ -227,14 +227,14 @@ class Settings(BaseSettings):
 
     # ---- Regret Index (Reddit-sourced employee sentiment) -----------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
-    # employee-review API exists (Glassdoor/Indeed/ChooseMyCompany) and
-    # accepting the ToS risk of an alternative: scrape signal from Reddit
-    # instead. Uses Reddit's own free OAuth2 API (see reddit_gateway.py),
-    # not raw HTML scraping -- narrower risk than sitewide scraping, but
-    # still not risk-free; nobody involved here is a lawyer. Register a
-    # free "script" app at reddit.com/prefs/apps to get the two values below.
-    REDDIT_CLIENT_ID: str | None = None
-    REDDIT_CLIENT_SECRET: str | None = None
+    # employee-review API exists (Glassdoor/Indeed/ChooseMyCompany). Originally
+    # built against Reddit's official OAuth2 API, but Reddit locked down
+    # self-serve app creation the same day ("Responsible Builder Policy" --
+    # see reddit_gateway.py's docstring), so this now hits Reddit's public,
+    # unauthenticated search endpoint instead -- closer to real scraping,
+    # not risk-free, nobody here is a lawyer. No credentials needed; only a
+    # descriptive User-Agent (Reddit is more likely to rate-limit/block an
+    # unidentified one).
     REDDIT_USER_AGENT: str = "byebyeboss-regret-index/1.0"
     # Same OPENAI_API_KEY as everywhere else, own cheap model: turning a
     # handful of Reddit posts into a score is closer to the cv module's

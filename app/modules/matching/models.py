@@ -122,15 +122,18 @@ class CompanyRegretProfile(BaseModel, table=True):
     access level this project can use (Glassdoor: no public API left, partner
     terms only; Indeed: partner API covers job postings, not reviews;
     ChooseMyCompany: a widget for their own paying clients' career sites, not
-    a third-party read API). Reddit's read API is Reddit's own official,
-    free-tier, self-serve product (see reddit_gateway.py) -- not scraping in
-    the same sense as the `offers` module explicitly refuses to do for
-    LinkedIn/Indeed/Glassdoor -- but using it to publish a per-employer score
-    still sits under Reddit's Developer/Data API Terms, which restrict some
-    commercial redistribution uses; nobody involved in writing this is a
-    lawyer, and that risk was accepted as a product decision, not resolved.
-    If that decision ever changes, this table (and regret_service.py's call
-    site in MatchingService._upsert) is the one place to revert.
+    a third-party read API). Originally built against Reddit's own official,
+    free-tier OAuth2 API -- but Reddit locked down self-serve app creation
+    the same day (see reddit_gateway.py's docstring), so this now hits
+    Reddit's public, unauthenticated search endpoint instead. That is closer
+    to the raw scraping the `offers` module already refuses to do for
+    LinkedIn/Indeed than the original version was; Steve chose Reddit over
+    Glassdoor anyway (2026-09-30) after being told Glassdoor's login
+    wall/anti-bot measures make it an even worse scraping target. Nobody
+    involved in writing this is a lawyer, and that risk was accepted as a
+    product decision, not resolved. If that decision ever changes, this
+    table (and regret_service.py's call site in MatchingService._upsert) is
+    the one place to revert.
 
     "unavailable" is still a real outcome, not just a placeholder for the
     pre-scraping era: fewer than settings.REGRET_MIN_MENTIONS relevant Reddit
