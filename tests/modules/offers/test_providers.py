@@ -59,6 +59,8 @@ async def test_france_travail_search_normalizes_results(monkeypatch) -> None:
     assert offer.location == "Paris"
     assert offer.contract_type == "CDI"
     assert offer.salary_label == "Annuel de 40000.0 à 48000.0 Euros"
+    assert offer.salary_min == 40000
+    assert offer.salary_max == 48000
     assert offer.url == "https://example.fr/offre/123"
     assert offer.published_at is not None
     assert offer.raw["id"] == "123ABC"
@@ -375,6 +377,72 @@ async def test_france_travail_has_no_daily_rate_for_a_salaried_offer(
 
     assert results[0].daily_rate_min is None
     assert results[0].daily_rate_max is None
+
+
+async def test_france_travail_extracts_annual_salary_from_salaire_libelle(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Product Owner",
+                        # Real-world label: "Euros" after the first figure,
+                        # plus trailing avantages text after the range.
+                        "salaire": {
+                            "libelle": (
+                                "Annuel de 45000.0 Euros à 55000.0 Euros - TR, CSE"
+                            )
+                        },
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].salary_min == 45000
+    assert results[0].salary_max == 55000
+
+
+async def test_france_travail_annualizes_mensuel_salaire_libelle(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "fake-token"})
+        return httpx.Response(
+            200,
+            json={
+                "resultats": [
+                    {
+                        "id": "123ABC",
+                        "intitule": "Product Owner",
+                        "salaire": {
+                            "libelle": "Mensuel de 2500.0 Euros à 3000.0 Euros"
+                        },
+                        "origineOffre": {"urlOrigine": "https://example.fr/offre/123"},
+                    }
+                ]
+            },
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    results = await provider.search(keywords="product owner", limit=50)
+
+    assert results[0].salary_min == 30000
+    assert results[0].salary_max == 36000
 
 
 # ---- Adzuna -----------------------------------------------------------------

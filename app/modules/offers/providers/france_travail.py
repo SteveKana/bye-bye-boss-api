@@ -29,6 +29,7 @@ from app.core.daily_rate import extract_daily_rate
 from app.core.logging import get_logger
 from app.core.regions import region_from_insee_code, region_from_postal_code
 from app.core.remote_work import looks_full_remote
+from app.core.salary import extract_annual_salary
 from app.modules.offers.providers._util import parse_iso_datetime
 from app.modules.offers.providers.base import NormalizedOffer, OfferProvider
 
@@ -118,6 +119,11 @@ class FranceTravailProvider(OfferProvider):
         # description or in this same salaire.libelle field France Travail
         # otherwise uses for a plain salary label -- see core/daily_rate.py.
         daily_rate_min, daily_rate_max = extract_daily_rate(description, salary_label)
+        # France Travail never gives a structured salary figure, only this
+        # label -- see core/salary.py. A permanent-role offer with no
+        # plausible match here simply keeps salary_min/max unset (shown as
+        # "salaire non précisé" on the frontend) rather than being guessed.
+        salary_min, salary_max = extract_annual_salary(salary_label)
         # France Travail usually fills typeContratLibelle/typeContrat, but not
         # always -- same fallback as Adzuna's normalizer (see
         # core/contract_type.py) for the listings where neither is set, even
@@ -135,6 +141,8 @@ class FranceTravailProvider(OfferProvider):
             description=description,
             location=lieu.get("libelle"),
             contract_type=contract_type,
+            salary_min=salary_min,
+            salary_max=salary_max,
             salary_label=salary_label,
             region=region,
             is_full_remote=looks_full_remote(title, description),
