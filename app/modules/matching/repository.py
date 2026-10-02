@@ -91,11 +91,11 @@ class CompanyReviewRepository(BaseRepository[CompanyReview]):
     async def replace_for_company(
         self, company_name_key: str, reviews: list[CompanyReview]
     ) -> None:
-        """Deletes every existing review row for this company and inserts
-        `reviews` in its place -- see CompanyReview's docstring for why a
-        wholesale replace, not an upsert, is the right model here (no
-        stable external id, and the source itself caps at ~10 reviews, so
-        there's nothing to accumulate across refreshes)."""
+        """Deletes every existing review row for this company (from every
+        source) and inserts `reviews` in its place -- see CompanyReview's
+        docstring for why a wholesale replace, not an upsert, is the right
+        model here: neither source gateway hands back a stable external id
+        to upsert against."""
         existing = await self.list_by_key(company_name_key)
         for row in existing:
             await self.delete(row)

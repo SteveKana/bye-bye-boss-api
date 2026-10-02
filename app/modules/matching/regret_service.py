@@ -25,7 +25,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.core.text import fold
-from app.modules.matching import simplyhired_gateway
+from app.modules.matching import indeed_gateway, simplyhired_gateway
 from app.modules.matching.models import CompanyRegretProfile, CompanyReview
 from app.modules.matching.repository import (
     CompanyRegretRepository,
@@ -82,40 +82,66 @@ class RegretService:
         return values["regret_availability"], values["regret_score"]
 
     async def _refresh_reviews(self, key: str, company_name: str) -> None:
-        """Fetches and stores this company's individual reviews, on the
-        same schedule as the rating itself (whenever `_compute` above
-        actually runs -- first lookup, TTL expiry, or a forced refresh).
-        Fetched independently of whether the rating came back "available":
-        Steve asked for the review text itself ("j'en veux un maximum",
-        2026-10-02), not just as a byproduct of a usable rating.
+        """Fetches and stores this company's individual reviews from both
+        gateways, on the same schedule as the rating itself (whenever
+        `_compute` above actually runs -- first lookup, TTL expiry, or a
+        forced refresh). Fetched independently of whether the rating came
+        back "available": Steve asked for the review text itself ("j'en
+        veux un maximum", 2026-10-02), not just as a byproduct of a usable
+        rating.
 
-        Never raises: a failure here must not break the rating computation
-        that triggered it, so any error is logged and swallowed -- same
-        never-fabricate-but-never-abort spirit as the rest of this module.
-        """
+        Indeed (indeed_gateway) is a no-op returning [] until Steve sets up
+        a Bright Data account -- see that module's docstring -- so this
+        works exactly as before (SimplyHired's up-to-10 only) until then.
+
+        Never raises: a failure in either gateway must not break the rating
+        computation that triggered it, so each is caught and logged
+        independently -- one source failing never takes the other down
+        with it."""
+        now = utcnow()
+        rows: list[CompanyReview] = []
+
         try:
-            reviews = await simplyhired_gateway.fetch_company_reviews(company_name)
+            simplyhired_reviews = await simplyhired_gateway.fetch_company_reviews(
+                company_name
+            )
         except Exception:
             logger.exception("simplyhired_reviews_refresh_failed", company=company_name)
-            return
+            simplyhired_reviews = []
 
-        now = utcnow()
-        rows = [
-            CompanyReview(
-                company_name_key=key,
-                overall_rating=review.overall_rating,
-                job_title=review.job_title,
-                location=review.location,
-                review_date=review.review_date,
-                title=review.title,
-                text=review.text,
-                pros=review.pros,
-                cons=review.cons,
-                source_url=review.source_url,
-                computed_at=now,
-            )
-            for review in reviews
-        ]
+        try:
+            indeed_reviews = await indeed_gateway.fetch_company_reviews(company_name)
+        except Exception:
+            logger.exception("indeed_reviews_refresh_failed", company=company_name)
+            indeed_reviews = []
+
+        for source_name, reviews in (
+            ("simplyhired", simplyhired_reviews),
+            ("indeed", indeed_reviews),
+        ):
+            for review in reviews:
+                rows.append(
+                    CompanyReview(
+                        company_name_key=key,
+                        source=source_name,
+                        overall_rating=review.overall_rating,
+                        job_title=review.job_title,
+                        location=review.location,
+                        review_date=review.review_date,
+                        title=review.title,
+                        text=review.text,
+                        # IndeedReview has no pros/cons fields at all -- see
+                        # indeed_gateway.py's docstring, no such split was
+                        # found on the real page -- hence the getattr
+                        # default rather than an attribute that doesn't
+                        # exist on that dataclass.
+                        pros=getattr(review, "pros", ""),
+                        cons=getattr(review, "cons", ""),
+                        source_url=review.source_url,
+                        computed_at=now,
+                    )
+                )
+
         await self.reviews_repo.replace_for_company(key, rows)
 
     async def _compute(self, company_name: str) -> dict:

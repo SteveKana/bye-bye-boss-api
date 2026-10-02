@@ -191,23 +191,26 @@ class CompanyRegretProfile(BaseModel, table=True):
 
 
 class CompanyReview(BaseModel, table=True):
-    """One individual employee review for one employer, sourced from
-    SimplyHired's reviews JSON endpoint (see simplyhired_gateway.py's
-    fetch_company_reviews -- added 2026-10-02, in response to Steve's
-    direct ask for the actual review text, "un maximum").
+    """One individual employee review for one employer, sourced from two
+    gateways (see the `source` column below): SimplyHired's reviews JSON
+    endpoint (simplyhired_gateway.py's fetch_company_reviews -- added
+    2026-10-02 for Steve's direct ask for the actual review text, "un
+    maximum"), and -- added the same day, once SimplyHired's own hard
+    ceiling was confirmed -- Indeed directly via Bright Data's Web Unlocker
+    (indeed_gateway.py's fetch_company_reviews).
 
-    Important ceiling, verified against SimplyHired's real data (not an
-    arbitrary limit this project chose): that endpoint only ever returns a
-    fixed batch of up to 10 reviews per company, however it's queried --
-    see fetch_company_reviews's docstring. "Un maximum" for a given company
-    is therefore at most 10 rows here, never the much larger review count
-    SimplyHired's own page cites as coming from Indeed.
+    SimplyHired's endpoint only ever returns a fixed batch of up to 10
+    reviews per company, however it's queried -- verified, not an arbitrary
+    limit this project chose, see that function's docstring. Indeed itself
+    has no such ceiling -- INDEED_REVIEWS_MAX_PAGES_PER_COMPANY controls how
+    many of its 20-reviews-per-page batches get pulled, as a cost control
+    (Bright Data bills per page request), not a content limit.
 
     Existing rows for a company are deleted and replaced wholesale on every
-    refresh (see regret_service.py) -- same "re-scrape overwrites, nothing
-    accumulates" convention CompanyRegretProfile itself already uses. There
-    is no stable external review id to upsert against, and the fixed-10
-    ceiling means there's nothing to accumulate over time anyway.
+    refresh, from both gateways together (see regret_service.py) -- same
+    "re-scrape overwrites, nothing accumulates" convention
+    CompanyRegretProfile itself already uses. There is no stable external
+    review id to upsert against either source by.
     """
 
     __tablename__ = "company_reviews"
@@ -215,8 +218,18 @@ class CompanyReview(BaseModel, table=True):
     # Same folded key as CompanyRegretProfile.company_name_key -- not a
     # foreign key (that table is looked up by this same string, not by id;
     # see its own docstring), just the shared join key. Not unique here:
-    # many rows share one key (up to 10 per company).
+    # many rows share one key.
     company_name_key: str = Field(index=True, nullable=False)
+
+    # "simplyhired" or "indeed" -- which gateway this row came from (added
+    # 2026-10-02 when the Indeed/Bright Data source was added alongside
+    # SimplyHired's own 10-review ceiling). Deliberately NOT deduplicated
+    # against each other even though SimplyHired's own reviews are
+    # themselves Indeed-sourced: no reliable way to match "the same review"
+    # across the two sources' slightly different rendering was verified,
+    # so both are kept, tagged, and it's left visible rather than guessed
+    # at silently.
+    source: str = Field(default="simplyhired", nullable=False)
 
     overall_rating: float | None = Field(default=None)
     job_title: str = Field(default="")

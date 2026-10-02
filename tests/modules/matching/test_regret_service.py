@@ -5,7 +5,8 @@ from datetime import timedelta
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.models import utcnow
-from app.modules.matching import simplyhired_gateway
+from app.modules.matching import indeed_gateway, simplyhired_gateway
+from app.modules.matching.indeed_gateway import IndeedReview
 from app.modules.matching.models import CompanyRegretProfile
 from app.modules.matching.regret_service import RegretService
 from app.modules.matching.repository import (
@@ -322,3 +323,77 @@ async def test_get_or_compute_review_fetch_failure_does_not_break_rating(
 
     assert availability == "available"
     assert score == 30
+
+
+async def test_get_or_compute_combines_and_tags_both_review_sources(
+    monkeypatch,
+) -> None:
+    async def _ratings_fn(company_name):
+        return _ratings(80, overall_rating=3.5)
+
+    async def _simplyhired_reviews(company_name):
+        return [_review(title="Avis SimplyHired")]
+
+    async def _indeed_reviews(company_name):
+        return [
+            IndeedReview(
+                overall_rating=2.0,
+                job_title="RH",
+                location="Paris (75)",
+                review_date=None,
+                title="Avis Indeed",
+                text="Texte Indeed.",
+                source_url="https://fr.indeed.com/cmp/Astek/reviews",
+            )
+        ]
+
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_fn)
+    monkeypatch.setattr(
+        simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews
+    )
+    monkeypatch.setattr(indeed_gateway, "fetch_company_reviews", _indeed_reviews)
+    monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
+
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek")
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        stored = await CompanyReviewRepository(session).list_by_key("astek")
+
+    by_title = {row.title: row for row in stored}
+    assert len(stored) == 2
+    assert by_title["Avis SimplyHired"].source == "simplyhired"
+    assert by_title["Avis Indeed"].source == "indeed"
+    assert by_title["Avis Indeed"].pros == ""
+    assert by_title["Avis Indeed"].job_title == "RH"
+
+
+async def test_get_or_compute_indeed_failure_does_not_drop_simplyhired_reviews(
+    monkeypatch,
+) -> None:
+    async def _ratings_fn(company_name):
+        return _ratings(80, overall_rating=3.5)
+
+    async def _simplyhired_reviews(company_name):
+        return [_review()]
+
+    async def _broken_indeed(company_name):
+        raise RuntimeError("brightdata down")
+
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_fn)
+    monkeypatch.setattr(
+        simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews
+    )
+    monkeypatch.setattr(indeed_gateway, "fetch_company_reviews", _broken_indeed)
+    monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
+
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek")
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        stored = await CompanyReviewRepository(session).list_by_key("astek")
+
+    assert len(stored) == 1
+    assert stored[0].source == "simplyhired"
