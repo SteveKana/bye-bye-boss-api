@@ -273,22 +273,32 @@ def _parse_reviews(payload: dict, url: str) -> list[SimplyHiredReview]:
     return reviews
 
 
-async def fetch_company_reviews(company_name: str) -> list[SimplyHiredReview]:
+async def fetch_company_reviews(company_name: str) -> list[SimplyHiredReview] | None:
     """Best-effort fetch of `company_name`'s individual reviews -- see the
     module docstring's "Individual reviews" section for the source endpoint
     and why this is capped at ~10 reviews regardless of what's asked for.
 
-    Returns [] whenever the slug can't be resolved, the request fails, or
-    the payload doesn't parse -- same "no signal, not an error" convention
-    as fetch_company_ratings returning None, so callers never need to treat
-    this differently from "nothing found"."""
+    Returns None when nothing could be determined -- the slug can't be
+    resolved, the request fails (network error, 403, 5xx, ...), or the
+    payload doesn't parse -- and [] only for a confirmed, successful result
+    with zero reviews (a 404, meaning SimplyHired itself says this company
+    has no page). This split (CHANGED 2026-10-02) matters to
+    regret_service.py's _refresh_reviews: before it existed, a transient
+    failure and "genuinely zero reviews" were indistinguishable, both just
+    [], so a SimplyHired outage (confirmed in production the same day --
+    every company returning 403) would have wiped every previously-stored
+    SimplyHired review on the very next refresh. Now a failed attempt
+    returns None and the caller knows to leave existing rows alone, same
+    "is this a genuine zero" distinction fetch_company_ratings already made
+    by returning None on failure instead of some zero-value ratings
+    object."""
     if not company_name or not company_name.strip():
-        return []
+        return None
 
     settings = get_settings()
     slug = _slugify(company_name)
     if not slug:
-        return []
+        return None
     url = f"{settings.SIMPLYHIRED_BASE_URL}/api/next/company/reviews"
 
     try:
@@ -308,7 +318,7 @@ async def fetch_company_reviews(company_name: str) -> list[SimplyHiredReview]:
         logger.warning(
             "simplyhired_reviews_fetch_failed", company=company_name, error=str(exc)
         )
-        return []
+        return None
 
     try:
         return _parse_reviews(payload, str(response.url))
@@ -316,4 +326,4 @@ async def fetch_company_reviews(company_name: str) -> list[SimplyHiredReview]:
         logger.exception(
             "simplyhired_reviews_parse_failed", company=company_name, url=url
         )
-        return []
+        return None

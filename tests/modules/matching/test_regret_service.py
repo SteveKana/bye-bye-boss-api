@@ -461,3 +461,49 @@ async def test_get_or_compute_preserves_existing_indeed_reviews_once_disabled(
     assert "indeed" in by_source  # still there, not silently wiped
     assert by_source["indeed"].title == "Avis Indeed"
     assert "simplyhired" in by_source  # unaffected, refreshed as normal
+
+
+async def test_get_or_compute_preserves_existing_simplyhired_reviews_on_fetch_failure(
+    monkeypatch,
+) -> None:
+    """Confirmed in production 2026-10-02: SimplyHired started returning 403
+    for every company. fetch_company_reviews used to collapse that into []
+    exactly like a genuine "zero reviews" result, which would have wiped
+    every previously-stored SimplyHired review on the next refresh --
+    exactly the outcome Steve explicitly said he doesn't want. A failed
+    fetch (None) must leave existing rows untouched; only a successful
+    fetch (even an empty list, e.g. a confirmed 404) replaces them."""
+
+    async def _ratings_fn(company_name):
+        return _ratings(80, overall_rating=3.5)
+
+    async def _simplyhired_reviews_ok(company_name):
+        return [_review(title="Avis SimplyHired")]
+
+    async def _simplyhired_reviews_failed(company_name):
+        return None  # simulates a 403/network failure, not "zero reviews"
+
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_fn)
+    monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
+
+    # First refresh succeeds -- the review gets stored.
+    monkeypatch.setattr(
+        simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews_ok
+    )
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek", force=True)
+        await session.commit()
+
+    # SimplyHired starts failing (403) -- same as the real incident.
+    monkeypatch.setattr(
+        simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews_failed
+    )
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek", force=True)
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        stored = await CompanyReviewRepository(session).list_by_key("astek")
+
+    assert len(stored) == 1  # still there, not silently wiped
+    assert stored[0].title == "Avis SimplyHired"

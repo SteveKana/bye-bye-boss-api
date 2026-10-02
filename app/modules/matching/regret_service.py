@@ -117,19 +117,22 @@ class RegretService:
 
         Each source is replaced independently
         (CompanyReviewRepository.replace_for_company_and_source), and ONLY
-        for a source actually attempted this run -- see that method's
-        docstring. This matters concretely for Indeed/Bright Data: Steve's
-        plan (2026-10-02) is to run one Bright-Data-backed pull across all
-        companies, then remove BRIGHTDATA_API_KEY from the server so he's
-        never charged again. Before this distinction existed, the very next
-        scheduled refresh (regret_jobs.py's monthly job, or any TTL-expired
-        on-demand recompute) would see indeed_gateway.fetch_company_reviews
-        return [] -- "not configured" and "fetched, found nothing" look
-        identical from the caller's side -- and delete every Indeed review
-        already stored. Now, "not configured" (or a transient failure) just
-        skips the Indeed replace entirely, leaving those rows exactly as
-        they were. SimplyHired has no such off switch -- it's always
-        attempted, so it's always replaced.
+        for a source that genuinely succeeded this run -- see that method's
+        docstring. This matters concretely for both gateways, confirmed in
+        production the same day (2026-10-02): Steve's plan for Indeed/Bright
+        Data is to run one pull across all companies, then remove
+        BRIGHTDATA_API_KEY so he's never charged again -- before this
+        distinction existed, the very next scheduled refresh would see
+        indeed_gateway.fetch_company_reviews return [] ("not configured" and
+        "fetched, found nothing" looked identical) and delete every Indeed
+        review already stored. Separately, that same day SimplyHired started
+        returning 403 for every company -- fetch_company_reviews used to
+        collapse that into [] exactly like a real "zero reviews" result,
+        which would have wiped every previously-stored SimplyHired review on
+        the next refresh too. Both gateways now distinguish "didn't run /
+        failed" from "ran and genuinely found nothing", and only a result
+        from the latter replaces existing rows; a skipped or failed fetch on
+        either side leaves that source's rows exactly as they were.
 
         Never raises: a failure in either gateway must not break the rating
         computation that triggered it, so each is caught and logged
@@ -143,16 +146,20 @@ class RegretService:
             )
         except Exception:
             logger.exception("simplyhired_reviews_refresh_failed", company=company_name)
-            simplyhired_reviews = []
+            simplyhired_reviews = None
 
-        await self.reviews_repo.replace_for_company_and_source(
-            key,
-            "simplyhired",
-            [
-                _review_row(key, "simplyhired", review, now)
-                for review in simplyhired_reviews
-            ],
-        )
+        if simplyhired_reviews is not None:
+            await self.reviews_repo.replace_for_company_and_source(
+                key,
+                "simplyhired",
+                [
+                    _review_row(key, "simplyhired", review, now)
+                    for review in simplyhired_reviews
+                ],
+            )
+        # else: the fetch failed (or raised unexpectedly) -- leave any
+        # previously-stored SimplyHired reviews untouched, same reasoning as
+        # the Indeed branch below.
 
         indeed_attempted = indeed_gateway.is_configured()
         indeed_reviews: list = []
