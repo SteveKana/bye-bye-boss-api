@@ -10,6 +10,7 @@ from app.modules.matching.models import (
     ApplicationStatus,
     CandidateMatch,
     CompanyRegretProfile,
+    CompanyReview,
 )
 
 
@@ -79,3 +80,24 @@ class CompanyRegretRepository(BaseRepository[CompanyRegretProfile]):
 
     async def get_by_key(self, company_name_key: str) -> CompanyRegretProfile | None:
         return await self.find_one(company_name_key=company_name_key)
+
+
+class CompanyReviewRepository(BaseRepository[CompanyReview]):
+    model = CompanyReview
+
+    async def list_by_key(self, company_name_key: str) -> Sequence[CompanyReview]:
+        return await self.list(filters={"company_name_key": company_name_key})
+
+    async def replace_for_company(
+        self, company_name_key: str, reviews: list[CompanyReview]
+    ) -> None:
+        """Deletes every existing review row for this company and inserts
+        `reviews` in its place -- see CompanyReview's docstring for why a
+        wholesale replace, not an upsert, is the right model here (no
+        stable external id, and the source itself caps at ~10 reviews, so
+        there's nothing to accumulate across refreshes)."""
+        existing = await self.list_by_key(company_name_key)
+        for row in existing:
+            await self.delete(row)
+        for review in reviews:
+            await self.create(review)

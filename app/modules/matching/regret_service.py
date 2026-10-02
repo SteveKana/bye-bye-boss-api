@@ -26,8 +26,11 @@ from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.core.text import fold
 from app.modules.matching import simplyhired_gateway
-from app.modules.matching.models import CompanyRegretProfile
-from app.modules.matching.repository import CompanyRegretRepository
+from app.modules.matching.models import CompanyRegretProfile, CompanyReview
+from app.modules.matching.repository import (
+    CompanyRegretRepository,
+    CompanyReviewRepository,
+)
 
 logger = get_logger("matching.regret_service")
 
@@ -35,6 +38,7 @@ logger = get_logger("matching.regret_service")
 class RegretService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = CompanyRegretRepository(session)
+        self.reviews_repo = CompanyReviewRepository(session)
 
     async def get_or_compute(
         self, company_name: str | None, *, force: bool = False
@@ -73,7 +77,46 @@ class RegretService:
         else:
             await self.repo.update(existing, values)
 
+        await self._refresh_reviews(key, company_name)
+
         return values["regret_availability"], values["regret_score"]
+
+    async def _refresh_reviews(self, key: str, company_name: str) -> None:
+        """Fetches and stores this company's individual reviews, on the
+        same schedule as the rating itself (whenever `_compute` above
+        actually runs -- first lookup, TTL expiry, or a forced refresh).
+        Fetched independently of whether the rating came back "available":
+        Steve asked for the review text itself ("j'en veux un maximum",
+        2026-10-02), not just as a byproduct of a usable rating.
+
+        Never raises: a failure here must not break the rating computation
+        that triggered it, so any error is logged and swallowed -- same
+        never-fabricate-but-never-abort spirit as the rest of this module.
+        """
+        try:
+            reviews = await simplyhired_gateway.fetch_company_reviews(company_name)
+        except Exception:
+            logger.exception("simplyhired_reviews_refresh_failed", company=company_name)
+            return
+
+        now = utcnow()
+        rows = [
+            CompanyReview(
+                company_name_key=key,
+                overall_rating=review.overall_rating,
+                job_title=review.job_title,
+                location=review.location,
+                review_date=review.review_date,
+                title=review.title,
+                text=review.text,
+                pros=review.pros,
+                cons=review.cons,
+                source_url=review.source_url,
+                computed_at=now,
+            )
+            for review in reviews
+        ]
+        await self.reviews_repo.replace_for_company(key, rows)
 
     async def _compute(self, company_name: str) -> dict:
         settings = get_settings()

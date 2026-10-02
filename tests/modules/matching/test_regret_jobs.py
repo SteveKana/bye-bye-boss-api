@@ -11,6 +11,13 @@ from app.modules.offers.models import JobOffer
 from app.modules.offers.repository import JobOfferRepository
 
 
+async def _no_reviews(company_name):
+    # RegretService.get_or_compute now also fetches reviews on every fresh
+    # compute -- stub it out so these job-level tests never make a real
+    # network call via the gateway.
+    return []
+
+
 async def _make_offer(**overrides) -> JobOffer:
     defaults = {
         "source": "test",
@@ -42,6 +49,7 @@ async def test_refresh_all_computes_every_distinct_company(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _fake_ratings)
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_reviews", _no_reviews)
     monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
 
     await regret_jobs.refresh_all_company_regret_profiles()
@@ -71,6 +79,7 @@ async def test_refresh_all_skips_a_failing_company_without_aborting(
         )
 
     monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _flaky)
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_reviews", _no_reviews)
     monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
 
     await regret_jobs.refresh_all_company_regret_profiles()

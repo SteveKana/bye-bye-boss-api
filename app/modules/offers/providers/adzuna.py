@@ -17,10 +17,10 @@ import httpx
 from app.core.config import get_settings
 from app.core.contract_type import guess_contract_type
 from app.core.daily_rate import extract_daily_rate
+from app.core.dates import parse_iso_datetime
 from app.core.logging import get_logger
 from app.core.regions import normalize_region_name
 from app.core.remote_work import looks_full_remote
-from app.modules.offers.providers._util import parse_iso_datetime
 from app.modules.offers.providers.base import NormalizedOffer, OfferProvider
 
 logger = get_logger("offers.adzuna")

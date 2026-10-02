@@ -188,3 +188,47 @@ class CompanyRegretProfile(BaseModel, table=True):
     source_url: str = Field(default="")
 
     computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+
+
+class CompanyReview(BaseModel, table=True):
+    """One individual employee review for one employer, sourced from
+    SimplyHired's reviews JSON endpoint (see simplyhired_gateway.py's
+    fetch_company_reviews -- added 2026-10-02, in response to Steve's
+    direct ask for the actual review text, "un maximum").
+
+    Important ceiling, verified against SimplyHired's real data (not an
+    arbitrary limit this project chose): that endpoint only ever returns a
+    fixed batch of up to 10 reviews per company, however it's queried --
+    see fetch_company_reviews's docstring. "Un maximum" for a given company
+    is therefore at most 10 rows here, never the much larger review count
+    SimplyHired's own page cites as coming from Indeed.
+
+    Existing rows for a company are deleted and replaced wholesale on every
+    refresh (see regret_service.py) -- same "re-scrape overwrites, nothing
+    accumulates" convention CompanyRegretProfile itself already uses. There
+    is no stable external review id to upsert against, and the fixed-10
+    ceiling means there's nothing to accumulate over time anyway.
+    """
+
+    __tablename__ = "company_reviews"
+
+    # Same folded key as CompanyRegretProfile.company_name_key -- not a
+    # foreign key (that table is looked up by this same string, not by id;
+    # see its own docstring), just the shared join key. Not unique here:
+    # many rows share one key (up to 10 per company).
+    company_name_key: str = Field(index=True, nullable=False)
+
+    overall_rating: float | None = Field(default=None)
+    job_title: str = Field(default="")
+    location: str = Field(default="")
+    review_date: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    title: str = Field(default="")
+    text: str = Field(default="")
+    pros: str = Field(default="")
+    cons: str = Field(default="")
+
+    source_url: str = Field(default="")
+
+    computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))

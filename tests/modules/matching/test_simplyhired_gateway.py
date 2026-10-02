@@ -1,6 +1,38 @@
 from __future__ import annotations
 
-from app.modules.matching.simplyhired_gateway import _parse, _slugify
+from app.modules.matching.simplyhired_gateway import _parse, _parse_reviews, _slugify
+
+# Shape reconstructed from the real `/api/next/company/reviews` response
+# (Randstad and Groupe-Sii, verified live via a JS-executing browser,
+# 2026-10-02 -- see the module docstring's "Individual reviews" section).
+# Real field names: overallRating, normalizedJobTitle, normalizedLocation,
+# dateCreated (ISO-8601), title, text, pros, cons -- pros/cons are plain
+# strings or null, never a nested object.
+_SAMPLE_REVIEWS_PAYLOAD = {
+    "companyName": "Randstad",
+    "reviewsContentGroup": [
+        {
+            "overallRating": 4,
+            "normalizedJobTitle": "Chargé de Recrutement (H/F)",
+            "normalizedLocation": "Rueil-Malmaison (92)",
+            "dateCreated": "2014-09-30T15:29:54.888Z",
+            "title": "Semaine type",
+            "text": "Au vu de la forte polyvalence...",
+            "pros": None,
+            "cons": None,
+        },
+        {
+            "overallRating": 4,
+            "normalizedJobTitle": "Ingénieur Systèmes Et Réseaux (H/F)",
+            "normalizedLocation": "Guipavas (29)",
+            "dateCreated": "2018-12-10T19:01:32.416Z",
+            "title": "Très prometteur",
+            "text": "Je ne suis entré chez SII que très récemment...",
+            "pros": "ESN très humaine, directeur et commerciaux à l'écoute",
+            "cons": "Le pôle infra n'est pas encore développé mais tout reste à faire",
+        },
+    ],
+}
 
 # Minimal HTML reconstructed from the one verified live page fetch (Groupe
 # SII, 2026-09-30, see simplyhired_gateway.py's docstring) -- exercises the
@@ -87,3 +119,31 @@ def test_parse_missing_category_is_simply_absent() -> None:
 
     assert ratings is not None
     assert ratings.category_scores == {"management": 3.2}
+
+
+def test_parse_reviews_extracts_all_fields() -> None:
+    reviews = _parse_reviews(_SAMPLE_REVIEWS_PAYLOAD, "https://example.test/Randstad")
+
+    assert len(reviews) == 2
+    first, second = reviews
+
+    assert first.overall_rating == 4
+    assert first.job_title == "Chargé de Recrutement (H/F)"
+    assert first.location == "Rueil-Malmaison (92)"
+    assert first.review_date is not None
+    assert first.review_date.year == 2014
+    assert first.title == "Semaine type"
+    assert first.pros == ""
+    assert first.cons == ""
+    assert first.source_url == "https://example.test/Randstad"
+
+    assert second.pros == "ESN très humaine, directeur et commerciaux à l'écoute"
+    assert second.cons.startswith("Le pôle infra")
+
+
+def test_parse_reviews_handles_empty_group() -> None:
+    assert _parse_reviews({"companyName": "X", "reviewsContentGroup": []}, "url") == []
+
+
+def test_parse_reviews_handles_missing_group_key() -> None:
+    assert _parse_reviews({"companyName": "X"}, "url") == []
