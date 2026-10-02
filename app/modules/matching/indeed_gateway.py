@@ -21,15 +21,18 @@ project pays for access to already-public review content rather than
 building an anti-bot bypass itself. Steve made this call explicitly
 (2026-10-02) after being shown the alternative's cost.
 
-Request shape, from Bright Data's own published docs (NOT yet verified
-against a real account/key -- this project doesn't have one; do a live
-sanity check, e.g. a single fetch_company_reviews call for one real
-company, once BRIGHTDATA_API_KEY/BRIGHTDATA_WEB_UNLOCKER_ZONE are set, same
-"verify once real credentials exist" spirit as france_travail.py):
+Request shape -- CORRECTED 2026-10-02 against Steve's real account after the
+first live run returned 400 Bad Request for every company:
+`{"error":"Request validation failed", ..., "message":"\"format\" must be
+one of [json, raw]"}`. The published docs this was first built from said
+"html"; Bright Data's actual API only accepts "json" or "raw" -- "raw"
+behaves the same way "html" was meant to (response body is the page's own
+unblocked markup, no JSON envelope), so that's the fix, not a new format
+handled differently:
 
     POST https://api.brightdata.com/request
     Authorization: Bearer <BRIGHTDATA_API_KEY>
-    {"zone": "<BRIGHTDATA_WEB_UNLOCKER_ZONE>", "url": "<target>", "format": "html"}
+    {"zone": "<BRIGHTDATA_WEB_UNLOCKER_ZONE>", "url": "<target>", "format": "raw"}
 
 -> response body is the target page's own unblocked HTML, parsed below
 exactly like SimplyHired's page (BeautifulSoup over real, verified
@@ -126,7 +129,11 @@ async def _fetch_unblocked_html(url: str) -> str | None:
                 json={
                     "zone": settings.BRIGHTDATA_WEB_UNLOCKER_ZONE,
                     "url": url,
-                    "format": "html",
+                    # "html" (from the published docs) is rejected by the
+                    # real API -- "raw" is the corrected value, verified
+                    # 2026-10-02 against Steve's account (see module
+                    # docstring).
+                    "format": "raw",
                 },
             )
             response.raise_for_status()
