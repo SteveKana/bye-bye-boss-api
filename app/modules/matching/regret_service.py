@@ -162,9 +162,7 @@ class RegretService:
                     company_name
                 )
             except Exception:
-                logger.exception(
-                    "indeed_reviews_refresh_failed", company=company_name
-                )
+                logger.exception("indeed_reviews_refresh_failed", company=company_name)
                 indeed_attempted = False
 
         if indeed_attempted:

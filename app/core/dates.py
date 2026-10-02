@@ -29,9 +29,7 @@ _FRENCH_MONTHS = {
     "décembre": 12,
     "decembre": 12,
 }
-_FRENCH_DATE_RE = re.compile(
-    r"(\d{1,2})\s+([a-zéû]+)\s+(\d{4})", re.IGNORECASE
-)
+_FRENCH_DATE_RE = re.compile(r"(\d{1,2})\s+([a-zéû]+)\s+(\d{4})", re.IGNORECASE)
 
 
 def parse_french_date(value: str | None) -> datetime | None:
