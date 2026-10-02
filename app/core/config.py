@@ -268,6 +268,38 @@ class Settings(BaseSettings):
     # matching sync.
     REGRET_MONTHLY_REFRESH_ENABLED: bool = True
 
+    # ---- Regret Index, Indeed reviews via Bright Data (2026-10-02) --------
+    # SimplyHired's own review endpoint caps at a fixed 10 reviews per
+    # company no matter how it's queried (verified directly, see
+    # simplyhired_gateway.py's docstring) -- nowhere near the much larger
+    # count SimplyHired itself cites as coming from Indeed. Steve asked
+    # ("un maximum") to also pull from Indeed directly; Indeed's own review
+    # pages require an established browser session (a plain request gets
+    # 403 -- verified), the same anti-bot gate this project already refuses
+    # to defeat itself for Glassdoor/Google. Bright Data's Web Unlocker is a
+    # paid third-party service that has already built that bypass and sells
+    # access to it (https://brightdata.com/products/web-unlocker) -- this
+    # project pays for that access rather than building the bypass itself.
+    #
+    # Steve has to create the Bright Data account and Web Unlocker zone
+    # himself (this project never creates third-party accounts) and set
+    # BRIGHTDATA_API_KEY / BRIGHTDATA_WEB_UNLOCKER_ZONE below -- everything
+    # here stays inert (indeed_gateway.is_configured() -> False) until he
+    # does, same pattern as FRANCE_TRAVAIL_CLIENT_ID/SECRET above.
+    BRIGHTDATA_API_KEY: str = ""
+    # The zone name Steve picks when creating the Web Unlocker zone in his
+    # Bright Data dashboard -- "web_unlocker1" is only Bright Data's own
+    # example value, not a default that will work out of the box.
+    BRIGHTDATA_WEB_UNLOCKER_ZONE: str = "web_unlocker1"
+    BRIGHTDATA_REQUEST_TIMEOUT_SECONDS: int = 30
+    # Indeed shows 20 reviews per page (verified: .../reviews?start=20 is
+    # the real "page 2" link) -- each Bright Data request unblocks one such
+    # page, billed per request, not per review. Capped low by default (1
+    # page = up to 20 reviews/company/month) to keep cost predictable while
+    # Steve gets a feel for real usage against Bright Data's own dashboard;
+    # raise it once he's seen real volume/cost there.
+    INDEED_REVIEWS_MAX_PAGES_PER_COMPANY: int = 1
+
     # ---- Regret Index, Reddit-era settings (kept, unused) ------------------
     # reddit_gateway.py/regret_gateway.py/regret_prompt.py/regret_schema.py
     # still exist and still read these, but nothing calls them any more

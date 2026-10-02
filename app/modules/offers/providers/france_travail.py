@@ -26,11 +26,11 @@ import httpx
 from app.core.config import get_settings
 from app.core.contract_type import guess_contract_type
 from app.core.daily_rate import extract_daily_rate
+from app.core.dates import parse_iso_datetime
 from app.core.logging import get_logger
 from app.core.regions import region_from_insee_code, region_from_postal_code
 from app.core.remote_work import looks_full_remote
 from app.core.salary import extract_annual_salary
-from app.modules.offers.providers._util import parse_iso_datetime
 from app.modules.offers.providers.base import NormalizedOffer, OfferProvider
 
 logger = get_logger("offers.france_travail")

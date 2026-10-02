@@ -46,18 +46,58 @@ Two things make this scrape inherently best-effort:
 Never raises: any failure (network, 404, unparseable page) returns None,
 exactly like Reddit's gateway returned [] -- regret_service.py treats that
 as "no signal", never differently from a hard failure.
+
+---- Individual reviews (fetch_company_reviews, added 2026-10-02) ----------
+
+Steve asked (2026-10-02) for the actual review text, after a screenshot of
+Groupe SII's page proved wrong an earlier claim made in this project that no
+free-text reviews exist on SimplyHired. That claim came from fetching the
+page's plain HTML (no JS execution): the rendered page's individual reviews
+turned out to be injected client-side, invisible to a plain GET -- a tooling
+gap, not a fact about SimplyHired's data.
+
+Re-verified (2026-10-02) via a JS-executing browser on the real Randstad and
+Groupe-Sii pages: the reviews shown in the page are fetched by the browser,
+after the initial page load, from SimplyHired's own JSON endpoint --
+`{SIMPLYHIRED_BASE_URL}/api/next/company/reviews?companyname=<slug>&locale=
+fr-FR` -- using the exact same slug as the HTML page URL. That endpoint
+returns clean structured JSON (rating, job title, location, ISO date, title,
+full untruncated text, pros, cons), so `fetch_company_reviews` below calls
+it directly with httpx, the same way `fetch_company_ratings` calls the HTML
+page -- no browser automation, no HTML parsing needed for this part.
+
+IMPORTANT, verified the same day: this endpoint always returns the SAME
+fixed batch of up to 10 reviews, however it's queried. Six common pagination
+parameter names (page, pageNumber, offset, start, skip, reviewPage) were
+each tried against the live Randstad page -- whose own displayed text says
+"1 155 avis sur Indeed" -- and every single one came back with the
+identical first review; the rendered page itself has no "load more"/"next"
+control either. So despite SimplyHired citing a much larger Indeed-wide
+review count, this endpoint (and therefore this scraper) can only ever see
+this one fixed sample of up to 10 reviews per company -- not "all of them".
+If SimplyHired ever adds real pagination here, this is the one function to
+extend; there is currently no known way to get more than 10 through this
+source.
+
+Also note (same verification): the page states these reviews' ratings are
+"sur Indeed" -- SimplyHired republishes Indeed-sourced review text here, not
+its own original content. That sits less cleanly with this table's existing
+scraping rationale above (republishing a *computed rating*, not raw
+third-party text) -- flagged for Steve, not resolved unilaterally here.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from urllib.parse import quote
 
 import httpx
 from bs4 import BeautifulSoup
 
 from app.core.config import get_settings
+from app.core.dates import parse_iso_datetime
 from app.core.logging import get_logger
 
 logger = get_logger("matching.simplyhired")
@@ -86,6 +126,45 @@ class SimplyHiredRatings:
     category_scores: dict[str, float] = field(default_factory=dict)
     satisfaction_percent: int | None = None
     source_url: str = ""
+
+
+@dataclass
+class SimplyHiredReview:
+    """One individual review, as returned by the reviews JSON endpoint --
+    see the module docstring's "Individual reviews" section for where this
+    comes from and why there are at most 10 of these per company."""
+
+    overall_rating: float | None
+    job_title: str
+    location: str
+    review_date: datetime | None
+    title: str
+    text: str
+    pros: str
+    cons: str
+    source_url: str = ""
+
+
+def _browser_headers(settings) -> dict[str, str]:
+    # A real browser never sends just a User-Agent -- a request with only
+    # that one header, fired the instant the process starts, is itself a
+    # bot signature many WAFs key on. This is still "identify honestly"
+    # (see module docstring), not a CAPTCHA/fingerprint bypass: it's the
+    # same header set Chrome sends on a normal navigation.
+    return {
+        "User-Agent": settings.SIMPLYHIRED_USER_AGENT,
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+    }
 
 
 def _slugify(company_name: str) -> str:
@@ -151,33 +230,13 @@ async def fetch_company_ratings(company_name: str) -> SimplyHiredRatings | None:
         return None
     url = f"{settings.SIMPLYHIRED_BASE_URL}/browse-jobs/companies/{slug}"
 
-    # A real browser never sends just a User-Agent -- a request with only
-    # that one header, fired the instant the process starts, is itself a
-    # bot signature many WAFs key on. This is still "identify honestly"
-    # (see module docstring), not a CAPTCHA/fingerprint bypass: it's the
-    # same header set Chrome sends on a normal navigation.
-    _headers = {
-        "User-Agent": settings.SIMPLYHIRED_USER_AGENT,
-        "Accept": (
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-        ),
-        "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-    }
-
     try:
         async with httpx.AsyncClient(
             timeout=settings.SIMPLYHIRED_REQUEST_TIMEOUT_SECONDS
         ) as client:
             response = await client.get(
                 url,
-                headers=_headers,
+                headers=_browser_headers(settings),
                 follow_redirects=True,
             )
             if response.status_code == 404:
@@ -193,3 +252,68 @@ async def fetch_company_ratings(company_name: str) -> SimplyHiredRatings | None:
     except Exception:
         logger.exception("simplyhired_parse_failed", company=company_name, url=url)
         return None
+
+
+def _parse_reviews(payload: dict, url: str) -> list[SimplyHiredReview]:
+    reviews = []
+    for item in payload.get("reviewsContentGroup") or []:
+        reviews.append(
+            SimplyHiredReview(
+                overall_rating=item.get("overallRating"),
+                job_title=item.get("normalizedJobTitle") or "",
+                location=item.get("normalizedLocation") or "",
+                review_date=parse_iso_datetime(item.get("dateCreated")),
+                title=item.get("title") or "",
+                text=item.get("text") or "",
+                pros=item.get("pros") or "",
+                cons=item.get("cons") or "",
+                source_url=url,
+            )
+        )
+    return reviews
+
+
+async def fetch_company_reviews(company_name: str) -> list[SimplyHiredReview]:
+    """Best-effort fetch of `company_name`'s individual reviews -- see the
+    module docstring's "Individual reviews" section for the source endpoint
+    and why this is capped at ~10 reviews regardless of what's asked for.
+
+    Returns [] whenever the slug can't be resolved, the request fails, or
+    the payload doesn't parse -- same "no signal, not an error" convention
+    as fetch_company_ratings returning None, so callers never need to treat
+    this differently from "nothing found"."""
+    if not company_name or not company_name.strip():
+        return []
+
+    settings = get_settings()
+    slug = _slugify(company_name)
+    if not slug:
+        return []
+    url = f"{settings.SIMPLYHIRED_BASE_URL}/api/next/company/reviews"
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.SIMPLYHIRED_REQUEST_TIMEOUT_SECONDS
+        ) as client:
+            response = await client.get(
+                url,
+                params={"companyname": slug, "locale": "fr-FR"},
+                headers={**_browser_headers(settings), "Accept": "application/json"},
+            )
+            if response.status_code == 404:
+                return []
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "simplyhired_reviews_fetch_failed", company=company_name, error=str(exc)
+        )
+        return []
+
+    try:
+        return _parse_reviews(payload, str(response.url))
+    except Exception:
+        logger.exception(
+            "simplyhired_reviews_parse_failed", company=company_name, url=url
+        )
+        return []

@@ -188,3 +188,66 @@ class CompanyRegretProfile(BaseModel, table=True):
     source_url: str = Field(default="")
 
     computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+
+
+class CompanyReview(BaseModel, table=True):
+    """One individual employee review for one employer, sourced from two
+    gateways (see the `source` column below): SimplyHired's reviews JSON
+    endpoint (simplyhired_gateway.py's fetch_company_reviews -- added
+    2026-10-02 for Steve's direct ask for the actual review text, "un
+    maximum"), and -- added the same day, once SimplyHired's own hard
+    ceiling was confirmed -- Indeed directly via Bright Data's Web Unlocker
+    (indeed_gateway.py's fetch_company_reviews).
+
+    SimplyHired's endpoint only ever returns a fixed batch of up to 10
+    reviews per company, however it's queried -- verified, not an arbitrary
+    limit this project chose, see that function's docstring. Indeed itself
+    has no such ceiling -- INDEED_REVIEWS_MAX_PAGES_PER_COMPANY controls how
+    many of its 20-reviews-per-page batches get pulled, as a cost control
+    (Bright Data bills per page request), not a content limit.
+
+    Existing rows are deleted and replaced wholesale on every refresh, same
+    "re-scrape overwrites, nothing accumulates" convention CompanyRegretProfile
+    itself already uses -- there is no stable external review id to upsert
+    against either source by. This replace is scoped PER SOURCE, not across
+    both gateways together (see regret_service.py's _refresh_reviews and
+    CompanyReviewRepository.replace_for_company_and_source, 2026-10-02): a
+    source that wasn't attempted this run -- Indeed/Bright Data left
+    unconfigured on purpose once Steve's one-time pull is done, or a
+    transient failure -- leaves that source's existing rows untouched rather
+    than deleting them. Only a source that genuinely ran this refresh (even
+    if it came back empty) gets its old rows replaced.
+    """
+
+    __tablename__ = "company_reviews"
+
+    # Same folded key as CompanyRegretProfile.company_name_key -- not a
+    # foreign key (that table is looked up by this same string, not by id;
+    # see its own docstring), just the shared join key. Not unique here:
+    # many rows share one key.
+    company_name_key: str = Field(index=True, nullable=False)
+
+    # "simplyhired" or "indeed" -- which gateway this row came from (added
+    # 2026-10-02 when the Indeed/Bright Data source was added alongside
+    # SimplyHired's own 10-review ceiling). Deliberately NOT deduplicated
+    # against each other even though SimplyHired's own reviews are
+    # themselves Indeed-sourced: no reliable way to match "the same review"
+    # across the two sources' slightly different rendering was verified,
+    # so both are kept, tagged, and it's left visible rather than guessed
+    # at silently.
+    source: str = Field(default="simplyhired", nullable=False)
+
+    overall_rating: float | None = Field(default=None)
+    job_title: str = Field(default="")
+    location: str = Field(default="")
+    review_date: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+    title: str = Field(default="")
+    text: str = Field(default="")
+    pros: str = Field(default="")
+    cons: str = Field(default="")
+
+    source_url: str = Field(default="")
+
+    computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))

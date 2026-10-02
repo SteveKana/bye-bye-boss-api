@@ -10,6 +10,7 @@ from app.modules.matching.models import (
     ApplicationStatus,
     CandidateMatch,
     CompanyRegretProfile,
+    CompanyReview,
 )
 
 
@@ -79,3 +80,32 @@ class CompanyRegretRepository(BaseRepository[CompanyRegretProfile]):
 
     async def get_by_key(self, company_name_key: str) -> CompanyRegretProfile | None:
         return await self.find_one(company_name_key=company_name_key)
+
+
+class CompanyReviewRepository(BaseRepository[CompanyReview]):
+    model = CompanyReview
+
+    async def list_by_key(self, company_name_key: str) -> Sequence[CompanyReview]:
+        return await self.list(filters={"company_name_key": company_name_key})
+
+    async def replace_for_company_and_source(
+        self, company_name_key: str, source: str, reviews: list[CompanyReview]
+    ) -> None:
+        """Deletes existing review rows for this company FROM THIS SOURCE
+        ONLY, then inserts `reviews` in their place -- see CompanyReview's
+        docstring for why a wholesale replace, not an upsert, is the right
+        model (neither gateway hands back a stable external id to upsert
+        against), and why it's scoped per source rather than across both
+        gateways together (2026-10-02, replacing the former company-wide
+        replace_for_company): _refresh_reviews in regret_service.py only
+        calls this for a source it actually attempted to fetch this run, so
+        skipping a source -- Bright Data left unconfigured on purpose, or a
+        transient failure -- leaves that source's previously-stored rows
+        exactly as they were instead of deleting them."""
+        existing = await self.list(
+            filters={"company_name_key": company_name_key, "source": source}
+        )
+        for row in existing:
+            await self.delete(row)
+        for review in reviews:
+            await self.create(review)
