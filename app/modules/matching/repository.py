@@ -88,15 +88,23 @@ class CompanyReviewRepository(BaseRepository[CompanyReview]):
     async def list_by_key(self, company_name_key: str) -> Sequence[CompanyReview]:
         return await self.list(filters={"company_name_key": company_name_key})
 
-    async def replace_for_company(
-        self, company_name_key: str, reviews: list[CompanyReview]
+    async def replace_for_company_and_source(
+        self, company_name_key: str, source: str, reviews: list[CompanyReview]
     ) -> None:
-        """Deletes every existing review row for this company (from every
-        source) and inserts `reviews` in its place -- see CompanyReview's
+        """Deletes existing review rows for this company FROM THIS SOURCE
+        ONLY, then inserts `reviews` in their place -- see CompanyReview's
         docstring for why a wholesale replace, not an upsert, is the right
-        model here: neither source gateway hands back a stable external id
-        to upsert against."""
-        existing = await self.list_by_key(company_name_key)
+        model (neither gateway hands back a stable external id to upsert
+        against), and why it's scoped per source rather than across both
+        gateways together (2026-10-02, replacing the former company-wide
+        replace_for_company): _refresh_reviews in regret_service.py only
+        calls this for a source it actually attempted to fetch this run, so
+        skipping a source -- Bright Data left unconfigured on purpose, or a
+        transient failure -- leaves that source's previously-stored rows
+        exactly as they were instead of deleting them."""
+        existing = await self.list(
+            filters={"company_name_key": company_name_key, "source": source}
+        )
         for row in existing:
             await self.delete(row)
         for review in reviews:

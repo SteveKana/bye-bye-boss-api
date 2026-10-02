@@ -17,7 +17,7 @@ legitimate basis for showing a candidate a number.
 
 from __future__ import annotations
 
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,31 @@ from app.modules.matching.repository import (
 )
 
 logger = get_logger("matching.regret_service")
+
+
+def _review_row(
+    company_name_key: str, source: str, review: object, computed_at: datetime
+) -> CompanyReview:
+    """Builds one CompanyReview row from either gateway's own review
+    dataclass (SimplyHiredReview or IndeedReview) -- shared by both branches
+    of _refresh_reviews below. IndeedReview has no pros/cons fields at all
+    (see indeed_gateway.py's docstring -- no such split was found on the
+    real page), hence the getattr defaults rather than attributes that
+    don't exist on that dataclass."""
+    return CompanyReview(
+        company_name_key=company_name_key,
+        source=source,
+        overall_rating=review.overall_rating,  # type: ignore[attr-defined]
+        job_title=review.job_title,  # type: ignore[attr-defined]
+        location=review.location,  # type: ignore[attr-defined]
+        review_date=review.review_date,  # type: ignore[attr-defined]
+        title=review.title,  # type: ignore[attr-defined]
+        text=review.text,  # type: ignore[attr-defined]
+        pros=getattr(review, "pros", ""),
+        cons=getattr(review, "cons", ""),
+        source_url=review.source_url,  # type: ignore[attr-defined]
+        computed_at=computed_at,
+    )
 
 
 class RegretService:
@@ -90,16 +115,27 @@ class RegretService:
         veux un maximum", 2026-10-02), not just as a byproduct of a usable
         rating.
 
-        Indeed (indeed_gateway) is a no-op returning [] until Steve sets up
-        a Bright Data account -- see that module's docstring -- so this
-        works exactly as before (SimplyHired's up-to-10 only) until then.
+        Each source is replaced independently
+        (CompanyReviewRepository.replace_for_company_and_source), and ONLY
+        for a source actually attempted this run -- see that method's
+        docstring. This matters concretely for Indeed/Bright Data: Steve's
+        plan (2026-10-02) is to run one Bright-Data-backed pull across all
+        companies, then remove BRIGHTDATA_API_KEY from the server so he's
+        never charged again. Before this distinction existed, the very next
+        scheduled refresh (regret_jobs.py's monthly job, or any TTL-expired
+        on-demand recompute) would see indeed_gateway.fetch_company_reviews
+        return [] -- "not configured" and "fetched, found nothing" look
+        identical from the caller's side -- and delete every Indeed review
+        already stored. Now, "not configured" (or a transient failure) just
+        skips the Indeed replace entirely, leaving those rows exactly as
+        they were. SimplyHired has no such off switch -- it's always
+        attempted, so it's always replaced.
 
         Never raises: a failure in either gateway must not break the rating
         computation that triggered it, so each is caught and logged
         independently -- one source failing never takes the other down
         with it."""
         now = utcnow()
-        rows: list[CompanyReview] = []
 
         try:
             simplyhired_reviews = await simplyhired_gateway.fetch_company_reviews(
@@ -109,40 +145,37 @@ class RegretService:
             logger.exception("simplyhired_reviews_refresh_failed", company=company_name)
             simplyhired_reviews = []
 
-        try:
-            indeed_reviews = await indeed_gateway.fetch_company_reviews(company_name)
-        except Exception:
-            logger.exception("indeed_reviews_refresh_failed", company=company_name)
-            indeed_reviews = []
+        await self.reviews_repo.replace_for_company_and_source(
+            key,
+            "simplyhired",
+            [
+                _review_row(key, "simplyhired", review, now)
+                for review in simplyhired_reviews
+            ],
+        )
 
-        for source_name, reviews in (
-            ("simplyhired", simplyhired_reviews),
-            ("indeed", indeed_reviews),
-        ):
-            for review in reviews:
-                rows.append(
-                    CompanyReview(
-                        company_name_key=key,
-                        source=source_name,
-                        overall_rating=review.overall_rating,
-                        job_title=review.job_title,
-                        location=review.location,
-                        review_date=review.review_date,
-                        title=review.title,
-                        text=review.text,
-                        # IndeedReview has no pros/cons fields at all -- see
-                        # indeed_gateway.py's docstring, no such split was
-                        # found on the real page -- hence the getattr
-                        # default rather than an attribute that doesn't
-                        # exist on that dataclass.
-                        pros=getattr(review, "pros", ""),
-                        cons=getattr(review, "cons", ""),
-                        source_url=review.source_url,
-                        computed_at=now,
-                    )
+        indeed_attempted = indeed_gateway.is_configured()
+        indeed_reviews: list = []
+        if indeed_attempted:
+            try:
+                indeed_reviews = await indeed_gateway.fetch_company_reviews(
+                    company_name
                 )
+            except Exception:
+                logger.exception(
+                    "indeed_reviews_refresh_failed", company=company_name
+                )
+                indeed_attempted = False
 
-        await self.reviews_repo.replace_for_company(key, rows)
+        if indeed_attempted:
+            await self.reviews_repo.replace_for_company_and_source(
+                key,
+                "indeed",
+                [_review_row(key, "indeed", review, now) for review in indeed_reviews],
+            )
+        # else: Bright Data isn't configured right now, or this attempt
+        # failed -- leave any previously-stored Indeed reviews untouched
+        # (see this method's docstring above).
 
     async def _compute(self, company_name: str) -> dict:
         settings = get_settings()

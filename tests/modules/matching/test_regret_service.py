@@ -351,6 +351,7 @@ async def test_get_or_compute_combines_and_tags_both_review_sources(
     monkeypatch.setattr(
         simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews
     )
+    monkeypatch.setattr(indeed_gateway, "is_configured", lambda: True)
     monkeypatch.setattr(indeed_gateway, "fetch_company_reviews", _indeed_reviews)
     monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
 
@@ -385,6 +386,7 @@ async def test_get_or_compute_indeed_failure_does_not_drop_simplyhired_reviews(
     monkeypatch.setattr(
         simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews
     )
+    monkeypatch.setattr(indeed_gateway, "is_configured", lambda: True)
     monkeypatch.setattr(indeed_gateway, "fetch_company_reviews", _broken_indeed)
     monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
 
@@ -397,3 +399,65 @@ async def test_get_or_compute_indeed_failure_does_not_drop_simplyhired_reviews(
 
     assert len(stored) == 1
     assert stored[0].source == "simplyhired"
+
+
+async def test_get_or_compute_preserves_existing_indeed_reviews_once_disabled(
+    monkeypatch,
+) -> None:
+    """The exact scenario Steve plans to use (2026-10-02): run one
+    Bright-Data-backed pull, then remove BRIGHTDATA_API_KEY from the server
+    so he's never charged again. The next refresh (monthly job, or any
+    TTL-expired recompute) must NOT delete the Indeed reviews already
+    stored -- "not configured" and "configured but found nothing" must not
+    look the same to the repository, or turning the service off would
+    silently destroy the very data it was turned off to stop paying for."""
+
+    async def _ratings_fn(company_name):
+        return _ratings(80, overall_rating=3.5)
+
+    async def _simplyhired_reviews(company_name):
+        return [_review(title="Avis SimplyHired")]
+
+    async def _indeed_reviews(company_name):
+        return [
+            IndeedReview(
+                overall_rating=2.0,
+                job_title="RH",
+                location="Paris (75)",
+                review_date=None,
+                title="Avis Indeed",
+                text="Texte Indeed.",
+                source_url="https://fr.indeed.com/cmp/Astek/reviews",
+            )
+        ]
+
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_fn)
+    monkeypatch.setattr(
+        simplyhired_gateway, "fetch_company_reviews", _simplyhired_reviews
+    )
+    monkeypatch.setattr(indeed_gateway, "is_configured", lambda: True)
+    monkeypatch.setattr(indeed_gateway, "fetch_company_reviews", _indeed_reviews)
+    monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
+
+    # First refresh: Bright Data is configured -- the Indeed review gets
+    # fetched and stored, same as Steve's one-time pull.
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek", force=True)
+        await session.commit()
+
+    # Steve removes BRIGHTDATA_API_KEY from the server -- simulated here by
+    # flipping is_configured() back to False.
+    monkeypatch.setattr(indeed_gateway, "is_configured", lambda: False)
+
+    # Next refresh (e.g. next month's bulk job, or a forced recompute).
+    async with AsyncSessionLocal() as session:
+        await RegretService(session).get_or_compute("Astek", force=True)
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        stored = await CompanyReviewRepository(session).list_by_key("astek")
+
+    by_source = {row.source: row for row in stored}
+    assert "indeed" in by_source  # still there, not silently wiped
+    assert by_source["indeed"].title == "Avis Indeed"
+    assert "simplyhired" in by_source  # unaffected, refreshed as normal

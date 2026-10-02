@@ -206,11 +206,17 @@ class CompanyReview(BaseModel, table=True):
     many of its 20-reviews-per-page batches get pulled, as a cost control
     (Bright Data bills per page request), not a content limit.
 
-    Existing rows for a company are deleted and replaced wholesale on every
-    refresh, from both gateways together (see regret_service.py) -- same
-    "re-scrape overwrites, nothing accumulates" convention
-    CompanyRegretProfile itself already uses. There is no stable external
-    review id to upsert against either source by.
+    Existing rows are deleted and replaced wholesale on every refresh, same
+    "re-scrape overwrites, nothing accumulates" convention CompanyRegretProfile
+    itself already uses -- there is no stable external review id to upsert
+    against either source by. This replace is scoped PER SOURCE, not across
+    both gateways together (see regret_service.py's _refresh_reviews and
+    CompanyReviewRepository.replace_for_company_and_source, 2026-10-02): a
+    source that wasn't attempted this run -- Indeed/Bright Data left
+    unconfigured on purpose once Steve's one-time pull is done, or a
+    transient failure -- leaves that source's existing rows untouched rather
+    than deleting them. Only a source that genuinely ran this refresh (even
+    if it came back empty) gets its old rows replaced.
     """
 
     __tablename__ = "company_reviews"
