@@ -131,6 +131,19 @@ async def _fetch_unblocked_html(url: str) -> str | None:
             )
             response.raise_for_status()
             return response.text
+    except httpx.HTTPStatusError as exc:
+        # str(exc) alone is just the status line ("400 Bad Request for url
+        # ...") -- Bright Data's actual reason (bad zone name, malformed
+        # payload, etc.) is in the response body, so log that too, added
+        # 2026-10-02 after a real first run returned 400 for every company
+        # with no way to tell why from the logs alone.
+        logger.warning(
+            "brightdata_fetch_failed",
+            url=url,
+            error=str(exc),
+            response_body=exc.response.text[:500],
+        )
+        return None
     except httpx.HTTPError as exc:
         logger.warning("brightdata_fetch_failed", url=url, error=str(exc))
         return None
