@@ -53,6 +53,17 @@ def extract_text(
             "un autre export du CV.",
             code="unreadable_file",
         ) from exc
+    # pypdf occasionally emits literal NUL bytes (\x00) for certain
+    # malformed/oddly-encoded PDFs -- confirmed in production: a real CV
+    # upload failed with Postgres's own
+    # `CharacterNotInRepertoireError: invalid byte sequence for encoding
+    # "UTF8": 0x00`, since Postgres (unlike most text encodings) refuses
+    # any NUL byte in a text/varchar column outright. Stripped here, once,
+    # right after extraction -- before this text reaches the LLM or the
+    # database -- rather than at the DB layer, so nothing downstream
+    # (raw_text, and anything the LLM analysis derives from it) can carry
+    # one through.
+    text = text.replace("\x00", "")
     text = text.strip()
     if not text:
         raise BadRequestError(
