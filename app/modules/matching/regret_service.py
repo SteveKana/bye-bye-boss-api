@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.core.text import fold
@@ -93,7 +93,26 @@ class RegretService:
             if utcnow() < fresh_until:
                 return existing.regret_availability, existing.regret_score
 
-        values = await self._compute(company_name)
+        ratings = await simplyhired_gateway.fetch_company_ratings(company_name)
+
+        await self._refresh_reviews(key, company_name)
+
+        if ratings is None and existing is not None:
+            # The ratings fetch itself failed (403, network, parse) -- not
+            # "too few reviews", which is a genuine result _profile_values
+            # below already turns into "unavailable" on purpose. Confirmed
+            # necessary in production 2026-10-03: SimplyHired's ongoing 403
+            # block was silently overwriting every previously-computed
+            # regret score back to "unavailable" on each forced refresh --
+            # same bug class as the review-wiping one fixed earlier today,
+            # just on CompanyRegretProfile instead of CompanyReview. Leave
+            # the existing profile exactly as it is (including its
+            # computed_at, so a non-forced lookup keeps retrying once the
+            # TTL window passes rather than treating this as freshly
+            # confirmed).
+            return existing.regret_availability, existing.regret_score
+
+        values = self._profile_values(ratings, settings)
         values["company_name"] = company_name
         values["computed_at"] = utcnow()
 
@@ -101,8 +120,6 @@ class RegretService:
             await self.repo.create(CompanyRegretProfile(company_name_key=key, **values))
         else:
             await self.repo.update(existing, values)
-
-        await self._refresh_reviews(key, company_name)
 
         return values["regret_availability"], values["regret_score"]
 
@@ -182,9 +199,17 @@ class RegretService:
         # failed -- leave any previously-stored Indeed reviews untouched
         # (see this method's docstring above).
 
-    async def _compute(self, company_name: str) -> dict:
-        settings = get_settings()
-        ratings = await simplyhired_gateway.fetch_company_ratings(company_name)
+    def _profile_values(
+        self,
+        ratings: simplyhired_gateway.SimplyHiredRatings | None,
+        settings: Settings,
+    ) -> dict:
+        """Turns an already-fetched ratings result into CompanyRegretProfile
+        field values. No I/O here -- the fetch itself lives in
+        get_or_compute now (split out 2026-10-03) so that caller can tell a
+        genuine fetch failure (ratings is None) apart from a genuine "too
+        few reviews" result and decide whether to overwrite an existing
+        profile at all; see get_or_compute's docstring."""
         if ratings is None or ratings.review_count < settings.REGRET_MIN_REVIEWS:
             return {
                 "regret_availability": "unavailable",
