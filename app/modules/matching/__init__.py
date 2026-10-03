@@ -13,14 +13,21 @@ candidate's extracted CV text), `offers` (the pool to match against), and
 `mailer` (to send the "first matches ready" email after a brand-new
 profile's immediate matching run -- see emails.py and jobs.py).
 
-The Regret Index (employee-sentiment risk score) is computed via
+The Regret Index (employee-sentiment risk score) was computed via
 regret_service.py from SimplyHired.fr's public company-review pages (see
 CompanyRegretProfile's docstring for the sourcing decision and its
 disclosed legal tradeoffs, Steve, 2026-09-30), refreshed for every known
 employer once a month (regret_jobs.py) and computed on-demand for a
-brand-new one the first time it's matched. It still reports
-regret_availability="unavailable" whenever there isn't enough real signal
-to score -- never a fabricated number.
+brand-new one the first time it's matched.
+
+DISABLED 2026-10-03 (Steve: masquer/désactiver tout l'indice de regret,
+front et back) -- the monthly job's own import below is commented out, so
+it's no longer registered with the scheduler at all: no SimplyHired or
+Bright Data request fires automatically anymore, and MatchingService no
+longer calls RegretService either (see service.py). The regret_service.py/
+regret_jobs.py/simplyhired_gateway.py/indeed_gateway.py modules themselves
+are left intact and untouched so the feature can be turned back on later
+by uncommenting these same spots, rather than rebuilt.
 """
 
 from __future__ import annotations
@@ -37,7 +44,12 @@ from app.modules.matching import (
 from app.modules.matching import jobs as jobs  # noqa: F401
 from app.modules.matching import listeners as listeners  # noqa: F401
 from app.modules.matching import models as models  # noqa: F401
-from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
+
+# regret_jobs import disabled 2026-10-03 -- this import's only purpose was
+# the @scheduled decorator's side effect (registering the monthly refresh
+# with the scheduler); not importing it at all means that registration
+# never happens, so the job can never fire. See module docstring above.
+# from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
 from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
