@@ -167,13 +167,54 @@ _BULLET_STYLE = ParagraphStyle(
 )
 
 
+# The PDF uses reportlab's built-in Helvetica, which only knows the Windows
+# "cp1252" character set. The LLM likes look-alike characters outside it
+# (non-breaking hyphen, narrow no-break space...) which would print as a black
+# square -- swapped for the plain equivalent below before anything is drawn.
+_PDF_REPLACEMENTS = {
+    **dict.fromkeys("\u2010\u2011\u2012\u2015\u2212\u2043\ufe63\uff0d", "-"),
+    **dict.fromkeys(
+        "\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u202f\u205f\u3000",
+        " ",
+    ),
+    **dict.fromkeys("\u200b\u200c\u200d\u2060\ufeff\u00ad", ""),
+    "\u2192": "->",
+    "\u2190": "<-",
+    "\u21d2": "=>",
+    **dict.fromkeys("\u25cf\u25aa\u25a0\u2023\u25e6\u2219", "\u2022"),
+    **dict.fromkeys("\u2018\u201b\u2032", "'"),
+    "\u0142": "l",
+    "\u0141": "L",
+    "\u0111": "d",
+    "\u0110": "D",
+    "\u0131": "i",
+    **dict.fromkeys("\u201f\u2033", '"'),
+}
+
+
+def pdf_safe(value: str | None) -> str:
+    """`value` with every character Helvetica cannot draw replaced by a plain
+    equivalent (see _PDF_REPLACEMENTS); anything else unsupported falls back
+    to its unaccented form, or is dropped -- never a black square."""
+    out: list[str] = []
+    for char in value or "":
+        char = _PDF_REPLACEMENTS.get(char, char)
+        for c in char:
+            try:
+                c.encode("cp1252")
+            except UnicodeEncodeError:
+                c = unicodedata.normalize("NFKD", c).encode("ascii", "ignore").decode()
+            out.append(c)
+    return "".join(out)
+
+
 def _text(value: str | None) -> str:
     """Escapes untrusted text (candidate CV content, LLM output) before it
     goes into a Paragraph -- reportlab's Paragraph interprets a small
     HTML-like markup, so a raw '<', '>' or '&' in the source text (a CV
     mentioning "R&D" or "C++ <embedded>" is entirely plausible) would either
     break parsing or render wrong without this."""
-    return escape((value or "").strip())
+    return escape(pdf_safe(value).strip())
 
 
 def _section_title(label: str, template: str) -> list:
@@ -228,19 +269,19 @@ def _draw_visuelle_first_page(
     name_y = page_h - 16 * mm
     canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica-Bold", 20)
-    canvas.drawString(left_x, name_y, _candidate_name(profile))
+    canvas.drawString(left_x, name_y, pdf_safe(_candidate_name(profile)))
 
     headline = optimization.headline or profile.headline or ""
     if headline:
         canvas.setFillColor(_BAND_HEADLINE)
         canvas.setFont("Helvetica-Bold", 12.5)
-        canvas.drawString(left_x, name_y - 8 * mm, headline)
+        canvas.drawString(left_x, name_y - 8 * mm, pdf_safe(headline))
 
     contact_parts = [p for p in (profile.email, profile.location) if p]
     if contact_parts:
         canvas.setFillColor(_BAND_CONTACT)
         canvas.setFont("Helvetica", 9)
-        canvas.drawString(left_x, name_y - 15 * mm, " · ".join(contact_parts))
+        canvas.drawString(left_x, name_y - 15 * mm, pdf_safe(" · ".join(contact_parts)))
 
     canvas.restoreState()
 
