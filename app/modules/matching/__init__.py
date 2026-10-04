@@ -5,10 +5,13 @@ fit, ATS compatibility, blocking requirements, concrete CV improvement
 actions) -- ported from the standalone `matchcareer_engine` prototype, fixed
 to run safely inside this async backend (see gateway.py's docstring).
 
-Runs entirely in the background (see jobs.py): a cheap keyword-overlap
-pre-filter (shortlist.py) narrows the offer pool per candidate before any
-LLM call happens, and results are stored in `candidate_matches` so the
-dashboard only ever reads, never waits on the LLM. Depends on `cv` (the
+Runs entirely in the background (see jobs.py), as a three-stage pipeline
+(2026-10-04 redesign): an embedding-similarity shortlist (shortlist.py)
+picks ~30 offers per candidate, a cheaper model scores them on the ATS grid
+(only ATS >= 75 survive), and the full analysis runs on at most 5 -- the two
+LLM stages through OpenAI's Batch API (batch_service.py). Results are stored
+in `candidate_matches` so the dashboard only ever reads, never waits on the
+LLM. Depends on `cv` (the
 candidate's extracted CV text), `offers` (the pool to match against), and
 `mailer` (to send the "first matches ready" email after a brand-new
 profile's immediate matching run -- see emails.py and jobs.py).
@@ -50,6 +53,7 @@ from app.modules.matching import models as models  # noqa: F401
 # with the scheduler); not importing it at all means that registration
 # never happens, so the job can never fire. See module docstring above.
 # from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
+from app.modules.matching.events import MatchesScored
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
 from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
@@ -73,4 +77,5 @@ __all__ = [
     "CandidateMatchRead",
     "CVOptimizationRead",
     "MatchingService",
+    "MatchesScored",
 ]

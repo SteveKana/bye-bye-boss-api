@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Response
 
 from app.core.dependencies import DBSession
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.modules.auth import CurrentUser
 from app.modules.cv import CvService
 from app.modules.matching.cv_optimization_models import CVOptimization
@@ -16,6 +16,7 @@ from app.modules.matching.cv_pdf import (
     build_cv_pdf,
     cv_pdf_filename,
 )
+from app.modules.matching.models import MatchStatus
 from app.modules.matching.routes.v1.matching_routes import _get_owned_match_or_404
 from app.modules.matching.schemas import CVOptimizationRead
 from app.modules.offers import JobOfferRepository
@@ -55,6 +56,12 @@ async def generate_cv_optimization(
     path yet.
     """
     match = await _get_owned_match_or_404(match_id, session, user)
+    if match.status != MatchStatus.scored.value:
+        # The optimisation is built on the full analysis, which a
+        # still-pending match doesn't have yet.
+        raise BadRequestError(
+            "L'analyse de cette offre est en cours, réessayez dans quelques instants."
+        )
     profile = await CvService(session).get_for_user(user.id)
     offer = await JobOfferRepository(session).get(match.job_offer_id)
     if offer is None:

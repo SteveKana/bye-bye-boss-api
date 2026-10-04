@@ -11,6 +11,10 @@ from app.modules.offers import JobOfferRead
 
 class CandidateMatchRead(BaseModel):
     id: uuid.UUID
+    # "scored" once fully analysed; "placeholder"/"pending" while the
+    # scores below (all 0, analysis empty) are still being computed -- the
+    # frontend shows "analyse en cours" for those. See MatchStatus.
+    status: str
     company_name: str
     career_score: int
     ats_score: int

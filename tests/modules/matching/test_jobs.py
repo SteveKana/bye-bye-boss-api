@@ -8,17 +8,10 @@ from app.core.database import AsyncSessionLocal
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.mailer.models import EmailMessage
-from app.modules.matching import gateway
 from app.modules.matching import jobs as matching_jobs
-from app.modules.matching.llm_schema import LLMAnalysis
+from app.modules.matching.models import MatchStatus
+from app.modules.matching.repository import CandidateMatchRepository
 from tests.modules.matching.test_service import _make_complete_profile, _make_offer
-
-_FAKE_ANALYSIS = LLMAnalysis(
-    company_name="Astek",
-    career_score=80,
-    ats_score=60,
-    ats_potential=75,
-)
 
 
 async def _make_user(**overrides) -> User:
@@ -38,37 +31,31 @@ async def _queued_emails(to_email: str) -> list[EmailMessage]:
         return list(result.all())
 
 
-async def test_run_matching_for_new_profile_sends_email_when_matches_found(
-    monkeypatch,
-) -> None:
-    async def _fake(cv, offer):
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+async def test_run_matching_for_new_profile_shows_offers_without_email_yet() -> None:
+    """The new candidate's closest offers are recorded straight away (visible
+    placeholders, no score) -- the "first opportunities ready" email waits for
+    the batch results instead of being sent here (see batch_service.py)."""
     user = await _make_user()
     profile = await _make_complete_profile(user_id=user.id)
-    await _make_offer()
+    offer = await _make_offer()
 
     await matching_jobs.run_matching_for_new_profile(profile.id)
 
-    emails = await _queued_emails(user.email)
-    assert len(emails) == 1
-    assert "1" in emails[0].subject or "opportunit" in emails[0].subject.lower()
-    assert emails[0].body_html is not None
+    async with AsyncSessionLocal() as session:
+        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
+    assert match is not None
+    assert match.status == MatchStatus.placeholder.value
+    assert await _queued_emails(user.email) == []
 
 
-async def test_run_matching_for_new_profile_sends_email_even_with_zero_matches(
-    monkeypatch,
-) -> None:
+async def test_run_matching_for_new_profile_sends_email_even_with_zero_matches() -> (
+    None
+):
     """Steve's explicit call: the candidate must still hear that their
     analysis finished, even when the very first run finds nothing to show
     on the dashboard -- never silence."""
-
-    async def _fake(cv, offer):
-        raise AssertionError("no offer should be scored in this test")
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
 
     user = await _make_user()
     # No offers created at all -- shortlist_offers has nothing to select,

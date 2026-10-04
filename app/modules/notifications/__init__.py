@@ -1,7 +1,8 @@
 """Notifications module — public surface.
 
-"Le brief quotidien" -- once a day, each candidate with a complete profile
-and at least one enabled channel gets their best new offers (never a
+"Le brief quotidien" -- each time a candidate's new matches have been
+analysed (about once a day), a candidate with a complete profile and at
+least one enabled channel gets their best new offers (never a
 repeat, see NotificationBriefEntry) by email, Discord (a webhook the
 candidate creates themselves), and/or WhatsApp (Meta Business API --
 requires app-wide setup, see channels/whatsapp_channel.py; skipped
@@ -16,8 +17,9 @@ from fastapi import APIRouter
 
 from app.core.module import Module
 
-# Import side effects: register the models (Alembic) and the scheduled job.
+# Import side effects: register the models (Alembic) and the event listeners.
 from app.modules.notifications import jobs as jobs  # noqa: F401
+from app.modules.notifications import listeners as listeners  # noqa: F401
 from app.modules.notifications import models as models  # noqa: F401
 from app.modules.notifications.repository import (
     NotificationBriefEntryRepository,

@@ -1,27 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
+from datetime import timedelta
 
 from app.core import embeddings
-from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.models import utcnow
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
-from app.modules.matching import gateway
-from app.modules.matching.llm_schema import LLMAnalysis
+from app.modules.matching.models import MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.service import MatchingService
 from app.modules.offers.models import JobOffer
 from app.modules.offers.repository import JobOfferRepository
-
-_FAKE_ANALYSIS = LLMAnalysis(
-    company_name="Astek",
-    career_score=80,
-    ats_score=60,
-    ats_potential=75,
-)
 
 
 async def _make_complete_profile(**overrides) -> CandidateProfile:
@@ -67,51 +58,56 @@ async def _make_offer(**overrides) -> JobOffer:
         return offer
 
 
-async def test_run_for_profile_creates_a_match(monkeypatch) -> None:
-    async def _fake(cv, offer):
-        return _FAKE_ANALYSIS
+async def _match_for(profile, offer):
+    async with AsyncSessionLocal() as session:
+        return await CandidateMatchRepository(session).get_by_profile_and_offer(
+            profile.id, offer.id
+        )
 
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
 
+async def test_first_run_records_visible_placeholders_then_hidden_shortlist() -> None:
+    """A brand-new profile's first run: the closest offers are recorded, the
+    first MATCHING_MAX_OFFERS_PER_CANDIDATE (5) as visible placeholders (shown
+    straight away, no score yet), the rest of the 30-offer pool as hidden
+    `shortlisted` rows waiting for the pre-filter. Nothing is scored here."""
     profile = await _make_complete_profile()
-    offer = await _make_offer()
+    offers = [await _make_offer(title=f"Product Owner Data {i}") for i in range(8)]
 
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
-    assert report.pairs_scored == 1
-    assert report.pairs_failed == 0
+    assert report.pairs_shortlisted == 8
+    statuses = []
+    for offer in offers:
+        match = await _match_for(profile, offer)
+        assert match is not None
+        assert (match.career_score, match.ats_score, match.ats_potential) == (0, 0, 0)
+        assert match.analysis == {}
+        statuses.append(match.status)
+    assert statuses.count(MatchStatus.placeholder.value) == 5
+    assert statuses.count(MatchStatus.shortlisted.value) == 3
+
+
+async def test_run_shortlists_at_most_the_prefilter_pool_size(monkeypatch) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "MATCHING_PREFILTER_POOL_SIZE", 3)
+    profile = await _make_complete_profile()
+    for i in range(6):
+        await _make_offer(title=f"Offre {i}")
 
     async with AsyncSessionLocal() as session:
-        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
-            profile.id, offer.id
-        )
-    assert match is not None
-    assert match.career_score == 80
-    assert match.ats_score == 60
-    assert match.company_name == "Astek"
+        report = await MatchingService(session).run_for_profile(profile)
+
+    assert report.pairs_shortlisted == 3
 
 
 async def test_run_for_profile_computes_and_caches_profile_embedding_when_missing(
     monkeypatch,
 ) -> None:
     """A profile with no cached embedding yet -- never matched before, or one
-    that already existed before this feature shipped -- gets one computed
-    from its CV text and persisted before shortlisting even runs (see
-    MatchingService._run_for_profile).
-
-    This replaces the old v1-heuristic test that used to assert a plainly
-    irrelevant offer never got scored at all. Under the embeddings design
-    there's no such hard cutoff (see shortlist.py's docstring: the LLM step
-    is the real judge of fit, this is only a cheap pre-filter) -- shortlist's
-    own ranking/ordering behaviour is covered by test_shortlist.py instead.
-    """
-
-    async def _fake_analyse(cv, offer):
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake_analyse)
-
+    whose CV was just re-imported -- gets one computed from its CV text and
+    persisted before shortlisting even runs."""
     embed_calls: list[str] = []
 
     async def _fake_embed(text: str) -> list[float]:
@@ -127,79 +123,90 @@ async def test_run_for_profile_computes_and_caches_profile_embedding_when_missin
         report = await MatchingService(session).run_for_profile(profile)
 
     assert embed_calls == [profile.raw_text]
-    assert report.pairs_scored == 1
+    assert report.pairs_shortlisted == 1
 
     async with AsyncSessionLocal() as session:
         refreshed = await CandidateProfileRepository(session).get(profile.id)
     assert refreshed is not None
     assert refreshed.embedding == [1.0, 0.0, 0.0]
-
-    async with AsyncSessionLocal() as session:
-        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
-            profile.id, offer.id
-        )
-    assert match is not None
+    assert await _match_for(profile, offer) is not None
 
 
-async def test_run_for_profile_skips_already_fresh_matches(monkeypatch) -> None:
-    calls = 0
-
-    async def _fake(cv, offer):
-        nonlocal calls
-        calls += 1
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+async def test_daily_run_only_considers_recent_unseen_offers() -> None:
     profile = await _make_complete_profile()
-    await _make_offer()
+    first = await _make_offer(title="Offre déjà vue")
 
     async with AsyncSessionLocal() as session:
         await MatchingService(session).run_for_profile(profile)
+    first_match = await _match_for(profile, first)
+    assert first_match is not None
+
+    # Next day: a new offer, plus one ingested long ago that was simply never
+    # shortlisted (older than the daily window, so not looked at again).
+    new = await _make_offer(title="Offre du jour")
+    old = await _make_offer(
+        title="Offre ancienne", created_at=utcnow() - timedelta(days=10)
+    )
+
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
-    assert calls == 1  # only the first run actually called the LLM
-    assert report.pairs_skipped_fresh == 1
-    assert report.pairs_scored == 0
+    assert report.pairs_shortlisted == 1  # only the new one
+    new_match = await _match_for(profile, new)
+    assert new_match is not None
+    assert new_match.status == MatchStatus.shortlisted.value  # not a first run
+    assert await _match_for(profile, old) is None
+    # The already-seen pair was left alone, same row.
+    again = await _match_for(profile, first)
+    assert again is not None and again.id == first_match.id
 
 
-async def test_run_for_profile_recomputes_when_offer_changes(monkeypatch) -> None:
-    calls = 0
-
-    async def _fake(cv, offer):
-        nonlocal calls
-        calls += 1
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+async def test_cv_change_sends_existing_matches_back_through_the_pipeline() -> None:
+    """A re-imported CV clears the cached embedding (see cv/service.py): the
+    stored results no longer reflect it, so the closest offers re-enter the
+    pipeline -- keeping the same row (and the candidate's application status),
+    and staying visible meanwhile instead of vanishing."""
     profile = await _make_complete_profile()
     offer = await _make_offer()
-
     async with AsyncSessionLocal() as session:
         await MatchingService(session).run_for_profile(profile)
 
-    # Simulate the offer being refreshed by ingestion after the first match.
     async with AsyncSessionLocal() as session:
-        repo = JobOfferRepository(session)
-        stale = await repo.get(offer.id)
-        await repo.update(stale, {"updated_at": utcnow()})
+        repo = CandidateMatchRepository(session)
+        match = await repo.get_by_profile_and_offer(profile.id, offer.id)
+        await repo.update(
+            match,
+            {
+                "status": MatchStatus.scored.value,
+                "career_score": 80,
+                "application_status": "applied",
+            },
+        )
         await session.commit()
+        match_id = match.id
 
     async with AsyncSessionLocal() as session:
-        report = await MatchingService(session).run_for_profile(profile)
+        profile = await CandidateProfileRepository(session).update(
+            profile, {"embedding": None}
+        )
 
-    assert calls == 2
-    assert report.pairs_scored == 1
+    async def _embed(text: str) -> list[float]:
+        return [1.0, 0.0, 0.0]
+
+    from unittest import mock
+
+    with mock.patch.object(embeddings, "get_embedding", _embed):
+        async with AsyncSessionLocal() as session:
+            await MatchingService(session).run_for_profile(profile)
+
+    after = await _match_for(profile, offer)
+    assert after is not None
+    assert after.id == match_id
+    assert after.status == MatchStatus.placeholder.value
+    assert after.application_status == "applied"
 
 
-async def test_run_for_profile_skips_when_no_raw_text(monkeypatch) -> None:
-    async def _fake(cv, offer):
-        raise AssertionError("should never be called")
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+async def test_run_for_profile_skips_when_no_raw_text() -> None:
     profile = await _make_complete_profile(raw_text=None)
     await _make_offer()
 
@@ -207,21 +214,13 @@ async def test_run_for_profile_skips_when_no_raw_text(monkeypatch) -> None:
         report = await MatchingService(session).run_for_profile(profile)
 
     assert report.profiles_skipped_no_cv_text == 1
-    assert report.pairs_scored == 0
+    assert report.pairs_shortlisted == 0
 
 
-async def test_run_for_profile_excludes_offers_outside_mobility_region(
-    monkeypatch,
-) -> None:
+async def test_run_for_profile_excludes_offers_outside_mobility_region() -> None:
     """End-to-end check that MatchingService actually applies geo_filter
-    before shortlisting/scoring -- geo_filter's own unit tests cover the
-    filtering logic itself, this just confirms the wiring."""
-
-    async def _fake(cv, offer):
-        raise AssertionError("the out-of-region offer should never reach the LLM")
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+    before shortlisting -- geo_filter's own unit tests cover the filtering
+    logic itself, this just confirms the wiring."""
     profile = await _make_complete_profile(
         mobility="Région uniquement", mobility_region="Bretagne"
     )
@@ -230,18 +229,10 @@ async def test_run_for_profile_excludes_offers_outside_mobility_region(
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
-    assert report.pairs_scored == 0
-    assert report.pairs_failed == 0
+    assert report.pairs_shortlisted == 0
 
 
-async def test_run_for_profile_keeps_full_remote_offer_outside_mobility_region(
-    monkeypatch,
-) -> None:
-    async def _fake(cv, offer):
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
+async def test_run_for_profile_keeps_full_remote_offer_outside_mobility() -> None:
     profile = await _make_complete_profile(
         mobility="Région uniquement", mobility_region="Bretagne"
     )
@@ -250,43 +241,22 @@ async def test_run_for_profile_keeps_full_remote_offer_outside_mobility_region(
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
-    assert report.pairs_scored == 1
-
-    async with AsyncSessionLocal() as session:
-        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
-            profile.id, offer.id
-        )
-    assert match is not None
+    assert report.pairs_shortlisted == 1
+    assert await _match_for(profile, offer) is not None
 
 
-async def test_run_for_profile_prunes_existing_match_that_falls_outside_mobility_zone(
-    monkeypatch,
-) -> None:
-    """The gap this closes: filter_by_geography only decides what's eligible
-    for a *new* match, so without this pruning, a match computed before the
-    candidate restricted their mobility (or before the offer's région was
-    even known) would linger on the dashboard forever -- nothing else ever
-    revisits a pair that fails the geo filter (see geo_filter.py's
-    docstring)."""
-
-    async def _fake(cv, offer):
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
-    # First run, no mobility restriction yet: the offer matches normally.
+async def test_run_for_profile_prunes_match_that_falls_outside_mobility_zone() -> None:
+    """filter_by_geography only decides what's eligible for a *new* match, so
+    without this pruning a match computed before the candidate restricted
+    their mobility would linger on the dashboard forever -- nothing else ever
+    revisits a pair that fails the geo filter (see geo_filter.py)."""
     profile = await _make_complete_profile(mobility=None)
     offer = await _make_offer(region="Occitanie")
 
     async with AsyncSessionLocal() as session:
         await MatchingService(session).run_for_profile(profile)
-    async with AsyncSessionLocal() as session:
-        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
-            profile.id, offer.id
-        )
-    assert match is not None
+    assert await _match_for(profile, offer) is not None
 
-    # The candidate now restricts their search to a région the offer isn't in.
     async with AsyncSessionLocal() as session:
         profile = await CandidateProfileRepository(session).update(
             profile, {"mobility": "Région uniquement", "mobility_region": "Bretagne"}
@@ -295,52 +265,4 @@ async def test_run_for_profile_prunes_existing_match_that_falls_outside_mobility
     async with AsyncSessionLocal() as session:
         await MatchingService(session).run_for_profile(profile)
 
-    async with AsyncSessionLocal() as session:
-        match = await CandidateMatchRepository(session).get_by_profile_and_offer(
-            profile.id, offer.id
-        )
-    assert match is None
-
-
-async def test_run_for_profile_scores_offers_concurrently_within_limit(
-    monkeypatch,
-) -> None:
-    """Offers are scored several at a time (bounded by MATCHING_CONCURRENCY)
-    instead of one at a time -- this is what cuts a run's wall-clock time;
-    see service.py's docstring on _run_for_profile. Verifies the concurrency
-    cap is actually respected and that every pair still gets a correct,
-    isolated write despite running concurrently."""
-    monkeypatch.setattr(get_settings(), "MATCHING_CONCURRENCY", 2)
-
-    in_flight = 0
-    max_in_flight = 0
-    lock = asyncio.Lock()
-
-    async def _fake(cv, offer):
-        nonlocal in_flight, max_in_flight
-        async with lock:
-            in_flight += 1
-            max_in_flight = max(max_in_flight, in_flight)
-        await asyncio.sleep(0.05)
-        async with lock:
-            in_flight -= 1
-        return _FAKE_ANALYSIS
-
-    monkeypatch.setattr(gateway, "analyse_match", _fake)
-
-    profile = await _make_complete_profile()
-    offers = [await _make_offer(title=f"Product Owner Data {i}") for i in range(5)]
-
-    async with AsyncSessionLocal() as session:
-        report = await MatchingService(session).run_for_profile(profile)
-
-    assert report.pairs_scored == 5
-    assert report.pairs_failed == 0
-    assert max_in_flight == 2  # never exceeded the configured cap
-
-    async with AsyncSessionLocal() as session:
-        repo = CandidateMatchRepository(session)
-        for offer in offers:
-            match = await repo.get_by_profile_and_offer(profile.id, offer.id)
-            assert match is not None
-            assert match.career_score == 80
+    assert await _match_for(profile, offer) is None

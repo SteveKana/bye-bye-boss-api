@@ -213,13 +213,40 @@ class Settings(BaseSettings):
     # review): the single biggest lever on LLM spend, since it bounds how
     # often *any* candidate gets rescanned at all, not just how many offers
     # each rescan touches (see MATCHING_MAX_OFFERS_PER_CANDIDATE below).
-    # How many of the most relevant offers (see shortlist.py's keyword-overlap
-    # heuristic) are actually scored by the LLM per candidate per run. Bounds
-    # cost -- without this, cost would grow with the full offer pool size.
-    # Was 15: halved (2026-09-22 cost review) -- also shrinks how often a
-    # *new* offer bumps into the shortlist at all (the main source of fresh,
-    # non-skippable LLM calls), on top of the direct per-run cap.
-    MATCHING_MAX_OFFERS_PER_CANDIDATE: int = 8
+    # How many offers are sent to the (gpt-5) full analysis per candidate per
+    # run, after the intermediate pre-filter below has kept only the ones
+    # worth it. Was 15, then 8 (2026-09-22 cost review), now 5 (Steve,
+    # 2026-10-04: 5 offers/day x 5 days = the 25-offer history shown on
+    # /opportunites).
+    MATCHING_MAX_OFFERS_PER_CANDIDATE: int = 5
+    # Intermediate pre-filter (Steve, 2026-10-04): the offers closest to the
+    # CV by embedding similarity (cheap, but blind to hard requirements --
+    # it let ATS < 40 offers through) are first scored by a cheaper model on
+    # the SAME ATS grid (see prompt.build_prefilter_prompt); only those with
+    # an ATS score >= MATCHING_PREFILTER_MIN_ATS go on to the full analysis.
+    MATCHING_PREFILTER_POOL_SIZE: int = 30
+    MATCHING_PREFILTER_MODEL: str = "gpt-5-mini"
+    MATCHING_PREFILTER_MIN_ATS: int = 75
+    # A daily run only looks at offers ingested within this many days (an
+    # offer already seen for a candidate -- whatever its outcome -- is never
+    # pre-filtered or analysed twice); a brand-new profile's first run looks
+    # at the whole MATCHING_MAX_OFFER_POOL_DAYS window instead.
+    MATCHING_DAILY_POOL_DAYS: int = 2
+    # OpenAI Batch API (50% cheaper, results within 24h): max requests per
+    # submitted batch (OpenAI's own hard limit is 50,000), and how many times
+    # a pair is retried after a failed/unparseable result before giving up.
+    MATCHING_BATCH_MAX_REQUESTS: int = 5000
+    MATCHING_MAX_ATTEMPTS: int = 3
+    # /matching/top (the /opportunites history) returns this many most
+    # recent offers; the dashboard shows DASHBOARD_TOP_COUNT of those that
+    # haven't been on it for more than DASHBOARD_WINDOW_HOURS since first
+    # shown.
+    MATCHING_HISTORY_LIMIT: int = 25
+    DASHBOARD_TOP_COUNT: int = 5
+    DASHBOARD_WINDOW_HOURS: int = 24
+    # Minimum final ATS score for a scored match to appear on the dashboard
+    # (the /opportunites ATS filter defaults to the same value front-side).
+    DASHBOARD_MIN_ATS: int = 75
     # Only offers ingested within this window are even considered for
     # shortlisting -- keeps the in-memory shortlisting step (and the pool of
     # "still relevant" offers) bounded as the offers table grows.
