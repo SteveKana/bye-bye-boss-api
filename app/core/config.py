@@ -251,6 +251,12 @@ class Settings(BaseSettings):
     # shortlisting -- keeps the in-memory shortlisting step (and the pool of
     # "still relevant" offers) bounded as the offers table grows.
     MATCHING_MAX_OFFER_POOL_DAYS: int = 30
+    # Freshness cap (Steve, 2026-10-04): an offer is only ever shortlisted
+    # for a candidate -- first run included -- if it was PUBLISHED at most
+    # this many days ago (ingestion date when the source gave no publish
+    # date). Without it a brand-new profile's first run, which looks at the
+    # whole MATCHING_MAX_OFFER_POOL_DAYS window, showed offers weeks old.
+    MATCHING_MAX_OFFER_AGE_DAYS: int = 5
 
     # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
