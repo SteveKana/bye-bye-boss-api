@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from sqlmodel import col, delete
+
 from app.core.database import AsyncSessionLocal
 from app.core.events import on
 from app.core.logging import get_logger
-from app.modules.auth import UserRegistered
+from app.modules.auth import UserDeletionRequested, UserRegistered
 from app.modules.matching import MatchesScored
+from app.modules.notifications.models import (
+    NotificationBriefEntry,
+    NotificationPreference,
+)
 from app.modules.notifications.service import (
     DailyBriefService,
     NotificationPreferenceService,
@@ -37,3 +43,21 @@ async def send_brief_when_matches_scored(event: MatchesScored) -> None:
         )
     if report.channel_failures:
         logger.warning("notifications_brief_had_failures", **report.channel_failures)
+
+
+@on(UserDeletionRequested)
+async def purge_notification_data(event: UserDeletionRequested) -> None:
+    """Account deletion: the candidate's channel preferences and the log of
+    briefs already sent to them."""
+    async with AsyncSessionLocal() as session:
+        await session.exec(
+            delete(NotificationBriefEntry).where(
+                col(NotificationBriefEntry.user_id) == event.user_id
+            )
+        )
+        await session.exec(
+            delete(NotificationPreference).where(
+                col(NotificationPreference.user_id) == event.user_id
+            )
+        )
+        await session.commit()

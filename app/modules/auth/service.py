@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.events import event_bus
-from app.core.exceptions import ConflictError, UnauthorizedError
+from app.core.exceptions import BadRequestError, ConflictError, UnauthorizedError
 from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
@@ -16,8 +16,12 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.modules.auth.emails import build_reset_email, build_verification_email
-from app.modules.auth.events import UserRegistered
+from app.modules.auth.emails import (
+    build_account_deleted_email,
+    build_reset_email,
+    build_verification_email,
+)
+from app.modules.auth.events import UserDeletionRequested, UserRegistered
 from app.modules.auth.google_oauth import verify_google_id_token
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
@@ -230,6 +234,39 @@ class AuthService:
         self.session.add(user)
         await self.session.commit()
         logger.info("password_reset_confirmed", user_id=str(user.id))
+
+    async def delete_account(self, user: User, confirm_email: str) -> None:
+        """Permanently deletes the account and everything it owns (Steve,
+        2026-10-04).
+
+        The caller must re-type their own email. Every module purges its own
+        data in reaction to UserDeletionRequested (concurrently, awaited,
+        failures re-raised -- see the event's docstring); the user row goes
+        LAST, so if any purge fails the account is still there and the
+        request can be retried. A hard delete on purpose (no soft-delete
+        flag): the email address is unique and must be free to re-register.
+        """
+        if confirm_email.strip().lower() != user.email.strip().lower():
+            raise BadRequestError("L'adresse email saisie ne correspond pas.")
+        if user.isadmin:
+            # Never lock the platform out of its own admin account.
+            raise BadRequestError(
+                "Un compte administrateur ne peut pas être supprimé ici."
+            )
+
+        user_id, email = user.id, user.email
+        await event_bus.emit(
+            UserDeletionRequested(user_id=user_id), raise_on_error=True
+        )
+
+        await self.session.delete(user)
+        # Confirmation, queued in the same transaction as the deletion.
+        mail = build_account_deleted_email("fr")
+        await MailerGateway(self.session).enqueue(
+            to_email=email, subject=mail.subject, text=mail.text, html=mail.html
+        )
+        await self.session.commit()
+        logger.info("account_deleted", user_id=str(user_id))
 
     async def update_profile(self, user: User, data: UserUpdate) -> User:
         if data.first_name is not None:

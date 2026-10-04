@@ -1,0 +1,7 @@
+Hello,
+
+Your {{ brand }} account and all the associated data (CV, offers, analyses,
+preferences) have been permanently deleted.
+
+You can sign up again at any time with the same address.
+If you did not request this deletion, please contact us right away.

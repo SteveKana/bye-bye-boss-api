@@ -21,3 +21,14 @@ class ProfileOnboardingCompleted(Event):
     """
 
     profile_id: uuid.UUID
+
+
+class CandidateProfileDeleting(Event):
+    """Emitted by the cv module, awaited (failures re-raised), just BEFORE a
+    candidate's profile row is removed because their account is being
+    deleted -- the cue for modules holding data keyed by `profile_id`
+    (matching's candidate_matches / CV optimisations) to purge it. The
+    profile row is only deleted once every listener succeeded."""
+
+    profile_id: uuid.UUID
+    user_id: uuid.UUID
