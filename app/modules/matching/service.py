@@ -23,7 +23,12 @@ from app.modules.matching import gateway
 from app.modules.matching.geo_filter import filter_by_geography
 from app.modules.matching.llm_schema import LLMAnalysis
 from app.modules.matching.models import CandidateMatch
-from app.modules.matching.regret_service import RegretService
+
+# RegretService import disabled 2026-10-03 (Steve: masquer/désactiver tout
+# l'indice de regret, front et back) -- see the commented-out call sites
+# below for why. Not removed, just never imported: re-enabling the feature
+# later is uncommenting these spots, not rewriting them from scratch.
+# from app.modules.matching.regret_service import RegretService
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.shortlist import shortlist_offers
 from app.modules.offers import JobOffer, JobOfferRepository
@@ -66,7 +71,7 @@ class MatchingService:
         self.profiles = CandidateProfileRepository(session)
         self.offers = JobOfferRepository(session)
         self.matches = CandidateMatchRepository(session)
-        self.regret = RegretService(session)
+        # self.regret = RegretService(session)  # disabled 2026-10-03, see import above
 
     async def sync_all(self) -> MatchingRunReport:
         report = MatchingRunReport()
@@ -206,9 +211,18 @@ class MatchingService:
         existing: CandidateMatch | None,
     ) -> None:
         company_name = analysis.company_name or offer_company_hint or ""
-        regret_availability, regret_score = await self.regret.get_or_compute(
-            company_name
-        )
+        # Regret Index computation disabled 2026-10-03 (Steve: masquer/
+        # désactiver tout l'indice de regret, front et back) -- no SimplyHired/
+        # Bright Data call is made here anymore, and nothing writes
+        # regret_availability/regret_score going forward (they simply keep
+        # the model's own defaults -- "unavailable"/None -- on every new
+        # row). Already-stored values on older rows are left as-is in the
+        # database, but the API never serializes them anymore (see
+        # schemas.py/matching_routes.py), so nothing reaches the frontend
+        # either way.
+        # regret_availability, regret_score = await self.regret.get_or_compute(
+        #     company_name
+        # )
         values = {
             "company_name": company_name,
             "career_score": analysis.career_score,
@@ -216,8 +230,6 @@ class MatchingService:
             "ats_potential": analysis.ats_potential,
             "blocking_message": analysis.blocking_message,
             "analysis": analysis.model_dump(mode="json"),
-            "regret_availability": regret_availability,
-            "regret_score": regret_score,
             "computed_at": utcnow(),
         }
         if existing is None:

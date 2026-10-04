@@ -17,8 +17,14 @@ class CandidateMatchRead(BaseModel):
     ats_potential: int
     blocking_message: str
     analysis: dict
-    regret_availability: str
-    regret_score: int | None
+    # regret_availability / regret_score removed from the API response
+    # 2026-10-03 (Steve: masquer/désactiver tout l'indice de regret, front et
+    # back) -- the columns still exist on CandidateMatch (see models.py), but
+    # this schema is the whole API contract for a match, so dropping them
+    # here means the frontend never receives them at all, whatever is still
+    # stored in the database.
+    # regret_availability: str
+    # regret_score: int | None
     computed_at: datetime
     application_status: ApplicationStatus
     application_status_updated_at: datetime | None

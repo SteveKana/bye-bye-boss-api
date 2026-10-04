@@ -507,3 +507,55 @@ async def test_get_or_compute_preserves_existing_simplyhired_reviews_on_fetch_fa
 
     assert len(stored) == 1  # still there, not silently wiped
     assert stored[0].title == "Avis SimplyHired"
+
+
+async def test_get_or_compute_preserves_existing_score_on_ratings_fetch_failure(
+    monkeypatch,
+) -> None:
+    """The other half of the same incident (2026-10-03): fetch_company_
+    ratings returning None used to be treated exactly like "too few
+    reviews" -- both just overwrote the existing CompanyRegretProfile with
+    regret_availability="unavailable". While SimplyHired kept returning 403,
+    every forced refresh (the monthly job, or a manual one-off run) was
+    silently erasing every previously-computed regret score. A failed fetch
+    must leave the existing score untouched; only a successful fetch (even
+    one that legitimately lands on "unavailable", e.g. too few reviews)
+    may overwrite it."""
+
+    async def _ratings_ok(company_name):
+        return _ratings(80, overall_rating=3.5)
+
+    async def _ratings_failed(company_name):
+        return None  # simulates a 403/network failure, not "too few reviews"
+
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_reviews", _no_reviews)
+    monkeypatch.setattr(get_settings(), "REGRET_MIN_REVIEWS", 5)
+
+    # First refresh succeeds -- a real score gets stored.
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_ok)
+    async with AsyncSessionLocal() as session:
+        availability, score = await RegretService(session).get_or_compute(
+            "Astek", force=True
+        )
+        await session.commit()
+    assert availability == "available"
+    assert score == 30
+
+    # SimplyHired starts failing (403) -- same as the real incident.
+    monkeypatch.setattr(simplyhired_gateway, "fetch_company_ratings", _ratings_failed)
+    async with AsyncSessionLocal() as session:
+        availability, score = await RegretService(session).get_or_compute(
+            "Astek", force=True
+        )
+        await session.commit()
+
+    # The previously-computed score must still be reported, not wiped.
+    assert availability == "available"
+    assert score == 30
+
+    async with AsyncSessionLocal() as session:
+        cached = await CompanyRegretRepository(session).get_by_key("astek")
+
+    assert cached is not None
+    assert cached.regret_availability == "available"
+    assert cached.regret_score == 30

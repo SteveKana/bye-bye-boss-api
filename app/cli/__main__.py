@@ -8,9 +8,9 @@ Commands:
     run-matching                  score complete profiles against offers now
     backfill-contract-type        guess contract_type for already-stored offers
                                    that have none (one-off, safe to re-run)
-    backfill-regret-index         compute the Regret Index for already-stored
-                                   matches that predate it (one-off, safe to
-                                   re-run)
+
+Regret Index feature disabled 2026-10-03 (Steve) -- backfill-regret-index
+is no longer registered below, so it can't be invoked from this CLI anymore.
 """
 
 from __future__ import annotations
@@ -127,8 +127,14 @@ def _cmd_backfill_contract_type(_: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:
-    """One-off: RegretService.get_or_compute only runs at match-(re)scoring
+def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:  # pragma: no cover
+    """DISABLED 2026-10-03 (Steve: masquer/désactiver tout l'indice de
+    regret) -- no longer registered as a CLI subcommand below, so this
+    can't be invoked anymore; left in place, unregistered, so the feature
+    can be turned back on later without rewriting it. Docstring below is
+    the original, pre-disable one, kept for that same reason.
+
+    One-off: RegretService.get_or_compute only runs at match-(re)scoring
     time (see matching/service.py's `_upsert`), which itself only fires when
     a pair is no longer "fresh" (profile/offer unchanged since last scored --
     see `_run_for_profile`'s to_score logic). A match scored before the
@@ -237,10 +243,12 @@ def main(argv: list[str] | None = None) -> int:
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
     ).set_defaults(func=_cmd_backfill_contract_type)
-    sub.add_parser(
-        "backfill-regret-index",
-        help="compute the Regret Index for already-stored matches that predate it",
-    ).set_defaults(func=_cmd_backfill_regret_index)
+    # backfill-regret-index subcommand disabled 2026-10-03, see
+    # _cmd_backfill_regret_index's own docstring above.
+    # sub.add_parser(
+    #     "backfill-regret-index",
+    #     help="compute the Regret Index for already-stored matches that predate it",
+    # ).set_defaults(func=_cmd_backfill_regret_index)
 
     args = parser.parse_args(argv)
     return args.func(args)

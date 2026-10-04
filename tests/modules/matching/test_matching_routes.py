@@ -108,7 +108,8 @@ async def test_top_matches_returns_precomputed_results_sorted_by_score(
     assert body[0]["career_score"] == 90
     assert body[0]["offer"]["title"] == "Offre B"
     assert body[1]["career_score"] == 40
-    assert body[0]["regret_availability"] == "unavailable"
+    # regret_availability/regret_score removed from the API response
+    # 2026-10-03 (feature disabled) -- no longer asserted here.
 
 
 async def test_get_match_requires_auth(client: AsyncClient) -> None:

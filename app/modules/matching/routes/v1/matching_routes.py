@@ -26,8 +26,12 @@ def _to_read(match: CandidateMatch, offer: JobOffer) -> CandidateMatchRead:
         ats_potential=match.ats_potential,
         blocking_message=match.blocking_message,
         analysis=match.analysis,
-        regret_availability=match.regret_availability,
-        regret_score=match.regret_score,
+        # regret fields removed from CandidateMatchRead 2026-10-03, see
+        # schemas.py -- kept out here too, not just left unused, since
+        # CandidateMatchRead(...) would otherwise reject these as unknown
+        # kwargs.
+        # regret_availability=match.regret_availability,
+        # regret_score=match.regret_score,
         computed_at=match.computed_at,
         application_status=ApplicationStatus(match.application_status),
         application_status_updated_at=match.application_status_updated_at,
