@@ -11,6 +11,7 @@ from app.modules.notifications.channels.whatsapp_channel import (
     is_configured,
     send_brief_whatsapp,
 )
+from app.modules.notifications.links import notification_settings_url
 
 _ITEMS = [
     BriefItem(
@@ -228,3 +229,81 @@ async def test_send_brief_whatsapp_one_offer_failing_does_not_block_the_rest(
 
     assert ok is True  # the second offer still went out
     assert call_count == 2
+
+
+async def test_discord_brief_carries_the_notification_settings_link() -> None:
+    captured: dict = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(204)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        await send_brief_discord(
+            webhook_url="https://discord.com/api/webhooks/1/abc",
+            items=_ITEMS,
+            client=client,
+        )
+    finally:
+        await client.aclose()
+
+    fields = captured["body"]["embeds"][0]["fields"]
+    assert len(fields) == len(_ITEMS) + 1
+    assert fields[-1]["value"] == (
+        f"[Désactiver ces notifications]({notification_settings_url()})"
+    )
+    assert notification_settings_url().endswith("/settings#notifications")
+
+
+async def test_whatsapp_sends_settings_link_only_with_the_new_template(
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "WHATSAPP_ACCESS_TOKEN", "test-token")
+    monkeypatch.setattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "123456")
+    monkeypatch.setattr(settings, "WHATSAPP_TEMPLATE_NAME", "daily_brief_v2")
+    sent: list[list[str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        params = json.loads(request.content)["template"]["components"][0]["parameters"]
+        sent.append([p["text"] for p in params])
+        return httpx.Response(200, json={"messages": [{"id": "wamid.test"}]})
+
+    for has_link in (False, True):
+        monkeypatch.setattr(settings, "WHATSAPP_TEMPLATE_HAS_SETTINGS_LINK", has_link)
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        try:
+            await send_brief_whatsapp(
+                phone_number="+33612345678",
+                first_name="Steve",
+                items=_ITEMS[:1],
+                client=client,
+            )
+        finally:
+            await client.aclose()
+
+    assert len(sent[0]) == 5  # original template: unchanged payload
+    assert len(sent[1]) == 6
+    assert sent[1][5] == notification_settings_url()
+
+
+async def test_brief_email_has_the_notification_settings_link(
+    client, auth_headers
+) -> None:
+    from app.core.database import AsyncSessionLocal
+    from app.modules.mailer.models import EmailMessage  # noqa: PLC0415
+    from app.modules.notifications.channels.email_channel import send_brief_email
+
+    async with AsyncSessionLocal() as session:
+        await send_brief_email(
+            session, to_email="a@b.fr", first_name="Steve", items=_ITEMS
+        )
+        await session.commit()
+        from sqlmodel import select  # noqa: PLC0415
+
+        mail = (await session.exec(select(EmailMessage))).all()[-1]
+
+    url = notification_settings_url()
+    assert url in mail.body_text
+    assert f'href="{url}"' in mail.body_html

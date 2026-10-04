@@ -397,6 +397,11 @@ class Settings(BaseSettings):
     # offer link). One template message is sent per offer, not one
     # summarizing the whole brief -- see that module's docstring.
     WHATSAPP_TEMPLATE_NAME: str | None = None
+    # True once WHATSAPP_TEMPLATE_NAME points at the template version that has
+    # a 6th variable {{6}} = the "turn notifications off" link. Keep False
+    # for the original 5-variable template (Meta rejects a variable-count
+    # mismatch).
+    WHATSAPP_TEMPLATE_HAS_SETTINGS_LINK: bool = False
     WHATSAPP_API_VERSION: str = "v21.0"
     WHATSAPP_TIMEOUT_SECONDS: int = 15
 

@@ -43,6 +43,12 @@ applies), so it can't tout a match the candidate would actually be
 disqualified from (Steve's call, see matching/prompt.py's ETAPE 7/9).
 Email and Discord still show career_score; this substitution is
 WhatsApp-only.
+
+A newer template version has a 6th variable, {{6}}: the link to switch the
+notifications off (links.py). It is only sent when
+WHATSAPP_TEMPLATE_HAS_SETTINGS_LINK is on -- sending 6 values to a
+5-variable template (or the opposite) is rejected by Meta, so it is switched
+on together with WHATSAPP_TEMPLATE_NAME once Meta has approved that template.
 """
 
 from __future__ import annotations
@@ -52,6 +58,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.modules.notifications.brief_item import BriefItem
+from app.modules.notifications.links import notification_settings_url
 
 logger = get_logger("notifications.whatsapp")
 
@@ -66,8 +73,26 @@ def is_configured() -> bool:
 
 
 def _build_payload(
-    *, phone_number: str, first_name: str | None, template_name: str, item: BriefItem
+    *,
+    phone_number: str,
+    first_name: str | None,
+    template_name: str,
+    item: BriefItem,
+    include_settings_link: bool = False,
 ) -> dict:
+    parameters = [
+        {"type": "text", "text": first_name or "candidat"},
+        {"type": "text", "text": item.title},
+        {"type": "text", "text": item.company_name},
+        # Not career_score -- see module docstring.
+        {"type": "text", "text": str(item.ats_potential)},
+        {"type": "text", "text": item.url},
+    ]
+    if include_settings_link:
+        # 6th body variable of the newer template (see
+        # WHATSAPP_TEMPLATE_HAS_SETTINGS_LINK): where to switch the
+        # notifications off.
+        parameters.append({"type": "text", "text": notification_settings_url()})
     return {
         "messaging_product": "whatsapp",
         "to": phone_number,
@@ -81,29 +106,7 @@ def _build_payload(
                     # Positional format (see module docstring): order here
                     # is what maps each value to {{1}}..{{5}} in the
                     # template body -- no "parameter_name" key.
-                    "parameters": [
-                        {
-                            "type": "text",
-                            "text": first_name or "candidat",
-                        },
-                        {
-                            "type": "text",
-                            "text": item.title,
-                        },
-                        {
-                            "type": "text",
-                            "text": item.company_name,
-                        },
-                        {
-                            "type": "text",
-                            # Not career_score -- see module docstring.
-                            "text": str(item.ats_potential),
-                        },
-                        {
-                            "type": "text",
-                            "text": item.url,
-                        },
-                    ],
+                    "parameters": parameters,
                 }
             ],
         },
@@ -148,6 +151,7 @@ async def send_brief_whatsapp(
                 first_name=first_name,
                 template_name=settings.WHATSAPP_TEMPLATE_NAME,
                 item=item,
+                include_settings_link=settings.WHATSAPP_TEMPLATE_HAS_SETTINGS_LINK,
             )
             try:
                 response = await http.post(
