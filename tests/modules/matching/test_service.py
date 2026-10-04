@@ -132,6 +132,26 @@ async def test_run_for_profile_computes_and_caches_profile_embedding_when_missin
     assert await _match_for(profile, offer) is not None
 
 
+async def test_offers_published_more_than_max_age_days_ago_are_never_shortlisted() -> (
+    None
+):
+    profile = await _make_complete_profile()
+    fresh = await _make_offer(
+        title="Publiée hier", published_at=utcnow() - timedelta(days=1)
+    )
+    # Ingested just now, but published three weeks ago (a source re-listing
+    # an old ad): must not reach a candidate, first run included.
+    stale = await _make_offer(
+        title="Publiée il y a 3 semaines", published_at=utcnow() - timedelta(days=21)
+    )
+
+    async with AsyncSessionLocal() as session:
+        await MatchingService(session).run_for_profile(profile)
+
+    assert await _match_for(profile, fresh) is not None
+    assert await _match_for(profile, stale) is None
+
+
 async def test_daily_run_only_considers_recent_unseen_offers() -> None:
     profile = await _make_complete_profile()
     first = await _make_offer(title="Offre déjà vue")

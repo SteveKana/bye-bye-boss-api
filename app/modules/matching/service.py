@@ -61,6 +61,12 @@ def _as_utc(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
+def _offer_date(offer: JobOffer) -> datetime:
+    """When the offer went live: its publish date, or the day we ingested it
+    when the source gave none."""
+    return _as_utc(offer.published_at or offer.created_at)
+
+
 def _format_offer_text(offer: JobOffer) -> str:
     """Reassemble an offer's structured fields into the kind of free-text
     block the prompt (ported from a raw-text prototype) expects."""
@@ -174,6 +180,12 @@ class MatchingService:
         else:
             daily_since = now - timedelta(days=settings.MATCHING_DAILY_POOL_DAYS)
             candidates = [o for o in eligible if _as_utc(o.created_at) >= daily_since]
+
+        # Freshness cap: never shortlist an offer published more than
+        # MATCHING_MAX_OFFER_AGE_DAYS ago, whatever the run (Steve,
+        # 2026-10-04). Offers already on file are left alone.
+        oldest_allowed = now - timedelta(days=settings.MATCHING_MAX_OFFER_AGE_DAYS)
+        candidates = [o for o in candidates if _offer_date(o) >= oldest_allowed]
 
         # An offer already seen for this candidate (whatever its outcome) is
         # never pre-filtered or analysed twice -- except after a CV change,
