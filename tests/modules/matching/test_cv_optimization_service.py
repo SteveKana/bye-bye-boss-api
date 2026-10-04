@@ -10,6 +10,7 @@ from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
 from app.modules.matching import cv_optimization_gateway
+from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_schema import (
     CVOptimizationBullet,
     CVOptimizationExperience,
@@ -20,6 +21,8 @@ from app.modules.matching.cv_optimization_service import (
     CVOptimizationService,
     _reconcile_experiences,
     _reconcile_skills,
+    clean_skill_label,
+    has_technical_skill_labels,
 )
 from app.modules.matching.models import CandidateMatch
 from app.modules.matching.repository import CandidateMatchRepository
@@ -150,6 +153,39 @@ def test_reconcile_skills_ignores_non_added_and_duplicate_entries() -> None:
     assert skills.count("SQL") == 1
 
 
+def test_clean_skill_label_turns_snake_case_into_a_readable_label() -> None:
+    assert clean_skill_label("roadmap_planning") == "Roadmap planning"
+    assert (
+        clean_skill_label("product_analytics_usage_metrics")
+        == "Product analytics usage metrics"
+    )
+    # Normal labels are left exactly as they are.
+    assert clean_skill_label("SQL Server") == "SQL Server"
+    assert clean_skill_label("API REST") == "API REST"
+
+
+def test_reconcile_skills_cleans_snake_case_labels_the_model_echoed() -> None:
+    result = _reconcile_skills(
+        ["SQL"],
+        [CVOptimizationSkill(skill="ux_collaboration", added=True)],
+    )
+    assert [item["skill"] for item in result] == ["SQL", "Ux collaboration"]
+
+
+def test_has_technical_skill_labels_ignores_a_confirmed_variant() -> None:
+    row = CVOptimization(
+        candidate_match_id=uuid.uuid4(),
+        skills=[{"skill": "roadmap_planning", "added": True}],
+        computed_at=utcnow(),
+    )
+    assert has_technical_skill_labels(row) is True
+    row.confirmed_at = utcnow()
+    assert has_technical_skill_labels(row) is False
+    row.confirmed_at = None
+    row.skills = [{"skill": "Roadmap", "added": True}]
+    assert has_technical_skill_labels(row) is False
+
+
 async def _user_id(email: str) -> uuid.UUID:
     async with AsyncSessionLocal() as session:
         user = (await session.exec(select(User).where(User.email == email))).first()
@@ -213,3 +249,66 @@ async def test_get_or_generate_caches_result_and_calls_gateway_once(
     assert calls == 1  # second call served from the cache, no new LLM call
     assert first.id == second.id
     assert first.headline == "Optimisé"
+
+
+async def test_stale_snake_case_row_is_regenerated_in_place(
+    monkeypatch, client, auth_headers
+) -> None:
+    async def _fake_optimize_cv(cv, offer_text, analysis, **kwargs):
+        return CVOptimizationResult(
+            headline="Nouveau",
+            skills=[
+                CVOptimizationSkill(skill="Planification de la roadmap", added=True)
+            ],
+        )
+
+    monkeypatch.setattr(cv_optimization_gateway, "optimize_cv", _fake_optimize_cv)
+
+    user_id = await _user_id("user@example.com")
+    async with AsyncSessionLocal() as session:
+        profile = await CandidateProfileRepository(session).create(
+            CandidateProfile(
+                user_id=user_id,
+                status=ProfileStatus.complete.value,
+                raw_text="cv",
+                skills=["Python"],
+            )
+        )
+        offer = await JobOfferRepository(session).create(
+            JobOffer(
+                source="test",
+                external_id="cv-opt-stale",
+                title="Offre",
+                url="https://example.com/offre",
+            )
+        )
+        match = await CandidateMatchRepository(session).create(
+            CandidateMatch(
+                candidate_profile_id=profile.id,
+                job_offer_id=offer.id,
+                career_score=70,
+                ats_score=60,
+                ats_potential=80,
+                computed_at=utcnow(),
+            )
+        )
+        stale = CVOptimization(
+            candidate_match_id=match.id,
+            headline="Ancien",
+            skills=[{"skill": "roadmap_planning", "added": True}],
+            computed_at=utcnow(),
+        )
+        session.add(stale)
+        await session.commit()
+        stale_id = stale.id
+
+        refreshed = await CVOptimizationService(session).get_or_generate(
+            match, profile, offer
+        )
+
+    assert refreshed.id == stale_id  # same row, refreshed in place
+    assert refreshed.headline == "Nouveau"
+    assert {item["skill"] for item in refreshed.skills} == {
+        "Python",
+        "Planification de la roadmap",
+    }

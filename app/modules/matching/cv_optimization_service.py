@@ -32,6 +32,7 @@ from app.modules.matching.cv_optimization_schema import (
 )
 from app.modules.matching.models import CandidateMatch
 from app.modules.matching.service import _format_offer_text
+from app.modules.matching.skill_labels import clean_skill_label
 from app.modules.offers import JobOffer
 
 
@@ -120,6 +121,15 @@ def _reconcile_experiences(
     return reconciled
 
 
+def has_technical_skill_labels(optimization: CVOptimization) -> bool:
+    """True for a stored optimisation generated before labels were cleaned
+    (snake_case skill names): such a row is regenerated -- unless the
+    candidate already confirmed it -- the next time it is opened."""
+    if optimization.confirmed_at is not None:
+        return False
+    return any("_" in (item.get("skill") or "") for item in (optimization.skills or []))
+
+
 def _reconcile_skills(
     original_skills: list[str], model_skills: list[CVOptimizationSkill]
 ) -> list[dict]:
@@ -137,7 +147,7 @@ def _reconcile_skills(
     for item in model_skills:
         if not item.added:
             continue
-        name = item.skill.strip()
+        name = clean_skill_label(item.skill)
         key = name.lower()
         if not name or key in existing_lower or key in seen_added:
             continue
@@ -155,7 +165,7 @@ class CVOptimizationService:
         self, match: CandidateMatch, profile: CandidateProfile, offer: JobOffer
     ) -> CVOptimization:
         existing = await self.optimizations.get_by_match(match.id)
-        if existing is not None:
+        if existing is not None and not has_technical_skill_labels(existing):
             return existing
 
         cv_payload = _build_cv_payload(profile)
@@ -164,19 +174,25 @@ class CVOptimizationService:
             cv_payload, offer_text, match.analysis
         )
 
-        optimization = CVOptimization(
-            candidate_match_id=match.id,
-            headline=result.headline.strip() or profile.headline or "",
-            summary=result.summary.strip() or profile.professional_summary or "",
-            summary_why=result.summary_why,
-            experiences=_reconcile_experiences(
+        values = {
+            "headline": result.headline.strip() or profile.headline or "",
+            "summary": result.summary.strip() or profile.professional_summary or "",
+            "summary_why": result.summary_why,
+            "experiences": _reconcile_experiences(
                 profile.experiences or [], result.experiences
             ),
-            skills=_reconcile_skills(profile.skills or [], result.skills),
-            advice=result.advice,
-            computed_at=utcnow(),
-        )
-        optimization = await self.optimizations.create(optimization)
+            "skills": _reconcile_skills(profile.skills or [], result.skills),
+            "advice": result.advice,
+            "computed_at": utcnow(),
+        }
+        if existing is not None:
+            # Stale row (see has_technical_skill_labels): refreshed in place,
+            # candidate_match_id is unique.
+            optimization = await self.optimizations.update(existing, values)
+        else:
+            optimization = await self.optimizations.create(
+                CVOptimization(candidate_match_id=match.id, **values)
+            )
         await self.session.commit()
         return optimization
 

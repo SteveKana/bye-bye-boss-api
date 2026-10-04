@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import uuid
 
+from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.scheduler import scheduled
 from app.modules.cv import CandidateProfileRepository
 from app.modules.matching.batch_service import MatchingBatchService
 from app.modules.matching.service import MatchingService
+from app.modules.matching.skill_labels_service import SkillLabelService
 
 logger = get_logger("matching.worker")
 
@@ -69,6 +71,33 @@ async def poll_matching_batches() -> None:
             scored=report.scored,
             failed_pairs=report.failed,
         )
+    if report.scored:
+        # Fresh analyses: get their skill names into French right away
+        # rather than waiting for the 5-minute catch-up.
+        await process_skill_labels()
+
+
+async def process_skill_labels() -> int:
+    """Catches the analysed matches up on the French skill-label glossary --
+    see skill_labels_service.py. Never raises: a labelling problem must not
+    take anything else down, the next run simply tries again."""
+    settings = get_settings()
+    try:
+        async with AsyncSessionLocal() as session:
+            done = await SkillLabelService(session).process_pending(
+                limit=settings.MATCHING_LABELS_MATCHES_PER_RUN
+            )
+    except Exception:
+        logger.exception("skill_labels_failed")
+        return 0
+    if done:
+        logger.info("skill_labels_translated", matches=done)
+    return done
+
+
+@scheduled(interval_minutes=5, id="matching_skill_labels")
+async def translate_skill_labels() -> None:
+    await process_skill_labels()
 
 
 async def run_matching_for_new_profile(profile_id: uuid.UUID) -> None:

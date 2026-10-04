@@ -16,6 +16,7 @@ from app.modules.matching.models import (
     CompanyReview,
     MatchingBatch,
     MatchStatus,
+    SkillLabel,
 )
 
 
@@ -90,6 +91,20 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
                 CandidateMatch.status != MatchStatus.scored.value,
                 CandidateMatch.ats_score >= min_ats,
             ),
+        )
+        return (await self.session.exec(stmt)).all()
+
+    async def list_awaiting_labels(self, *, limit: int) -> Sequence[CandidateMatch]:
+        """Analysed matches whose skill names have not been through the
+        French glossary yet (newest first -- what candidates look at)."""
+        stmt = (
+            self._base_select()
+            .where(
+                CandidateMatch.status == MatchStatus.scored.value,
+                col(CandidateMatch.labels_done).is_(False),
+            )
+            .order_by(desc(CandidateMatch.computed_at))
+            .limit(limit)
         )
         return (await self.session.exec(stmt)).all()
 
@@ -190,3 +205,20 @@ class CompanyReviewRepository(BaseRepository[CompanyReview]):
             await self.delete(row)
         for review in reviews:
             await self.create(review)
+
+
+class SkillLabelRepository(BaseRepository[SkillLabel]):
+    model = SkillLabel
+
+    async def labels_for(self, keys: Sequence[str]) -> dict[str, str]:
+        """key -> French label, for the keys the glossary already knows."""
+        found: dict[str, str] = {}
+        wanted = list(keys)
+        # Chunked: stays well under every database's bound-parameter limit.
+        for i in range(0, len(wanted), 500):
+            stmt = self._base_select().where(
+                col(SkillLabel.key).in_(wanted[i : i + 500])
+            )
+            for row in (await self.session.exec(stmt)).all():
+                found[row.key] = row.label
+        return found
