@@ -54,6 +54,15 @@ Exemple de déduction INVALIDE : l'offre demande "Power BI", rien dans le CV ne
 mentionne d'outil de reporting -> ne pas ajouter "Power BI".
 En cas de doute sur une déduction, ne pas l'ajouter.
 
+Libellés des compétences (champ "skills") : chaque compétence ajoutée ("added") est
+écrite en français naturel, comme sur un vrai CV, avec des espaces et une majuscule
+initiale -- par exemple "Définition des critères d'acceptation", "Planification de
+la roadmap", "Collaboration avec l'UX". JAMAIS d'underscore ni de snake_case : l'analyse
+déjà calculée ci-dessous contient parfois des identifiants techniques de ce type
+(comme "roadmap_planning") qui sont des étiquettes internes, à ne jamais recopier
+tels quels. Les noms propres d'outils, de méthodes ou de technologies restent
+inchangés (SQL, Scrum, Jira, API REST, Power BI...).
+
 Le nombre d'expériences en sortie doit être IDENTIQUE au nombre d'expériences en
 entrée, dans le MÊME ordre, avec le même titre/entreprise/période -- seules les
 puces à l'intérieur de chaque expérience peuvent changer.

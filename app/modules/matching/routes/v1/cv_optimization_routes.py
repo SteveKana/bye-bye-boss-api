@@ -9,7 +9,11 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.modules.auth import CurrentUser
 from app.modules.cv import CvService
 from app.modules.matching.cv_optimization_models import CVOptimization
-from app.modules.matching.cv_optimization_service import CVOptimizationService
+from app.modules.matching.cv_optimization_service import (
+    CVOptimizationService,
+    clean_skill_label,
+    has_technical_skill_labels,
+)
 from app.modules.matching.cv_pdf import (
     DEFAULT_CV_TEMPLATE,
     CvTemplate,
@@ -35,7 +39,12 @@ def _to_read(
         summary=optimization.summary,
         summary_why=optimization.summary_why,
         experiences=optimization.experiences,
-        skills=optimization.skills,
+        # Display-time safety net for a kept (confirmed) variant that still
+        # has old snake_case labels -- see clean_skill_label.
+        skills=[
+            {**item, "skill": clean_skill_label(item.get("skill") or "")}
+            for item in (optimization.skills or [])
+        ],
         advice=optimization.advice,
         computed_at=optimization.computed_at,
         confirmed_at=optimization.confirmed_at,
@@ -88,7 +97,9 @@ async def get_cv_optimization(
     optimization = await CVOptimizationService(session).optimizations.get_by_match(
         match.id
     )
-    if optimization is None:
+    # A row with old snake_case skill labels counts as "not generated yet":
+    # the frontend then POSTs, which regenerates it with clean labels.
+    if optimization is None or has_technical_skill_labels(optimization):
         raise NotFoundError(_NO_OPTIMIZATION_YET)
     return _to_read(
         optimization,

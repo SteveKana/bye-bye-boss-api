@@ -58,6 +58,7 @@ from reportlab.platypus import (
 
 from app.modules.cv import CandidateProfile
 from app.modules.matching.cv_optimization_models import CVOptimization
+from app.modules.matching.cv_optimization_service import clean_skill_label
 
 # The two templates a candidate can choose from when downloading. CvTemplate
 # is the single source of truth for the allowed values -- the route imports
@@ -330,7 +331,9 @@ def build_cv_pdf(
                 )
 
     if optimization.skills:
-        skill_names = [s.get("skill") for s in optimization.skills if s.get("skill")]
+        skill_names = [
+            clean_skill_label(s["skill"]) for s in optimization.skills if s.get("skill")
+        ]
         if skill_names:
             story.extend(_section_title("Compétences", template))
             story.append(Paragraph(_text(" · ".join(skill_names)), _BODY_STYLE))
