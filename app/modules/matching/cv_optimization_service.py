@@ -32,6 +32,7 @@ from app.modules.matching.cv_optimization_schema import (
 )
 from app.modules.matching.models import CandidateMatch
 from app.modules.matching.service import _format_offer_text
+from app.modules.matching.skill_labels import clean_skill_label
 from app.modules.offers import JobOffer
 
 
@@ -118,19 +119,6 @@ def _reconcile_experiences(
             }
         )
     return reconciled
-
-
-def clean_skill_label(name: str) -> str:
-    """Safety net behind the prompt's "libellés en français naturel" rule: a
-    label that still looks like an internal snake_case identifier
-    ("roadmap_planning") gets its underscores turned into spaces and a
-    capital first letter. Anything else (SQL Server, API REST...) is left
-    exactly as is."""
-    name = name.strip()
-    if "_" not in name:
-        return name
-    spaced = " ".join(name.replace("_", " ").split())
-    return spaced[:1].upper() + spaced[1:]
 
 
 def has_technical_skill_labels(optimization: CVOptimization) -> bool:

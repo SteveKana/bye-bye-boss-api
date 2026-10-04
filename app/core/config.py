@@ -258,6 +258,14 @@ class Settings(BaseSettings):
     # whole MATCHING_MAX_OFFER_POOL_DAYS window, showed offers weeks old.
     MATCHING_MAX_OFFER_AGE_DAYS: int = 5
 
+    # French labels for the skill names shown with an analysis (see
+    # matching/skill_labels.py): the cheap model that translates each internal
+    # concept once into the shared glossary, and how many matches one
+    # background run catches up on.
+    MATCHING_LABELS_MODEL: str = "gpt-5-mini"
+    MATCHING_LABELS_TIMEOUT_SECONDS: int = 120
+    MATCHING_LABELS_MATCHES_PER_RUN: int = 2000
+
     # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
     # employee-review API exists at a cost/access level this project can use

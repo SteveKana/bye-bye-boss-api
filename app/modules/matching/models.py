@@ -175,6 +175,24 @@ class CandidateMatch(BaseModel, table=True):
     # same offer and click "Voir l'offre" again.
     application_manually_corrected: bool = Field(default=False, nullable=False)
 
+    # True once every skill name of `analysis` has been through the French
+    # label glossary (see skill_labels.py) -- what lets the background job
+    # find, cheaply, the matches still waiting for it.
+    labels_done: bool = Field(default=False, nullable=False, index=True)
+
+
+class SkillLabel(BaseModel, table=True):
+    """The glossary behind the readable skill names: one row per internal
+    skill concept the analysis uses ("roadmap_planning") with its French
+    label ("Planification de roadmap"). Shared by every candidate and every
+    offer, so a concept is translated by the LLM exactly once, ever -- see
+    skill_labels.py."""
+
+    __tablename__ = "skill_labels"
+
+    key: str = Field(index=True, unique=True, nullable=False)
+    label: str = Field(nullable=False)
+
 
 class CompanyRegretProfile(BaseModel, table=True):
     """A cached Regret Index for one employer, keyed by normalized company

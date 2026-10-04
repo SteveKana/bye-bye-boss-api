@@ -14,12 +14,18 @@ from app.modules.cv import CvService
 from app.modules.matching.models import ApplicationStatus, CandidateMatch, MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.schemas import ApplicationStatusUpdate, CandidateMatchRead
+from app.modules.matching.skill_labels_service import SkillLabelService
 from app.modules.offers import JobOffer, JobOfferRead, JobOfferRepository
 
 router = APIRouter(prefix="/matching", tags=["matching"])
 
 
-def _to_read(match: CandidateMatch, offer: JobOffer) -> CandidateMatchRead:
+def _to_read(
+    match: CandidateMatch, offer: JobOffer, analysis: dict | None = None
+) -> CandidateMatchRead:
+    """`analysis` is the stored one with French skill labels added (see
+    skill_labels.py) -- every caller goes through _read_all/_read_or_404 so
+    the labels are always there."""
     return CandidateMatchRead(
         id=match.id,
         status=match.status,
@@ -28,7 +34,7 @@ def _to_read(match: CandidateMatch, offer: JobOffer) -> CandidateMatchRead:
         ats_score=match.ats_score,
         ats_potential=match.ats_potential,
         blocking_message=match.blocking_message,
-        analysis=match.analysis,
+        analysis=match.analysis if analysis is None else analysis,
         # regret fields removed from CandidateMatchRead 2026-10-03, see
         # schemas.py -- kept out here too, not just left unused, since
         # CandidateMatchRead(...) would otherwise reject these as unknown
@@ -54,6 +60,20 @@ async def _get_owned_match_or_404(
     return match
 
 
+async def _read_all(
+    pairs: list[tuple[CandidateMatch, JobOffer]], session: DBSession
+) -> list[CandidateMatchRead]:
+    """Matches ready for the API, their skill names with French labels --
+    one glossary query for the whole list."""
+    analyses = await SkillLabelService(session).labelled(
+        [match.analysis or {} for match, _ in pairs]
+    )
+    return [
+        _to_read(match, offer, analysis)
+        for (match, offer), analysis in zip(pairs, analyses, strict=True)
+    ]
+
+
 async def _read_or_404(match: CandidateMatch, session: DBSession) -> CandidateMatchRead:
     """Shared tail of every single-match route below: a match whose offer
     was since removed from the pool is treated the same as a missing
@@ -61,7 +81,7 @@ async def _read_or_404(match: CandidateMatch, session: DBSession) -> CandidateMa
     offer = await JobOfferRepository(session).get(match.job_offer_id)
     if offer is None:
         raise NotFoundError("Correspondance introuvable.")
-    return _to_read(match, offer)
+    return (await _read_all([(match, offer)], session))[0]
 
 
 @router.get("/top", response_model=list[CandidateMatchRead])
@@ -84,15 +104,15 @@ async def top_matches(
     )
 
     offers = JobOfferRepository(session)
-    results: list[CandidateMatchRead] = []
+    pairs: list[tuple[CandidateMatch, JobOffer]] = []
     for match in matches:
         offer = await offers.get(match.job_offer_id)
         if offer is None:
             # The offer was removed from the pool since this match was
             # computed -- skip rather than show a match with no offer to link to.
             continue
-        results.append(_to_read(match, offer))
-    return results
+        pairs.append((match, offer))
+    return await _read_all(pairs, session)
 
 
 @router.get("/dashboard", response_model=list[CandidateMatchRead])
@@ -134,16 +154,17 @@ async def dashboard_matches(
     candidates = sorted(candidates, key=rank, reverse=True)
 
     offers = JobOfferRepository(session)
-    results: list[CandidateMatchRead] = []
+    pairs: list[tuple[CandidateMatch, JobOffer]] = []
     for match in candidates:
-        if len(results) >= settings.DASHBOARD_TOP_COUNT:
+        if len(pairs) >= settings.DASHBOARD_TOP_COUNT:
             break
         offer = await offers.get(match.job_offer_id)
         if offer is None:
             continue
         if match.dashboard_first_shown_at is None:
             await repo.update(match, {"dashboard_first_shown_at": now})
-        results.append(_to_read(match, offer))
+        pairs.append((match, offer))
+    results = await _read_all(pairs, session)
     await session.commit()
     return results
 
@@ -165,13 +186,13 @@ async def list_applications(
     )
 
     offers = JobOfferRepository(session)
-    results: list[CandidateMatchRead] = []
+    pairs: list[tuple[CandidateMatch, JobOffer]] = []
     for match in matches:
         offer = await offers.get(match.job_offer_id)
         if offer is None:
             continue
-        results.append(_to_read(match, offer))
-    return results
+        pairs.append((match, offer))
+    return await _read_all(pairs, session)
 
 
 @router.get("/{match_id}", response_model=CandidateMatchRead)
