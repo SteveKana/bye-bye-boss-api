@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mailer import MailerGateway, render_mail
 from app.modules.notifications.brief_item import BriefItem
+from app.modules.notifications.links import notification_settings_url
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
 
@@ -34,6 +35,7 @@ async def send_brief_email(
         first_name=first_name,
         items=items,
         count=len(items),
+        settings_url=notification_settings_url(),
     )
     await MailerGateway(session).enqueue(
         to_email=to_email, subject=mail.subject, text=mail.text, html=mail.html

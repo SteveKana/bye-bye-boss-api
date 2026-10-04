@@ -17,6 +17,10 @@ import httpx
 
 from app.core.logging import get_logger
 from app.modules.notifications.brief_item import BriefItem
+from app.modules.notifications.links import (
+    SETTINGS_LINK_LABEL,
+    notification_settings_url,
+)
 
 logger = get_logger("notifications.discord")
 
@@ -36,6 +40,15 @@ def _build_payload(items: list[BriefItem]) -> dict:
                         "inline": False,
                     }
                     for item in items
+                ]
+                + [
+                    {
+                        "name": "\u200b",  # empty title: Discord needs a name
+                        "value": (
+                            f"[{SETTINGS_LINK_LABEL}]({notification_settings_url()})"
+                        ),
+                        "inline": False,
+                    }
                 ],
             }
         ]
