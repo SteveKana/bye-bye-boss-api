@@ -65,6 +65,41 @@ def _extract_json(text: str) -> str:
     raise MatchingFailedError()
 
 
+def parse_analysis(raw: str) -> LLMAnalysis:
+    """Turn the model's raw text into a validated LLMAnalysis -- shared by
+    the direct call below and the Batch API results (batch_service.py), so
+    both go through the exact same tolerant parsing/validation."""
+    payload = _extract_json(raw)
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        logger.error("matching_bad_json", raw=raw)
+        raise MatchingFailedError() from exc
+
+    try:
+        return LLMAnalysis.model_validate(data)
+    except ValidationError as exc:
+        # `raw` alone (the previous behaviour) meant diagnosing a schema
+        # drift required manually reconstructing the payload and replaying
+        # it through LLMAnalysis by hand to even find which field failed --
+        # exactly what the cv_skills incident (2026-09-21) took. Logging the
+        # error itself names the offending field(s) and why, right in this
+        # line, the moment it happens.
+        logger.error("matching_bad_schema", error=str(exc), raw=raw)
+        raise MatchingFailedError() from exc
+
+
+def parse_prefilter_score(raw: str) -> int:
+    """The pre-filter model's answer is just `{"ats_score": <0-100>}`."""
+    payload = _extract_json(raw)
+    try:
+        score = int(json.loads(payload)["ats_score"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        logger.error("matching_prefilter_bad_output", raw=raw)
+        raise MatchingFailedError() from exc
+    return max(0, min(100, score))
+
+
 def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) -> str:
     # max_retries=0: see app/modules/cv/gateway.py -- the SDK's own default
     # retries would otherwise stack with the explicit retry loop below.
@@ -114,21 +149,4 @@ async def analyse_match(
     except MatchingFailedError:
         raise
 
-    payload = _extract_json(raw)
-    try:
-        data = json.loads(payload)
-    except json.JSONDecodeError as exc:
-        logger.error("matching_bad_json", raw=raw)
-        raise MatchingFailedError() from exc
-
-    try:
-        return LLMAnalysis.model_validate(data)
-    except ValidationError as exc:
-        # `raw` alone (the previous behaviour) meant diagnosing a schema
-        # drift required manually reconstructing the payload and replaying
-        # it through LLMAnalysis by hand to even find which field failed --
-        # exactly what the cv_skills incident (2026-09-21) took. Logging the
-        # error itself names the offending field(s) and why, right in this
-        # line, the moment it happens.
-        logger.error("matching_bad_schema", error=str(exc), raw=raw)
-        raise MatchingFailedError() from exc
+    return parse_analysis(raw)

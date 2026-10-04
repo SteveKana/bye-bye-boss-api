@@ -68,6 +68,21 @@ async def _profile_with_matches(*, n_matches: int = 1) -> CandidateProfile:
     return profile
 
 
+async def _set_preference(**fields) -> None:
+    """Sets the user's notification preferences -- a default row already
+    exists since sign-up (see notifications/listeners.py), so update it
+    rather than creating a second one."""
+    user_id = await _user_id()
+    async with AsyncSessionLocal() as session:
+        repo = NotificationPreferenceRepository(session)
+        preference = await repo.get_by_user(user_id)
+        if preference is None:
+            await repo.create(NotificationPreference(user_id=user_id, **fields))
+        else:
+            await repo.update(preference, fields)
+        await session.commit()
+
+
 async def _register(client, email: str = "user@example.com") -> None:
     await client.post(
         "/api/v1/auth/register",
@@ -81,8 +96,10 @@ async def test_send_daily_briefs_skips_user_with_no_channel_enabled(
     await _register(client)
     await verify_user("user@example.com")
     profile = await _profile_with_matches()
+    # Every account gets a default preference row at sign-up (email on); this
+    # one switched everything off.
+    await _set_preference(email_enabled=False)
     async with AsyncSessionLocal() as session:
-        # No NotificationPreference row at all -- never opted into anything.
         report = await DailyBriefService(session).send_daily_briefs()
 
     assert report.users_considered == 1
@@ -106,9 +123,7 @@ async def test_send_daily_briefs_sends_email_by_default_and_records_entries(
         # email_enabled defaults to True -- a bare default-constructed
         # preference row is enough to opt in, same as the route's
         # get_or_create.
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id)
-        )
+        await _set_preference()
         await session.commit()
 
     async with AsyncSessionLocal() as session:
@@ -132,9 +147,7 @@ async def test_send_daily_briefs_never_resends_an_already_sent_match(
     await verify_user("user@example.com")
     profile = await _profile_with_matches(n_matches=1)
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id)
-        )
+        await _set_preference()
         matches = await CandidateMatchRepository(session).list_top_for_profile(
             profile.id
         )
@@ -168,11 +181,9 @@ async def test_send_daily_briefs_caps_items_at_configured_max(
     monkeypatch.setattr(get_settings(), "NOTIFICATIONS_BRIEF_MAX_ITEMS", 2)
     await _register(client)
     await verify_user("user@example.com")
-    profile = await _profile_with_matches(n_matches=5)
+    await _profile_with_matches(n_matches=5)
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id)
-        )
+        await _set_preference()
         await session.commit()
 
     async with AsyncSessionLocal() as session:
@@ -199,13 +210,8 @@ async def test_send_daily_briefs_discord_dispatch_uses_configured_webhook(
     profile = await _profile_with_matches(n_matches=1)
     webhook = "https://discord.com/api/webhooks/1/abc"
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(
-                user_id=profile.user_id,
-                email_enabled=False,
-                discord_enabled=True,
-                discord_webhook_url=webhook,
-            )
+        await _set_preference(
+            email_enabled=False, discord_enabled=True, discord_webhook_url=webhook
         )
         await session.commit()
 
@@ -232,12 +238,8 @@ async def test_send_daily_briefs_whatsapp_unconfigured_is_skipped_not_fatal(
     await verify_user("user@example.com")
     profile = await _profile_with_matches(n_matches=1)
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(
-                user_id=profile.user_id,
-                whatsapp_enabled=True,
-                whatsapp_phone_number="+33612345678",
-            )
+        await _set_preference(
+            whatsapp_enabled=True, whatsapp_phone_number="+33612345678"
         )
         await session.commit()
 
@@ -260,9 +262,7 @@ async def test_send_test_brief_requires_a_channel(
     await verify_user("user@example.com")
     profile = await _profile_with_matches(n_matches=1)
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id, email_enabled=False)
-        )
+        await _set_preference(email_enabled=False)
         await session.commit()
 
     async with AsyncSessionLocal() as session:
@@ -280,9 +280,7 @@ async def test_send_test_brief_sends_immediately_and_ignores_dedup(
     await verify_user("user@example.com")
     profile = await _profile_with_matches(n_matches=1)
     async with AsyncSessionLocal() as session:
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id)
-        )
+        await _set_preference()
         matches = await CandidateMatchRepository(session).list_top_for_profile(
             profile.id
         )
@@ -312,14 +310,12 @@ async def test_send_test_brief_sends_immediately_and_ignores_dedup(
 async def test_test_send_route_delivers_and_reports_channels(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    profile = await _profile_with_matches(n_matches=1)
+    await _profile_with_matches(n_matches=1)
     async with AsyncSessionLocal() as session:
         # Default-constructed preference: email_enabled=True, Discord/
         # WhatsApp off -- avoids the route actually reaching out over the
         # network to a fake webhook/WhatsApp endpoint during a test.
-        await NotificationPreferenceRepository(session).create(
-            NotificationPreference(user_id=profile.user_id)
-        )
+        await _set_preference()
         await session.commit()
 
     r = await client.post(
@@ -328,3 +324,24 @@ async def test_test_send_route_delivers_and_reports_channels(
 
     assert r.status_code == 200
     assert r.json()["channels_sent"] == ["email"]
+
+
+async def test_send_briefs_for_profiles_only_covers_the_given_candidates(
+    client: AsyncClient, verify_user
+) -> None:
+    """What the MatchesScored listener calls: the brief for the candidates
+    whose new matches were just analysed, not for everyone."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2)
+
+    async with AsyncSessionLocal() as session:
+        nobody = await DailyBriefService(session).send_briefs_for_profiles(
+            [uuid.uuid4()]
+        )
+    assert nobody.users_considered == 0
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert report.users_sent == 1
+    assert report.items_sent == 2

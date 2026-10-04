@@ -40,6 +40,55 @@ class ApplicationStatus(enum.StrEnum):
     withdrawn = "withdrawn"
 
 
+class MatchStatus(enum.StrEnum):
+    """Where a (candidate, offer) pair stands in the matching pipeline
+    (2026-10-04 redesign, see batch_service.py):
+
+    shortlisted -- picked by embedding similarity, waiting for the cheap
+                   ATS pre-filter. Hidden from the candidate.
+    placeholder -- same, but one of the first few offers shown to a brand-new
+                   account straight away (no score yet) -- "offres tout de
+                   suite, scores plus tard". Visible.
+    pending     -- passed the pre-filter (ATS >= MATCHING_PREFILTER_MIN_ATS),
+                   waiting for the full analysis. Visible, no score yet.
+    scored      -- full analysis done. Visible.
+    filtered_out -- failed the pre-filter (or ran out of retries). Hidden,
+                   kept only so the pair is never evaluated (and billed) twice.
+    """
+
+    shortlisted = "shortlisted"
+    placeholder = "placeholder"
+    pending = "pending"
+    scored = "scored"
+    filtered_out = "filtered_out"
+
+
+VISIBLE_STATUSES = (
+    MatchStatus.placeholder.value,
+    MatchStatus.pending.value,
+    MatchStatus.scored.value,
+)
+
+
+class MatchingBatch(BaseModel, table=True):
+    """One OpenAI Batch API job submitted by batch_service.py. Rows of
+    `candidate_matches` point at it through `batch_id` while their request is
+    in flight; the request's `custom_id` is the match row's own id, so no
+    separate payload needs storing."""
+
+    __tablename__ = "matching_batches"
+
+    openai_batch_id: str = Field(index=True, unique=True, nullable=False)
+    # "prefilter" | "analysis"
+    stage: str = Field(nullable=False)
+    # "submitted" | "completed" | "failed"
+    status: str = Field(default="submitted", nullable=False, index=True)
+    request_count: int = Field(default=0, nullable=False)
+    completed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
+
+
 class CandidateMatch(BaseModel, table=True):
     """A computed match between one candidate profile and one job offer.
 
@@ -87,6 +136,24 @@ class CandidateMatch(BaseModel, table=True):
     regret_score: int | None = Field(default=None)
 
     computed_at: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+
+    # Pipeline state, see MatchStatus. Rows that predate the 2026-10-04
+    # redesign are all fully analysed, hence the "scored" default. For every
+    # status but "scored" the three score columns above are 0 and `analysis`
+    # is empty -- never shown, the API exposes `status` instead.
+    status: str = Field(default=MatchStatus.scored.value, nullable=False, index=True)
+    # ATS score given by the cheap pre-filter model (None before it ran).
+    prefilter_score: int | None = Field(default=None)
+    # Batch this row's current request is part of (None when not in flight).
+    batch_id: uuid.UUID | None = Field(default=None, index=True)
+    # Failed/unparseable results so far, see MATCHING_MAX_ATTEMPTS.
+    attempts: int = Field(default=0, nullable=False)
+    # First time the dashboard returned this match (see matching_routes'
+    # /matching/dashboard) -- it stays there for DASHBOARD_WINDOW_HOURS from
+    # then, and a match never shown yet is eligible for the next visit.
+    dashboard_first_shown_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
 
     # See ApplicationStatus's docstring. Never touched by MatchingService's
     # re-scoring upsert (see service.py's `values` dict) -- a fresh LLM

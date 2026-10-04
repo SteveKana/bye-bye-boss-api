@@ -238,3 +238,43 @@ OFFRE
 
 def build_prompt(cv: str, offer: str) -> str:
     return PROMPT_TEMPLATE.format(cv=cv, offer=offer)
+
+
+# ---------------------------------------------------------------------------
+# Pre-filter prompt (2026-10-04)
+#
+# The cheap pre-filter model scores a pair on the SAME ATS grid as the full
+# analysis -- so it is built from the full prompt's own rules (everything
+# before its "FORMAT DE SORTIE" section) rather than a second, separately
+# worded rubric that could drift from it -- and is only asked for the final
+# ATS score, which keeps its output short (and cheap).
+# ---------------------------------------------------------------------------
+
+_FORMAT_MARKER = "==================================================\nFORMAT DE SORTIE"
+_RULES_PART = PROMPT_TEMPLATE[: PROMPT_TEMPLATE.index(_FORMAT_MARKER)]
+
+PREFILTER_TEMPLATE = (
+    _RULES_PART
+    + """==================================================
+FORMAT DE SORTIE (PRÉ-ANALYSE RAPIDE)
+=====================================
+
+Applique les étapes ci-dessus en interne, mais ne retourne QUE le score ATS final
+(ETAPE 8), sous la forme d'un JSON valide, sans aucun texte avant ou après, sans
+balises Markdown :
+
+{{"ats_score": 0}}
+
+CV
+
+{cv}
+
+OFFRE
+
+{offer}
+"""
+)
+
+
+def build_prefilter_prompt(cv: str, offer: str) -> str:
+    return PREFILTER_TEMPLATE.format(cv=cv, offer=offer)

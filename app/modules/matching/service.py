@@ -1,33 +1,45 @@
-"""Orchestrates a matching run: shortlist offers, score the new/changed
-pairs with the LLM, upsert the results. Runs as a background job (see
-jobs.py) or on demand via `python -m app.cli run-matching`; the dashboard
-never triggers this itself -- see the `matching` module's docstring.
+"""Orchestrates the first stage of a matching run: for one candidate, pick the
+offers worth evaluating and record them as `candidate_matches` rows waiting
+for the next stages (cheap ATS pre-filter, then full analysis -- both run by
+batch_service.py through OpenAI's Batch API, never from here).
+
+Runs as a background job (see jobs.py) or on demand via
+`python -m app.cli run-matching`; the dashboard never triggers this itself --
+see the `matching` module's docstring.
+
+2026-10-04 redesign (Steve): this used to score the 8 offers closest to the
+CV with gpt-5 straight away. It now (1) takes the PREFILTER_POOL_SIZE (30)
+closest *unseen* offers by embedding similarity, (2) records them as
+`shortlisted` rows -- and, for a brand-new profile, flags its first
+MATCHING_MAX_OFFERS_PER_CANDIDATE as visible `placeholder`s so the candidate
+sees offers immediately, scores to follow --, (3) leaves everything else to
+batch_service.py.
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import embeddings
 from app.core.config import get_settings
-from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.modules.cv import CandidateProfile, CandidateProfileRepository, ProfileStatus
-from app.modules.matching import gateway
 from app.modules.matching.geo_filter import filter_by_geography
-from app.modules.matching.llm_schema import LLMAnalysis
-from app.modules.matching.models import CandidateMatch
+from app.modules.matching.models import (
+    VISIBLE_STATUSES,
+    CandidateMatch,
+    MatchStatus,
+)
 
 # RegretService import disabled 2026-10-03 (Steve: masquer/désactiver tout
-# l'indice de regret, front et back) -- see the commented-out call sites
-# below for why. Not removed, just never imported: re-enabling the feature
-# later is uncommenting these spots, not rewriting them from scratch.
+# l'indice de regret, front et back) -- not removed, just never imported:
+# re-enabling the feature later is uncommenting these spots, not rewriting
+# them from scratch.
 # from app.modules.matching.regret_service import RegretService
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.shortlist import shortlist_offers
@@ -39,10 +51,14 @@ logger = get_logger("matching.service")
 @dataclass
 class MatchingRunReport:
     profiles_processed: int = 0
-    pairs_scored: int = 0
-    pairs_skipped_fresh: int = 0
-    pairs_failed: int = 0
+    pairs_shortlisted: int = 0
     profiles_skipped_no_cv_text: int = 0
+
+
+def _as_utc(moment: datetime) -> datetime:
+    """SQLite hands datetimes back naive (Postgres, in production, keeps the
+    timezone) -- treat a naive one as UTC, which is what is stored."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 def _format_offer_text(offer: JobOffer) -> str:
@@ -84,15 +100,13 @@ class MatchingService:
         logger.info(
             "matching_sync_complete",
             profiles=report.profiles_processed,
-            scored=report.pairs_scored,
-            skipped_fresh=report.pairs_skipped_fresh,
-            failed=report.pairs_failed,
+            shortlisted=report.pairs_shortlisted,
         )
         return report
 
     async def run_for_profile(self, profile: CandidateProfile) -> MatchingRunReport:
-        """Run matching for a single profile -- used by the CLI/tests, and
-        reusable later for an on-demand "match me now" trigger if wanted."""
+        """Shortlist for a single profile -- called right after onboarding
+        (jobs.run_matching_for_new_profile), and by the CLI/tests."""
         report = MatchingRunReport(profiles_processed=1)
         await self._run_for_profile(profile, report)
         return report
@@ -108,24 +122,33 @@ class MatchingService:
             report.profiles_skipped_no_cv_text += 1
             return
 
-        if profile.embedding is None:
+        cv_changed = profile.embedding is None
+        if cv_changed:
             # Lazily computed and cached rather than at CV-import time: this
             # also self-heals profiles that already existed before this
             # feature shipped, with no separate backfill migration/script
             # needed. Cleared back to None on every re-import (see
             # cv/service.import_cv) so a new CV is never scored against the
-            # old one's embedding.
+            # old one's embedding -- which is also how a new CV is detected
+            # here (see `rescore_existing` below).
             embedding = await embeddings.get_embedding(cv_text)
             if embedding is not None:
                 profile = await self.profiles.update(profile, {"embedding": embedding})
 
         settings = get_settings()
-        since = utcnow() - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
-        pool = await self.offers.list_recent(since=since)
+        now = utcnow()
+        pool = await self.offers.list_recent(
+            since=now - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
+        )
         # Enforce the candidate's mobility preference (see geo_filter's
         # docstring) before ranking -- an out-of-zone offer should never
         # occupy one of the limited shortlist slots in the first place.
         eligible = filter_by_geography(profile, pool)
+
+        existing = {
+            match.job_offer_id: match
+            for match in await self.matches.list_all_for_profile(profile.id)
+        }
 
         # A match already on file for an offer that's now excluded (the
         # offer's région/full-remote status was only just backfilled, or the
@@ -133,110 +156,84 @@ class MatchingService:
         # the dashboard only ever reads CandidateMatch rows this table
         # already has (see its docstring) -- nothing else would ever revisit
         # or hide it otherwise, since a pair that fails the geo filter is
-        # simply never selected for (re)scoring below.
+        # simply never selected below.
         excluded_offer_ids = {offer.id for offer in pool} - {
             offer.id for offer in eligible
         }
-        if excluded_offer_ids:
-            stale = await self.matches.list_by_profile_and_offer_ids(
-                profile.id, excluded_offer_ids
-            )
-            for match in stale:
-                await self.matches.delete(match)
+        for offer_id in excluded_offer_ids:
+            stale = existing.pop(offer_id, None)
+            if stale is not None:
+                await self.matches.delete(stale)
 
+        # First run = nothing on file yet for this profile; it looks at the
+        # whole pool. A daily run only looks at offers ingested recently --
+        # everything older was already seen on an earlier run.
+        first_run = not existing
+        if first_run:
+            candidates = list(eligible)
+        else:
+            daily_since = now - timedelta(days=settings.MATCHING_DAILY_POOL_DAYS)
+            candidates = [o for o in eligible if _as_utc(o.created_at) >= daily_since]
+
+        # An offer already seen for this candidate (whatever its outcome) is
+        # never pre-filtered or analysed twice -- except after a CV change,
+        # where the stored result no longer reflects the new CV: those rows
+        # go back through the pipeline, keeping their application status.
+        to_shortlist: list[JobOffer] = []
+        for offer in candidates:
+            if offer.id not in existing or cv_changed:
+                to_shortlist.append(offer)
         shortlisted = shortlist_offers(
-            profile, eligible, limit=settings.MATCHING_MAX_OFFERS_PER_CANDIDATE
+            profile, to_shortlist, limit=settings.MATCHING_PREFILTER_POOL_SIZE
         )
 
-        # DB reads stay sequential on the single session (AsyncSession isn't
-        # safe for concurrent use) -- figure out up front which pairs are
-        # already fresh and can be skipped without touching the LLM at all.
-        to_score: list[tuple[JobOffer, CandidateMatch | None]] = []
-        for offer in shortlisted:
-            existing = await self.matches.get_by_profile_and_offer(profile.id, offer.id)
-            if (
-                existing is not None
-                and existing.computed_at >= profile.updated_at
-                and existing.computed_at >= offer.updated_at
-            ):
-                report.pairs_skipped_fresh += 1
-                continue
-            to_score.append((offer, existing))
-
-        if not to_score:
-            await self.session.commit()
-            return
-
-        # The LLM call is what's slow (network-bound, 1-2 minutes via OpenAI)
-        # and touches no shared state, so score several offers at once --
-        # bounded by MATCHING_CONCURRENCY to stay within OpenAI's rate limits.
-        # DB writes (below) happen afterward, back on the single session.
-        semaphore = asyncio.Semaphore(settings.MATCHING_CONCURRENCY)
-
-        async def _score(offer: JobOffer) -> LLMAnalysis | AppError:
-            async with semaphore:
-                try:
-                    return await gateway.analyse_match(
-                        cv_text, _format_offer_text(offer)
-                    )
-                except AppError as exc:
-                    return exc
-
-        results = await asyncio.gather(*(_score(offer) for offer, _ in to_score))
-
-        for (offer, existing), result in zip(to_score, results, strict=True):
-            if isinstance(result, AppError):
-                logger.warning(
-                    "matching_pair_failed",
-                    profile_id=str(profile.id),
-                    offer_id=str(offer.id),
-                    error=str(result),
-                )
-                report.pairs_failed += 1
-                continue
-
-            await self._upsert(
-                profile.id, offer.id, offer.company_name, result, existing
+        for rank, offer in enumerate(shortlisted):
+            previous = existing.get(offer.id)
+            visible_before = (
+                previous is not None and previous.status in VISIBLE_STATUSES
             )
-            report.pairs_scored += 1
+            # Visible straight away (no score yet): a new profile's first
+            # offers, and any offer the candidate could already see before a
+            # CV change sent it back through the pipeline -- it must not
+            # vanish from their list while it is being re-evaluated.
+            status = (
+                MatchStatus.placeholder
+                if visible_before
+                or (first_run and rank < settings.MATCHING_MAX_OFFERS_PER_CANDIDATE)
+                else MatchStatus.shortlisted
+            )
+            await self._record(profile.id, offer, status, previous)
+            report.pairs_shortlisted += 1
 
         await self.session.commit()
 
-    async def _upsert(
+    async def _record(
         self,
         profile_id: uuid.UUID,
-        offer_id: uuid.UUID,
-        offer_company_hint: str | None,
-        analysis: LLMAnalysis,
+        offer: JobOffer,
+        status: MatchStatus,
         existing: CandidateMatch | None,
     ) -> None:
-        company_name = analysis.company_name or offer_company_hint or ""
-        # Regret Index computation disabled 2026-10-03 (Steve: masquer/
-        # désactiver tout l'indice de regret, front et back) -- no SimplyHired/
-        # Bright Data call is made here anymore, and nothing writes
-        # regret_availability/regret_score going forward (they simply keep
-        # the model's own defaults -- "unavailable"/None -- on every new
-        # row). Already-stored values on older rows are left as-is in the
-        # database, but the API never serializes them anymore (see
-        # schemas.py/matching_routes.py), so nothing reaches the frontend
-        # either way.
-        # regret_availability, regret_score = await self.regret.get_or_compute(
-        #     company_name
-        # )
-        values = {
-            "company_name": company_name,
-            "career_score": analysis.career_score,
-            "ats_score": analysis.ats_score,
-            "ats_potential": analysis.ats_potential,
-            "blocking_message": analysis.blocking_message,
-            "analysis": analysis.model_dump(mode="json"),
-            "computed_at": utcnow(),
+        fresh_values = {
+            "status": status.value,
+            "prefilter_score": None,
+            "batch_id": None,
+            "attempts": 0,
         }
-        if existing is None:
-            await self.matches.create(
-                CandidateMatch(
-                    candidate_profile_id=profile_id, job_offer_id=offer_id, **values
-                )
+        if existing is not None:
+            # Keeps its id (a CV optimisation / brief entry may point at it)
+            # and its application status; only re-enters the pipeline.
+            await self.matches.update(existing, fresh_values)
+            return
+        await self.matches.create(
+            CandidateMatch(
+                candidate_profile_id=profile_id,
+                job_offer_id=offer.id,
+                company_name=offer.company_name or "",
+                career_score=0,
+                ats_score=0,
+                ats_potential=0,
+                computed_at=utcnow(),
+                **fresh_values,
             )
-        else:
-            await self.matches.update(existing, values)
+        )

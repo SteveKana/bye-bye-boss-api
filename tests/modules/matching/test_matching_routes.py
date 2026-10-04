@@ -49,7 +49,7 @@ async def test_top_matches_404_when_no_profile(
     assert r.status_code == 404
 
 
-async def test_top_matches_returns_precomputed_results_sorted_by_score(
+async def test_top_matches_returns_precomputed_results_newest_first(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     user_id = await _user_id("user@example.com")
@@ -104,7 +104,9 @@ async def test_top_matches_returns_precomputed_results_sorted_by_score(
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 2
-    # Best career_score * ats_potential first (90*95=8550 vs 40*50=2000).
+    # Newest first (Offre B's match was created after Offre A's) -- the
+    # frontend does its own relevance sorting. Exposes the pipeline status.
+    assert body[0]["status"] == "scored"
     assert body[0]["career_score"] == 90
     assert body[0]["offer"]["title"] == "Offre B"
     assert body[1]["career_score"] == 40

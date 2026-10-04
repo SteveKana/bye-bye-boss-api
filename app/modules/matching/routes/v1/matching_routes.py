@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 
 from fastapi import APIRouter
 
+from app.core.config import get_settings
 from app.core.dependencies import DBSession
 from app.core.exceptions import NotFoundError
 from app.core.models import utcnow
 from app.modules.auth import CurrentUser
 from app.modules.cv import CvService
-from app.modules.matching.models import ApplicationStatus, CandidateMatch
+from app.modules.matching.models import ApplicationStatus, CandidateMatch, MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.schemas import ApplicationStatusUpdate, CandidateMatchRead
 from app.modules.offers import JobOffer, JobOfferRead, JobOfferRepository
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/matching", tags=["matching"])
 def _to_read(match: CandidateMatch, offer: JobOffer) -> CandidateMatchRead:
     return CandidateMatchRead(
         id=match.id,
+        status=match.status,
         company_name=match.company_name,
         career_score=match.career_score,
         ats_score=match.ats_score,
@@ -65,14 +68,20 @@ async def _read_or_404(match: CandidateMatch, session: DBSession) -> CandidateMa
 async def top_matches(
     session: DBSession, user: CurrentUser
 ) -> list[CandidateMatchRead]:
-    """Pre-computed matches for the current user, best career_score first.
+    """The candidate's /opportunites history: their MATCHING_HISTORY_LIMIT
+    (25) most recent offers, newest first -- including ones still being
+    analysed (status != "scored", no scores yet). The frontend does its own
+    sorting/filtering (relevance, date, ATS threshold...).
 
     Nothing is computed here -- see the `matching` module's docstring for
     why scoring runs entirely in the background. A profile that hasn't been
     matched yet (too new, or not "complete") simply has no rows here yet.
     """
+    settings = get_settings()
     profile = await CvService(session).get_for_user(user.id)
-    matches = await CandidateMatchRepository(session).list_top_for_profile(profile.id)
+    matches = await CandidateMatchRepository(session).list_visible_for_profile(
+        profile.id, limit=settings.MATCHING_HISTORY_LIMIT
+    )
 
     offers = JobOfferRepository(session)
     results: list[CandidateMatchRead] = []
@@ -83,6 +92,59 @@ async def top_matches(
             # computed -- skip rather than show a match with no offer to link to.
             continue
         results.append(_to_read(match, offer))
+    return results
+
+
+@router.get("/dashboard", response_model=list[CandidateMatchRead])
+async def dashboard_matches(
+    session: DBSession, user: CurrentUser
+) -> list[CandidateMatchRead]:
+    """The dashboard's "Top 5 des opportunités" (Steve, 2026-10-04): only
+    offers the candidate hasn't been shown on the dashboard before -- or was
+    first shown within the last DASHBOARD_WINDOW_HOURS, so the day's list
+    survives a page refresh -- never one they already applied to, and, once
+    analysed, only with a final ATS score >= DASHBOARD_MIN_ATS. Best first
+    (career x ATS potential), offers still being analysed after the scored
+    ones. Returning an offer for the first time stamps it, which starts its
+    window.
+
+    Registered before "/{match_id}" so "dashboard" is never swallowed by
+    that path param.
+    """
+    settings = get_settings()
+    now = utcnow()
+    profile = await CvService(session).get_for_user(user.id)
+    repo = CandidateMatchRepository(session)
+    candidates = await repo.list_dashboard_candidates(
+        profile.id,
+        shown_since=now - timedelta(hours=settings.DASHBOARD_WINDOW_HOURS),
+        min_ats=settings.DASHBOARD_MIN_ATS,
+    )
+
+    def rank(match: CandidateMatch) -> tuple[int, int]:
+        scored = match.status == MatchStatus.scored.value
+        # Scored first, by career x ATS potential; the rest by pre-filter ATS.
+        return (
+            1 if scored else 0,
+            match.career_score * match.ats_potential
+            if scored
+            else (match.prefilter_score or 0),
+        )
+
+    candidates = sorted(candidates, key=rank, reverse=True)
+
+    offers = JobOfferRepository(session)
+    results: list[CandidateMatchRead] = []
+    for match in candidates:
+        if len(results) >= settings.DASHBOARD_TOP_COUNT:
+            break
+        offer = await offers.get(match.job_offer_id)
+        if offer is None:
+            continue
+        if match.dashboard_first_shown_at is None:
+            await repo.update(match, {"dashboard_first_shown_at": now})
+        results.append(_to_read(match, offer))
+    await session.commit()
     return results
 
 

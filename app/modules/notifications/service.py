@@ -120,6 +120,20 @@ class DailyBriefService:
         )
         return report
 
+    async def send_briefs_for_profiles(
+        self, profile_ids: list[uuid.UUID]
+    ) -> BriefRunReport:
+        """Brief for specific candidates -- the ones whose new matches were
+        just analysed (see listeners.py)."""
+        report = BriefRunReport()
+        for profile_id in profile_ids:
+            profile = await self.profiles.get(profile_id)
+            if profile is None or profile.status != ProfileStatus.complete.value:
+                continue
+            report.users_considered += 1
+            await self._send_for_profile(profile.id, profile.user_id, report)
+        return report
+
     async def _send_for_profile(
         self,
         candidate_profile_id: uuid.UUID,

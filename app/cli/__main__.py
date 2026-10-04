@@ -5,7 +5,8 @@ Commands:
     list-modules                  list discovered modules
     routes                        print the registered route table
     sync-offers                   fetch job offers from configured providers now
-    run-matching                  score complete profiles against offers now
+    run-matching                  shortlist offers + submit pending OpenAI batches
+    poll-matching-batches         apply finished OpenAI matching batches now
     backfill-contract-type        guess contract_type for already-stored offers
                                    that have none (one-off, safe to re-run)
 
@@ -200,18 +201,47 @@ def _cmd_backfill_regret_index(_: argparse.Namespace) -> int:  # pragma: no cove
 
 
 def _cmd_run_matching(_: argparse.Namespace) -> int:
+    """Runs the daily shortlisting for every complete profile, then submits
+    whatever is waiting for a pipeline stage to OpenAI's Batch API. Results
+    are applied by the scheduled poll job, or `poll-matching-batches`."""
     import asyncio
 
     from app.core.database import AsyncSessionLocal
+    from app.modules.matching.batch_service import MatchingBatchService
     from app.modules.matching.service import MatchingService
 
     async def _run() -> None:
         async with AsyncSessionLocal() as session:
             report = await MatchingService(session).sync_all()
+        async with AsyncSessionLocal() as session:
+            submitted = await MatchingBatchService(session).submit_pending()
         print(
-            f"profiles={report.profiles_processed} scored={report.pairs_scored} "
-            f"skipped_fresh={report.pairs_skipped_fresh} failed={report.pairs_failed} "
-            f"skipped_no_cv_text={report.profiles_skipped_no_cv_text}"
+            f"profiles={report.profiles_processed} "
+            f"shortlisted={report.pairs_shortlisted} "
+            f"skipped_no_cv_text={report.profiles_skipped_no_cv_text} "
+            f"batches_submitted={submitted.batches_submitted} "
+            f"requests_submitted={submitted.requests_submitted}"
+        )
+
+    asyncio.run(_run())
+    return 0
+
+
+def _cmd_poll_matching_batches(_: argparse.Namespace) -> int:
+    """One manual pass of the scheduled batch-polling job."""
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.matching.batch_service import MatchingBatchService
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            report = await MatchingBatchService(session).poll_batches()
+        print(
+            f"batches_completed={report.batches_completed} "
+            f"batches_failed={report.batches_failed} promoted={report.promoted} "
+            f"filtered_out={report.filtered_out} scored={report.scored} "
+            f"failed_pairs={report.failed}"
         )
 
     asyncio.run(_run())
@@ -237,8 +267,12 @@ def main(argv: list[str] | None = None) -> int:
         "sync-offers", help="fetch job offers from configured providers now"
     ).set_defaults(func=_cmd_sync_offers)
     sub.add_parser(
-        "run-matching", help="score complete profiles against offers now"
+        "run-matching",
+        help="shortlist offers for complete profiles and submit pending batches now",
     ).set_defaults(func=_cmd_run_matching)
+    sub.add_parser(
+        "poll-matching-batches", help="apply finished OpenAI matching batches now"
+    ).set_defaults(func=_cmd_poll_matching_batches)
     sub.add_parser(
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
