@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from httpx import AsyncClient
+from sqlmodel import select
+
+from app.core.database import AsyncSessionLocal
+from app.modules.auth.models import User
+from app.modules.notifications.repository import NotificationPreferenceRepository
 
 _URL = "/api/v1/notifications/preferences"
 
@@ -124,3 +129,27 @@ async def test_test_send_fails_without_a_complete_profile(
     # nothing to build a brief from, regardless of channel configuration.
     r = await client.post(f"{_URL}/test-send", headers=auth_headers)
     assert r.status_code == 400
+
+
+async def test_signup_creates_default_preferences_with_email_enabled(
+    client: AsyncClient,
+) -> None:
+    """Email notifications are on from the moment the account exists (Steve,
+    2026-10-04) -- no need to ever open the settings screen first."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "fresh@example.com", "password": "supersecret"},
+    )
+
+    async with AsyncSessionLocal() as session:
+        user = (
+            await session.exec(select(User).where(User.email == "fresh@example.com"))
+        ).first()
+        preference = await NotificationPreferenceRepository(session).get_by_user(
+            user.id
+        )
+
+    assert preference is not None
+    assert preference.email_enabled is True
+    assert preference.discord_enabled is False
+    assert preference.whatsapp_enabled is False
