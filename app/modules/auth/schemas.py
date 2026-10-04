@@ -45,6 +45,13 @@ class ChangePasswordRequest(BaseSchema):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class DeleteAccountRequest(BaseSchema):
+    """The caller re-types their own email as the explicit confirmation
+    (Google-created accounts have no password to ask for)."""
+
+    email: str
+
+
 class LoginRequest(BaseSchema):
     email: EmailStr
     password: str

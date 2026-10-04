@@ -1,5 +1,5 @@
-"""Auth transactional emails (verification, password reset). Wording lives in
-`templates/mail/<name>/<locale>/`."""
+"""Auth transactional emails (verification, password reset, account deleted).
+Wording lives in `templates/mail/<name>/<locale>/`."""
 
 from __future__ import annotations
 
@@ -31,3 +31,7 @@ def build_reset_email(locale: str, token: str) -> RenderedMail:
         link=_link("/reset-password", token),
         expires=settings.RESET_TOKEN_TTL_MINUTES,
     )
+
+
+def build_account_deleted_email(locale: str) -> RenderedMail:
+    return render_mail(TEMPLATES, "account_deleted", locale)

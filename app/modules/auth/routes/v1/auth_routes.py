@@ -9,6 +9,7 @@ from app.core.ratelimit import RateLimiter
 from app.modules.auth.dependencies import CurrentUser
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     EmailVerifyRequest,
     GoogleAuthRequest,
     GoogleAuthResponse,
@@ -35,6 +36,7 @@ refresh_limit = RateLimiter(times=20, seconds=60, scope="auth:refresh")
 reset_limit = RateLimiter(times=5, seconds=60, scope="auth:reset")
 password_limit = RateLimiter(times=5, seconds=60, scope="auth:change-password")
 verify_limit = RateLimiter(times=10, seconds=60, scope="auth:verify")
+delete_limit = RateLimiter(times=5, seconds=60, scope="auth:delete-account")
 
 
 @router.post(
@@ -142,6 +144,19 @@ async def update_me(
 ) -> UserRead:
     updated = await AuthService(session).update_profile(user, data)
     return UserRead.model_validate(updated)
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(delete_limit)],
+)
+async def delete_me(
+    data: DeleteAccountRequest, user: CurrentUser, session: DBSession
+) -> None:
+    """Permanently deletes the caller's account and all their data -- see
+    AuthService.delete_account."""
+    await AuthService(session).delete_account(user, data.email)
 
 
 @router.post(

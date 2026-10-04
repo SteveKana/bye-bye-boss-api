@@ -16,7 +16,7 @@ from app.core.module import Module
 from app.modules.auth import listeners as listeners  # noqa: F401
 from app.modules.auth import models as models  # noqa: F401
 from app.modules.auth.dependencies import AdminUser, CurrentUser, get_current_user
-from app.modules.auth.events import UserDeleted, UserRegistered
+from app.modules.auth.events import UserDeleted, UserDeletionRequested, UserRegistered
 from app.modules.auth.gateway import AuthGateway
 from app.modules.auth.models import SubscriptionPlan
 from app.modules.auth.repository import UserRepository
@@ -47,5 +47,6 @@ __all__ = [
     "SubscriptionPlan",
     "UserRegistered",
     "UserDeleted",
+    "UserDeletionRequested",
     "UserRepository",
 ]
