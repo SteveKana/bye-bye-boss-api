@@ -7,7 +7,7 @@ import pytest
 from app.core.models import utcnow
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.matching.cv_optimization_models import CVOptimization
-from app.modules.matching.cv_pdf import build_cv_pdf, cv_pdf_filename
+from app.modules.matching.cv_pdf import build_cv_pdf, cv_pdf_filename, pdf_safe
 
 
 def _profile(**overrides) -> CandidateProfile:
@@ -161,3 +161,56 @@ def test_cv_pdf_filename_falls_back_without_name() -> None:
     profile = _profile()
 
     assert cv_pdf_filename(profile) == "CV_Candidat.pdf"
+
+
+def test_pdf_safe_replaces_characters_helvetica_cannot_draw() -> None:
+    """These used to print as a black square in the PDF."""
+    assert (
+        pdf_safe("pilotage\u2011produit") == "pilotage-produit"
+    )  # non-breaking hyphen
+    assert pdf_safe("10\u202f000 \u20ac") == "10 000 \u20ac"  # narrow no-break space
+    assert pdf_safe("a \u2212 b") == "a - b"  # minus sign
+    assert pdf_safe("a \u2192 b") == "a -> b"
+    assert pdf_safe("\u25cf Agile") == "\u2022 Agile"
+    assert (
+        pdf_safe("tout\u200bcoll\u00e9") == "toutcoll\u00e9"
+    )  # zero-width space dropped
+
+
+def test_pdf_safe_keeps_everything_already_supported() -> None:
+    text = (
+        "Gestion de projet \u2013 R&D \u2014 \u00e9\u00e8\u00e0\u00e7 "
+        "\u2022 \u00b7 \u2019 \u2026 \u20ac"
+    )
+    assert pdf_safe(text) == text
+
+
+def test_pdf_safe_never_leaves_an_unsupported_character() -> None:
+    out = pdf_safe("Cl\u00e9ment \u0142\u00f3d\u017a \u2713 \u4e2d\u6587 \U0001f600 ok")
+    out.encode("cp1252")  # would raise on anything Helvetica can't draw
+    assert out.startswith("Cl\u00e9ment l\u00f3dz")
+    assert out.endswith("ok")
+
+
+@pytest.mark.parametrize("template", ["sobre", "visuelle"])
+def test_build_cv_pdf_accepts_lookalike_characters(template: str) -> None:
+    profile = _profile(first_name="Jean\u2011Pierre", last_name="Dupont")
+    optimization = _optimization(
+        headline="Product Owner \u2011 Data",
+        summary="Budget de 10\u202f000 \u20ac.",
+        experiences=[
+            {
+                "title": "PO",
+                "company": "Acme",
+                "period": "2020",
+                "bullets": [
+                    {
+                        "text": "Pilotage\u2011produit \u2192 Scrum",
+                        "status": "unchanged",
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert build_cv_pdf(profile, optimization, template=template).startswith(b"%PDF")
