@@ -30,6 +30,11 @@ from app.core.events import event_bus
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.core.models import utcnow
+from app.core.seniority import (
+    candidate_years,
+    career_score_penalty,
+    required_years_range,
+)
 from app.modules.auth import UserRepository
 from app.modules.cv import CandidateProfile, CandidateProfileRepository
 from app.modules.mailer import MailerGateway
@@ -312,6 +317,7 @@ class MatchingBatchService:
         report: PollReport,
     ) -> None:
         newly_scored: dict[uuid.UUID, int] = defaultdict(int)
+        years_by_profile: dict[uuid.UUID, float | None] = {}
         for row in rows:
             raw = results.get(str(row.id))
             analysis = None
@@ -324,17 +330,25 @@ class MatchingBatchService:
                 await self.matches.update(row, self._register_failure(row))
                 report.failed += 1
                 continue
+            career_score, seniority_penalty = await self._seniority_adjusted(
+                row, analysis.career_score, years_by_profile
+            )
+            analysis_payload = analysis.model_dump(mode="json")
+            if seniority_penalty:
+                # The model's own score stays readable next to ours.
+                analysis_payload["career_score_model"] = analysis.career_score
+                analysis_payload["seniority_penalty"] = seniority_penalty
             await self.matches.update(
                 row,
                 {
                     "status": MatchStatus.scored.value,
                     "batch_id": None,
                     "company_name": analysis.company_name or row.company_name or "",
-                    "career_score": analysis.career_score,
+                    "career_score": career_score,
                     "ats_score": analysis.ats_score,
                     "ats_potential": analysis.ats_potential,
                     "blocking_message": analysis.blocking_message,
-                    "analysis": analysis.model_dump(mode="json"),
+                    "analysis": analysis_payload,
                     "computed_at": utcnow(),
                 },
             )
@@ -349,6 +363,35 @@ class MatchingBatchService:
                 await self.send_first_matches_email(profile_id, match_count=count)
             else:
                 report.scored_profile_ids.append(profile_id)
+
+    async def _seniority_adjusted(
+        self,
+        row: CandidateMatch,
+        model_score: int,
+        years_by_profile: dict[uuid.UUID, float | None],
+    ) -> tuple[int, int]:
+        """The Career Score after the seniority rule (Steve, 2026-10-05): lowered
+        when the years the offer asks for are far from the candidate's, see
+        core/seniority.py. Returns (score, points removed); an offer or profile
+        that cannot be read leaves the model's score untouched."""
+        profile_id = row.candidate_profile_id
+        if profile_id not in years_by_profile:
+            profile = await self.profiles.get(profile_id)
+            years_by_profile[profile_id] = (
+                candidate_years(profile.total_experience) if profile else None
+            )
+        years = years_by_profile[profile_id]
+        if years is None:
+            return model_score, 0
+        offer = await self.offers.get(row.job_offer_id)
+        if offer is None:
+            return model_score, 0
+        penalty = career_score_penalty(
+            years, required_years_range(offer.title, offer.description)
+        )
+        if penalty <= 0:
+            return model_score, 0
+        return max(0, model_score - penalty), penalty
 
     async def _scored_count(self, profile_id: uuid.UUID) -> int:
         rows = await self.matches.list_all_for_profile(profile_id)

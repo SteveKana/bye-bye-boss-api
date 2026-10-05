@@ -8,7 +8,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.models import utcnow
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
-from app.modules.matching.models import MatchStatus
+from app.modules.matching.models import CandidateMatch, MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.service import MatchingService
 from app.modules.offers.models import JobOffer
@@ -252,3 +252,87 @@ async def test_run_for_profile_ignores_saved_mobility_restriction() -> None:
 
     assert report.pairs_shortlisted == 1
     assert await _match_for(profile, offer) is not None
+
+
+_EXPERIENCED = {
+    "total_experience": "7 ans",
+    "experiences": [{"title": "Product Owner", "company": "Acme"}],
+}
+_STUDENT = {
+    "total_experience": "1 an",
+    "experiences": [{"title": "Stagiaire produit", "company": "Acme"}],
+}
+
+
+async def test_experienced_candidate_is_never_shortlisted_stage_or_junior() -> None:
+    """Seniority rule (Steve, 2026-10-05): no Stage/Alternance for someone with
+    experience, no Junior from 3 years -- decided before any LLM call, the
+    pair is recorded as `filtered_out` so it is never evaluated or billed."""
+    profile = await _make_complete_profile(**_EXPERIENCED)
+    stage = await _make_offer(title="Stage chef de projet", contract_type="Stage")
+    alternance = await _make_offer(title="Alternance RH", contract_type="Alternance")
+    junior = await _make_offer(title="Product Owner Junior")
+    normal = await _make_offer(title="Product Owner confirmé")
+
+    async with AsyncSessionLocal() as session:
+        report = await MatchingService(session).run_for_profile(profile)
+
+    assert report.seniority_excluded == 3
+    assert report.pairs_shortlisted == 1
+    for offer in (stage, alternance, junior):
+        match = await _match_for(profile, offer)
+        assert match is not None
+        assert match.status == MatchStatus.filtered_out.value
+    kept = await _match_for(profile, normal)
+    assert kept is not None
+    assert kept.status != MatchStatus.filtered_out.value
+
+
+async def test_student_candidate_still_receives_stage_and_junior_offers() -> None:
+    profile = await _make_complete_profile(**_STUDENT)
+    stage = await _make_offer(title="Stage produit", contract_type="Stage")
+    junior = await _make_offer(title="Product Owner Junior")
+
+    async with AsyncSessionLocal() as session:
+        report = await MatchingService(session).run_for_profile(profile)
+
+    assert report.seniority_excluded == 0
+    assert report.pairs_shortlisted == 2
+    for offer in (stage, junior):
+        match = await _match_for(profile, offer)
+        assert match is not None
+        assert match.status != MatchStatus.filtered_out.value
+
+
+async def test_existing_stage_match_is_hidden_unless_already_applied() -> None:
+    profile = await _make_complete_profile(**_EXPERIENCED)
+    open_stage = await _make_offer(title="Stage A", contract_type="Stage")
+    applied_stage = await _make_offer(title="Stage B", contract_type="Stage")
+    async with AsyncSessionLocal() as session:
+        repo = CandidateMatchRepository(session)
+        for offer, application in (
+            (open_stage, "not_applied"),
+            (applied_stage, "applied"),
+        ):
+            await repo.create(
+                CandidateMatch(
+                    candidate_profile_id=profile.id,
+                    job_offer_id=offer.id,
+                    career_score=70,
+                    ats_score=70,
+                    ats_potential=80,
+                    computed_at=utcnow(),
+                    status=MatchStatus.scored.value,
+                    application_status=application,
+                )
+            )
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        await MatchingService(session).run_for_profile(profile)
+
+    hidden = await _match_for(profile, open_stage)
+    kept = await _match_for(profile, applied_stage)
+    assert hidden is not None and kept is not None
+    assert hidden.status == MatchStatus.filtered_out.value
+    assert kept.status == MatchStatus.scored.value
