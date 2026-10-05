@@ -149,8 +149,8 @@ class CandidateMatch(BaseModel, table=True):
     # Failed/unparseable results so far, see MATCHING_MAX_ATTEMPTS.
     attempts: int = Field(default=0, nullable=False)
     # First time the dashboard returned this match (see matching_routes'
-    # /matching/dashboard) -- it stays there for DASHBOARD_WINDOW_HOURS from
-    # then, and a match never shown yet is eligible for the next visit.
+    # /matching/dashboard) -- it stays there until the end of that calendar day
+    # (Paris time), and a match never shown yet is eligible for the next visit.
     dashboard_first_shown_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )

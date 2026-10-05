@@ -239,11 +239,11 @@ class Settings(BaseSettings):
     MATCHING_MAX_ATTEMPTS: int = 3
     # /matching/top (the /opportunites history) returns this many most
     # recent offers; the dashboard shows DASHBOARD_TOP_COUNT of those that
-    # haven't been on it for more than DASHBOARD_WINDOW_HOURS since first
-    # shown.
+    # are new to the candidate or were first shown on it TODAY (calendar day
+    # in DASHBOARD_TIMEZONE) -- from the next day on they live in /opportunites.
     MATCHING_HISTORY_LIMIT: int = 25
     DASHBOARD_TOP_COUNT: int = 5
-    DASHBOARD_WINDOW_HOURS: int = 24
+    DASHBOARD_TIMEZONE: str = "Europe/Paris"
     # Minimum final ATS score for a scored match to appear on the dashboard
     # (the /opportunites ATS filter defaults to the same value front-side).
     DASHBOARD_MIN_ATS: int = 75
