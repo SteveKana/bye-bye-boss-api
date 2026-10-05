@@ -82,11 +82,17 @@ class NotificationPreferenceService:
         return await self.preferences.update(preference, data)
 
 
+def _email_blocked(user: PublicUser, preference: NotificationPreference) -> bool:
+    """Email alerts are switched on but the address was never confirmed."""
+    return preference.email_enabled and not user.is_verified
+
+
 @dataclass
 class BriefRunReport:
     users_considered: int = 0
     users_sent: int = 0
     users_skipped_no_channel: int = 0
+    users_skipped_unverified_email: int = 0
     users_skipped_no_new_offers: int = 0
     items_sent: int = 0
     channel_failures: dict = field(default_factory=dict)
@@ -115,6 +121,7 @@ class DailyBriefService:
             considered=report.users_considered,
             sent=report.users_sent,
             skipped_no_channel=report.users_skipped_no_channel,
+            skipped_unverified_email=report.users_skipped_unverified_email,
             skipped_no_new_offers=report.users_skipped_no_new_offers,
             items=report.items_sent,
         )
@@ -148,6 +155,19 @@ class DailyBriefService:
             or preference.whatsapp_enabled
         ):
             report.users_skipped_no_channel += 1
+            return
+
+        user = await self.auth.get_user(user_id)
+        if user is None:
+            return
+        # Email alerts only go to a confirmed address (anyone can sign up
+        # with someone else's email). When email is the ONLY channel, skip
+        # before anything is logged as sent, so the offers are still
+        # waiting once the address gets confirmed.
+        if _email_blocked(user, preference) and not (
+            preference.discord_enabled or preference.whatsapp_enabled
+        ):
+            report.users_skipped_unverified_email += 1
             return
 
         already_sent = await self.entries.sent_match_ids(user_id)
@@ -189,13 +209,11 @@ class DailyBriefService:
             report.users_skipped_no_new_offers += 1
             return
 
-        user = await self.auth.get_user(user_id)
-        if user is None:
-            return
-
         channels_sent = await self._dispatch(user, preference, items)
         for failure in {"email", "discord", "whatsapp"} - set(channels_sent):
             enabled = getattr(preference, f"{failure}_enabled")
+            if failure == "email" and _email_blocked(user, preference):
+                continue
             if enabled:
                 report.channel_failures[failure] = (
                     report.channel_failures.get(failure, 0) + 1
@@ -246,6 +264,17 @@ class DailyBriefService:
                 "Activez au moins un canal de notification avant de tester l'envoi."
             )
 
+        user = await self.auth.get_user(user_id)
+        if user is None:
+            raise NotFoundError("Utilisateur introuvable.")
+        if _email_blocked(user, preference) and not (
+            preference.discord_enabled or preference.whatsapp_enabled
+        ):
+            raise BadRequestError(
+                "Confirmez votre adresse email (lien reçu à l'inscription) "
+                "pour recevoir les alertes par email."
+            )
+
         candidates = await self.matches.list_top_for_profile(
             profile.id, limit=settings.NOTIFICATIONS_BRIEF_MAX_ITEMS
         )
@@ -270,10 +299,6 @@ class DailyBriefService:
                 "fois que des correspondances auront été calculées."
             )
 
-        user = await self.auth.get_user(user_id)
-        if user is None:
-            raise NotFoundError("Utilisateur introuvable.")
-
         channels_sent = await self._dispatch(user, preference, items)
         # send_brief_email only enqueues an EmailMessage row in this
         # session's transaction (see channels/email_channel.py) -- without
@@ -290,7 +315,7 @@ class DailyBriefService:
     ) -> list[str]:
         channels_sent: list[str] = []
 
-        if preference.email_enabled:
+        if preference.email_enabled and user.is_verified:
             await send_brief_email(
                 self.session,
                 to_email=user.email,

@@ -345,3 +345,75 @@ async def test_send_briefs_for_profiles_only_covers_the_given_candidates(
         report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
     assert report.users_sent == 1
     assert report.items_sent == 2
+
+
+async def test_unconfirmed_email_gets_no_email_alert_and_offers_wait(
+    client: AsyncClient, verify_user
+) -> None:
+    # Anyone can sign up with someone else's address: until it is
+    # confirmed, no alert goes there -- and nothing is logged as sent, so
+    # the offers are still waiting once the address is confirmed.
+    await _register(client)
+    profile = await _profile_with_matches(n_matches=2)
+    await _set_preference()
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_daily_briefs()
+    assert report.users_skipped_unverified_email == 1
+    assert report.users_sent == 0
+    async with AsyncSessionLocal() as session:
+        entries = await NotificationBriefEntryRepository(session).list_for_user(
+            profile.user_id
+        )
+    assert entries == []
+
+    await verify_user("user@example.com")
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_daily_briefs()
+    assert report.users_sent == 1
+    assert report.items_sent == 2
+
+
+async def test_unconfirmed_email_still_gets_discord_alert_but_no_email(
+    client: AsyncClient, monkeypatch
+) -> None:
+    sent: list[str] = []
+
+    async def _fake_send_discord(*, webhook_url, items):
+        sent.append(webhook_url)
+        return True
+
+    monkeypatch.setattr(
+        "app.modules.notifications.service.send_brief_discord", _fake_send_discord
+    )
+    await _register(client)
+    profile = await _profile_with_matches(n_matches=1)
+    await _set_preference(
+        email_enabled=True,
+        discord_enabled=True,
+        discord_webhook_url="https://discord.com/api/webhooks/1/abc",
+    )
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_daily_briefs()
+
+    assert report.users_sent == 1
+    assert report.channel_failures == {}
+    assert len(sent) == 1
+    async with AsyncSessionLocal() as session:
+        entries = await NotificationBriefEntryRepository(session).list_for_user(
+            profile.user_id
+        )
+    assert entries[0].channels_sent == ["discord"]
+
+
+async def test_test_send_refused_when_only_channel_is_unconfirmed_email(
+    client: AsyncClient,
+) -> None:
+    await _register(client)
+    await _profile_with_matches(n_matches=1)
+    await _set_preference()
+    user_id = await _user_id()
+    async with AsyncSessionLocal() as session:
+        with pytest.raises(BadRequestError):
+            await DailyBriefService(session).send_test_brief(user_id)
