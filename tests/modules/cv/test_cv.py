@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
+from sqlmodel import select
 
 from app.core.config import get_settings
+from app.core.database import AsyncSessionLocal
 from app.modules.cv import extraction, gateway
+from app.modules.cv.models import CandidateProfile
 from app.modules.matching import jobs as matching_jobs
 
 UPLOAD = "/api/v1/cv/upload"
@@ -213,12 +216,68 @@ async def test_verification_completed_at_survives_a_cv_reimport(
     await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
     await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
 
-    # Re-import (the profile page's "reupload" shortcut) -- resets `status`
-    # back to draft, per CvService.import_cv, but must leave verification
-    # alone.
+    # Re-import (the profile page's "reupload" shortcut) -- verification is
+    # left alone, and since saving it now completes onboarding (no
+    # preferences step anymore) the profile stays "complete".
     r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    assert r.json()["status"] == "draft"
+    assert r.json()["status"] == "complete"
     assert r.json()["verification_completed_at"] is not None
+
+
+async def test_verification_completes_onboarding_and_triggers_matching_once(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    """The preferences step is gone (Steve, 2026-10-05): saving the verified
+    CV is the end of onboarding -- profile "complete", and the one-off
+    immediate matching run fires exactly once per account."""
+    triggered: list = []
+
+    async def _fake_run(profile_id):
+        triggered.append(profile_id)
+
+    monkeypatch.setattr(matching_jobs, "run_matching_for_new_profile", _fake_run)
+
+    upload = await client.post(
+        UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers
+    )
+    assert upload.json()["status"] == "draft"
+
+    r = await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "complete"
+    assert [str(p) for p in triggered] == [upload.json()["id"]]
+
+    # Saving again (profile page edits, CV re-import) never re-triggers it.
+    await client.put(PROFILE, json={"first_name": "Thomas"}, headers=auth_headers)
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    await client.put(PROFILE, json={"first_name": "Tom"}, headers=auth_headers)
+    assert len(triggered) == 1
+
+
+async def test_upload_strips_nul_characters_from_the_cv(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch
+) -> None:
+    """Some PDF exports leave NUL characters in the extracted text, which
+    PostgreSQL refuses -- the upload used to fail with a 500 (jjkenfack,
+    2026-10-02). SQLite accepts them, so check what actually gets stored."""
+    monkeypatch.setattr(
+        extraction, "_extract_pdf", lambda _data: "Thomas\nDe sept. 2023\x002024\x00"
+    )
+
+    async def _structure_with_nul(_raw_text: str) -> dict:
+        return {**_EXTRACTED, "first_name": "Tho\x00mas", "skills": ["Ag\x00ile"]}
+
+    monkeypatch.setattr(gateway, "structure_cv_text", _structure_with_nul)
+
+    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["first_name"] == "Thomas"
+    assert r.json()["skills"] == ["Agile"]
+
+    async with AsyncSessionLocal() as session:
+        stored = (await session.exec(select(CandidateProfile))).one()
+    assert "\x00" not in stored.raw_text
+    assert stored.raw_text.endswith("2023" + "2024")
 
 
 async def test_cv_reimport_after_onboarding_completion_keeps_status_complete(

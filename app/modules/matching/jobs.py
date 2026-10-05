@@ -127,8 +127,7 @@ async def run_matching_for_new_profile(profile_id: uuid.UUID) -> None:
             report = await MatchingService(session).run_for_profile(profile)
             if report.profiles_skipped_no_cv_text or report.pairs_shortlisted:
                 return
-            # Nothing at all to evaluate (empty offer pool, or everything
-            # outside the candidate's mobility zone): no batch will ever
+            # Nothing at all to evaluate (empty offer pool): no batch will ever
             # follow, so tell them now rather than leave them wondering
             # (Steve's explicit call, see emails.py).
             await MatchingBatchService(session).send_first_matches_email(

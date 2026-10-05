@@ -3,10 +3,9 @@ source actually gives us.
 
 Kept in `core` rather than `offers` or `cv` because both need it: `offers`
 derives each ingested offer's région from its raw postal-code/breadcrumb
-data (see providers/adzuna.py and providers/france_travail.py), `cv` already
-has its own hand-picked `MobilityRegion` Literal (app/modules/cv/schemas.py)
-for the candidate's own preference dropdown, and `matching` compares the
-two (see matching/geo_filter.py). Putting it in `core` avoids `offers`
+data (see providers/adzuna.py and providers/france_travail.py), `cv` keeps
+its own `MobilityRegion` Literal (app/modules/cv/schemas.py, legacy
+preference field). Putting it in `core` avoids `offers`
 having to depend on `cv` (or vice versa) just for a list of 18 names --
 see the module dependency graph in app/modules/*/__init__.py.
 

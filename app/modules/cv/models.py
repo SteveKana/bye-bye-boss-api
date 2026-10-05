@@ -33,8 +33,9 @@ class CandidateProfile(BaseModel, table=True):
 
     One profile per user (`user_id` is unique). The onboarding wizard fills
     it in two passes: `POST /cv/upload` creates it as a draft from the raw
-    extraction, `PUT /cv/profile` applies the user's corrections, and
-    `PUT /cv/profile/preferences` completes it. Structured, list-shaped CV
+    extraction, `PUT /cv/profile` applies the user's corrections and completes it
+    (the former preferences step is gone; `PUT /cv/profile/preferences` only
+    remains for older clients). Structured, list-shaped CV
     content (experiences, formations...) has no fixed cardinality and is
     edited as a whole block by the client, so it is stored as JSON rather
     than normalized into child tables.

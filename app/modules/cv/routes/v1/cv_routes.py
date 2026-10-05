@@ -64,7 +64,10 @@ async def download_cv(session: DBSession, user: CurrentUser) -> FileResponse:
 
 @router.put("/profile", response_model=CandidateProfileRead)
 async def update_profile(
-    data: CandidateProfileUpdate, session: DBSession, user: CurrentUser
+    data: CandidateProfileUpdate,
+    session: DBSession,
+    user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> CandidateProfileRead:
     payload = data.model_dump(exclude_unset=True)
     # Nested list items come through as pydantic models via validation;
@@ -75,7 +78,16 @@ async def update_profile(
                 item.model_dump() if hasattr(item, "model_dump") else item
                 for item in payload[key]
             ]
-    profile = await CvService(session).apply_verification(user_id=user.id, data=payload)
+    profile, is_first_completion = await CvService(session).apply_verification(
+        user_id=user.id, data=payload
+    )
+    if is_first_completion:
+        # End of onboarding (the preferences step no longer exists): fire the
+        # one-off immediate matching run in the background, same reasoning
+        # as in update_preferences below.
+        background_tasks.add_task(
+            event_bus.emit, ProfileOnboardingCompleted(profile_id=profile.id)
+        )
     return CandidateProfileRead.model_validate(profile)
 
 

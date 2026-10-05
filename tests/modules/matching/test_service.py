@@ -237,52 +237,18 @@ async def test_run_for_profile_skips_when_no_raw_text() -> None:
     assert report.pairs_shortlisted == 0
 
 
-async def test_run_for_profile_excludes_offers_outside_mobility_region() -> None:
-    """End-to-end check that MatchingService actually applies geo_filter
-    before shortlisting -- geo_filter's own unit tests cover the filtering
-    logic itself, this just confirms the wiring."""
+async def test_run_for_profile_ignores_saved_mobility_restriction() -> None:
+    """Candidates are matched on their CV alone (Steve, 2026-10-05): a
+    "Région uniquement" mobility saved in an older profile no longer hides
+    offers from other régions -- the candidate filters on the Opportunités
+    page instead."""
     profile = await _make_complete_profile(
         mobility="Région uniquement", mobility_region="Bretagne"
     )
-    await _make_offer(region="Occitanie")
-
-    async with AsyncSessionLocal() as session:
-        report = await MatchingService(session).run_for_profile(profile)
-
-    assert report.pairs_shortlisted == 0
-
-
-async def test_run_for_profile_keeps_full_remote_offer_outside_mobility() -> None:
-    profile = await _make_complete_profile(
-        mobility="Région uniquement", mobility_region="Bretagne"
-    )
-    offer = await _make_offer(region="Occitanie", is_full_remote=True)
+    offer = await _make_offer(region="Occitanie")
 
     async with AsyncSessionLocal() as session:
         report = await MatchingService(session).run_for_profile(profile)
 
     assert report.pairs_shortlisted == 1
     assert await _match_for(profile, offer) is not None
-
-
-async def test_run_for_profile_prunes_match_that_falls_outside_mobility_zone() -> None:
-    """filter_by_geography only decides what's eligible for a *new* match, so
-    without this pruning a match computed before the candidate restricted
-    their mobility would linger on the dashboard forever -- nothing else ever
-    revisits a pair that fails the geo filter (see geo_filter.py)."""
-    profile = await _make_complete_profile(mobility=None)
-    offer = await _make_offer(region="Occitanie")
-
-    async with AsyncSessionLocal() as session:
-        await MatchingService(session).run_for_profile(profile)
-    assert await _match_for(profile, offer) is not None
-
-    async with AsyncSessionLocal() as session:
-        profile = await CandidateProfileRepository(session).update(
-            profile, {"mobility": "Région uniquement", "mobility_region": "Bretagne"}
-        )
-
-    async with AsyncSessionLocal() as session:
-        await MatchingService(session).run_for_profile(profile)
-
-    assert await _match_for(profile, offer) is None

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.core.models import utcnow
+from app.core.text import strip_nul
 from app.modules.cv import extraction, gateway
 from app.modules.cv.models import AvailabilityStatus, CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
@@ -61,7 +62,8 @@ class CvService:
         raw_text, kind = extraction.extract_text(
             filename=filename, content_type=content_type, data=data
         )
-        extracted = await gateway.structure_cv_text(raw_text)
+        raw_text = strip_nul(raw_text)
+        extracted = strip_nul(await gateway.structure_cv_text(raw_text))
 
         profile = await self.profiles.get_by_user(user_id)
         values = {field: extracted.get(field) or None for field in _FLAT_FIELDS}
@@ -146,14 +148,26 @@ class CvService:
 
     async def apply_verification(
         self, *, user_id: uuid.UUID, data: dict
-    ) -> CandidateProfile:
+    ) -> tuple[CandidateProfile, bool]:
+        """Saves the verified CV fields. Since 2026-10-05 (Steve) this is
+        also the END of onboarding -- the preferences step is gone -- so the
+        profile becomes "complete" here. Returns (profile,
+        is_first_completion): True only the very first time this account
+        ever completes onboarding (tracked by `onboarding_matched_at`, set
+        once and never cleared, so re-importing a CV can't be used to force
+        repeat LLM-costed matching runs). The route uses it to fire the
+        one-off immediate matching run."""
         profile = await self.get_for_user(user_id)
+        is_first_completion = profile.onboarding_matched_at is None
         updates = {k: v for k, v in data.items() if v is not None}
         # Marks that this profile has been through the verification step at
         # least once -- see the field's docstring in models.py for why this
         # is a plain "last saved" timestamp rather than something cleared on
         # re-import.
         updates["verification_completed_at"] = utcnow()
+        updates["status"] = ProfileStatus.complete.value
+        if is_first_completion:
+            updates["onboarding_matched_at"] = utcnow()
         # Only one of availability_date / notice_period_months is ever
         # meaningful, matching whichever status was just set — clear the
         # other explicitly, since the generic filter above drops None values
@@ -171,7 +185,7 @@ class CvService:
             updates["notice_period_months"] = None
         profile = await self.profiles.update(profile, updates)
         await self.session.commit()
-        return profile
+        return profile, is_first_completion
 
     async def apply_preferences(
         self, *, user_id: uuid.UUID, data: PreferencesUpdate

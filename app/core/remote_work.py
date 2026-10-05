@@ -1,10 +1,9 @@
 """Best-effort detection of "full remote" postings from free text.
 
 Neither France Travail nor Adzuna exposes a structured remote-work field
-(see offers/models.py's `remote_policy` docstring) -- so without this, a
-candidate who restricted their search to a région or a city (see
-matching/geo_filter.py) would never see a genuinely fully-remote offer just
-because it happens to be posted from a distant office.
+(see offers/models.py's `remote_policy` docstring) -- so without this, the
+"Full remote" filter on the Opportunités page would miss genuinely
+fully-remote offers.
 
 This is a keyword heuristic, not a guarantee, and it can fail both ways:
 an offer that describes full-remote work in wording not covered here is a
