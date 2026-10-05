@@ -212,3 +212,34 @@ async def test_sync_refreshes_region_and_full_remote_flag_on_an_unchanged_offer(
         offers = await JobOfferRepository(session).list()
     assert offers[0].region == "Corse"
     assert offers[0].is_full_remote is True
+
+
+def test_offer_read_exposes_is_hybrid_from_the_description() -> None:
+    import uuid
+    from datetime import UTC, datetime
+
+    from app.modules.offers import JobOfferRead
+
+    def _read(description: str, *, full_remote: bool = False) -> JobOfferRead:
+        return JobOfferRead(
+            id=uuid.uuid4(),
+            source="test",
+            title="Chef de projet",
+            company_name=None,
+            description=description,
+            location=None,
+            contract_type=None,
+            remote_policy=None,
+            salary_min=None,
+            salary_max=None,
+            salary_label=None,
+            daily_rate_min=None,
+            daily_rate_max=None,
+            url="https://example.com/1",
+            published_at=datetime.now(UTC),
+            is_full_remote=full_remote,
+        )
+
+    assert _read("3 jours sur site, 2 jours de télétravail").is_hybrid is True
+    assert _read("Poste basé à Paris").is_hybrid is False
+    assert _read("2 jours de télétravail", full_remote=True).is_hybrid is False
