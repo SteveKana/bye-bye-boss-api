@@ -4,7 +4,7 @@
 run through OpenAI's Batch API (-50% cost, results within 24h), so it is
 driven by three jobs instead of one:
 
-  * `sync_matches`, once a day at 18:00 Paris time: for every complete
+  * `sync_matches`, once a day at 08:00 Paris time: for every complete
     candidate, picks the offers ingested since the last run (see
     MatchingService), then submits what is waiting;
   * `submit_matching_batches`, every 15 minutes: submits whatever is waiting
@@ -35,7 +35,7 @@ logger = get_logger("matching.worker")
 
 
 @scheduled(
-    cron="0 18 * * *",  # 18:00, every day
+    cron="0 8 * * *",  # 08:00 Paris time, every day
     timezone="Europe/Paris",
     id="matching_sync",
 )
@@ -107,7 +107,7 @@ async def run_matching_for_new_profile(profile_id: uuid.UUID) -> None:
     onboarding (see that event's docstring for why this can't be
     re-triggered by re-uploading a CV or resaving preferences later). Lets
     a brand-new candidate see real offers on their dashboard right away
-    (unscored, "analyse en cours") instead of waiting for the next 18:00
+    (unscored, "analyse en cours") instead of waiting for the next 08:00
     sync -- the cheap pre-filter and the full analysis follow through the
     Batch API, and the "first opportunities ready" email goes out when they
     are done (see batch_service.py).

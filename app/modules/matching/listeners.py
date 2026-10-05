@@ -17,7 +17,7 @@ async def run_matching_for_newly_onboarded_profile(
     event: ProfileOnboardingCompleted,
 ) -> None:
     """A candidate's first onboarding completion should surface real
-    opportunities right away rather than waiting for the 18:00 sync -- see
+    opportunities right away rather than waiting for the 08:00 sync -- see
     run_matching_for_new_profile's own docstring, and
     ProfileOnboardingCompleted's, for why this only ever fires once per
     account.
