@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">
+  Nouveau message de contact
+</p>
+
+<p style="margin:0 0 4px"><strong>De :</strong> {{ sender_name }}</p>
+<p style="margin:0 0 4px"><strong>E-mail :</strong> <a href="mailto:{{ email }}">{{ email }}</a></p>
+<p style="margin:0 0 4px"><strong>Sujet :</strong> {{ topic }}</p>
+<p style="margin:0 0 16px"><strong>Langue :</strong> {{ visitor_locale }}</p>
+
+<p style="margin:0 0 20px;padding:14px 16px;background:#EEE9FF;border-radius:10px;white-space:pre-wrap">{{ message }}</p>
+
+<p style="margin:0">
+  <a href="mailto:{{ email }}" style="color:#5B3FE8;font-weight:700">Répondre à {{ sender_name }}</a>
+</p>
+{% endblock %}

@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     SMTP_TIMEOUT_SECONDS: int = 15
     EMAIL_FROM: str = "contact@byebyeboss.fr"
     EMAIL_FROM_NAME: str = "Bye Bye Boss"
+    # Where the public contact form (/contact page) delivers its messages.
+    CONTACT_RECIPIENT_EMAIL: str = "stevykana21@gmail.com"
     MAIL_QUEUE_INTERVAL_MINUTES: int = 1
     MAIL_QUEUE_BATCH_SIZE: int = 20
     MAIL_MAX_ATTEMPTS: int = 5
