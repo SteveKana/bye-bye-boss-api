@@ -34,8 +34,8 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
         self, candidate_profile_id: uuid.UUID, job_offer_ids: set[uuid.UUID]
     ) -> Sequence[CandidateMatch]:
         """Existing matches for this profile among a given set of offers --
-        used by MatchingService to find matches that need pruning (see
-        geo_filter.py) without one query per offer."""
+        used by MatchingService to find matches that need pruning
+        without one query per offer."""
         if not job_offer_ids:
             return []
         stmt = self._base_select().where(

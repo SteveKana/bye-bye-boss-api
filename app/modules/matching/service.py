@@ -29,7 +29,6 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.models import utcnow
 from app.modules.cv import CandidateProfile, CandidateProfileRepository, ProfileStatus
-from app.modules.matching.geo_filter import filter_by_geography
 from app.modules.matching.models import (
     VISIBLE_STATUSES,
     CandidateMatch,
@@ -146,30 +145,16 @@ class MatchingService:
         pool = await self.offers.list_recent(
             since=now - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
         )
-        # Enforce the candidate's mobility preference (see geo_filter's
-        # docstring) before ranking -- an out-of-zone offer should never
-        # occupy one of the limited shortlist slots in the first place.
-        eligible = filter_by_geography(profile, pool)
+        # No geographic restriction: since 2026-10-05 (Steve) a candidate is
+        # matched on their CV alone, and narrows by city/region themselves
+        # with the filters on the Opportunités page. A mobility value saved
+        # in an older profile is ignored.
+        eligible = list(pool)
 
         existing = {
             match.job_offer_id: match
             for match in await self.matches.list_all_for_profile(profile.id)
         }
-
-        # A match already on file for an offer that's now excluded (the
-        # offer's région/full-remote status was only just backfilled, or the
-        # candidate only just restricted their mobility) must not linger:
-        # the dashboard only ever reads CandidateMatch rows this table
-        # already has (see its docstring) -- nothing else would ever revisit
-        # or hide it otherwise, since a pair that fails the geo filter is
-        # simply never selected below.
-        excluded_offer_ids = {offer.id for offer in pool} - {
-            offer.id for offer in eligible
-        }
-        for offer_id in excluded_offer_ids:
-            stale = existing.pop(offer_id, None)
-            if stale is not None:
-                await self.matches.delete(stale)
 
         # First run = nothing on file yet for this profile; it looks at the
         # whole pool. A daily run only looks at offers ingested recently --

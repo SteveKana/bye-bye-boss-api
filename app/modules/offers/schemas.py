@@ -25,3 +25,4 @@ class JobOfferRead(BaseModel):
     url: str
     published_at: datetime | None
     is_full_remote: bool
+    region: str | None = None

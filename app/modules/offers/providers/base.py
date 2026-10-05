@@ -41,9 +41,9 @@ class NormalizedOffer:
     published_at: datetime | None = None
     # One of app.core.regions.FRENCH_REGIONS, or None when the source gave
     # us nothing (or nothing recognizable) to derive one from -- see each
-    # provider's own _normalize for how it's worked out. Consumed by
-    # matching/geo_filter.py: an offer with no région is excluded outright
-    # whenever the candidate has restricted their search geographically.
+    # provider's own _normalize for how it's worked out. Used by
+    # the front's "Région" filter: an offer with no région is hidden whenever
+    # a région is chosen.
     region: str | None = None
     # Best-effort keyword detection (see core/remote_work.py) -- a
     # fully-remote offer always bypasses the geographic filter regardless
