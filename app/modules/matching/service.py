@@ -28,9 +28,11 @@ from app.core import embeddings
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.models import utcnow
+from app.core.seniority import is_excluded_for_candidate
 from app.modules.cv import CandidateProfile, CandidateProfileRepository, ProfileStatus
 from app.modules.matching.models import (
     VISIBLE_STATUSES,
+    ApplicationStatus,
     CandidateMatch,
     MatchStatus,
 )
@@ -52,6 +54,10 @@ class MatchingRunReport:
     profiles_processed: int = 0
     pairs_shortlisted: int = 0
     profiles_skipped_no_cv_text: int = 0
+    # Offers kept away from a candidate by the seniority rules (Stage /
+    # Alternance for an experienced profile, Junior from 3 years) -- each one
+    # is a pre-filter call (and possibly a full analysis) not paid for.
+    seniority_excluded: int = 0
 
 
 def _as_utc(moment: datetime) -> datetime:
@@ -106,6 +112,7 @@ class MatchingService:
             "matching_sync_complete",
             profiles=report.profiles_processed,
             shortlisted=report.pairs_shortlisted,
+            seniority_excluded=report.seniority_excluded,
         )
         return report
 
@@ -151,6 +158,22 @@ class MatchingService:
         # in an older profile is ignored.
         eligible = list(pool)
 
+        # Seniority (Steve, 2026-10-05): an experienced candidate is never
+        # offered a Stage/Alternance, nor a Junior post from 3 years of
+        # experience. Decided here, before any LLM call. An excluded pair is
+        # recorded as `filtered_out` (hidden, never evaluated or billed), and
+        # a match already on file for one is hidden the same way -- unless the
+        # candidate already acted on it.
+        excluded_ids = {
+            offer.id
+            for offer in eligible
+            if is_excluded_for_candidate(
+                total_experience=profile.total_experience,
+                experiences=profile.experiences,
+                contract_type=offer.contract_type,
+                title=offer.title,
+            )
+        }
         existing = {
             match.job_offer_id: match
             for match in await self.matches.list_all_for_profile(profile.id)
@@ -176,10 +199,30 @@ class MatchingService:
         # never pre-filtered or analysed twice -- except after a CV change,
         # where the stored result no longer reflects the new CV: those rows
         # go back through the pipeline, keeping their application status.
+        for offer_id in excluded_ids:
+            stale = existing.get(offer_id)
+            if (
+                stale is not None
+                and stale.status != MatchStatus.filtered_out.value
+                and stale.application_status == ApplicationStatus.not_applied.value
+            ):
+                await self.matches.update(
+                    stale, {"status": MatchStatus.filtered_out.value, "batch_id": None}
+                )
+
         to_shortlist: list[JobOffer] = []
         for offer in candidates:
             if offer.id not in existing or cv_changed:
-                to_shortlist.append(offer)
+                if offer.id in excluded_ids:
+                    await self._record(
+                        profile.id,
+                        offer,
+                        MatchStatus.filtered_out,
+                        existing.get(offer.id),
+                    )
+                    report.seniority_excluded += 1
+                else:
+                    to_shortlist.append(offer)
         shortlisted = shortlist_offers(
             profile, to_shortlist, limit=settings.MATCHING_PREFILTER_POOL_SIZE
         )

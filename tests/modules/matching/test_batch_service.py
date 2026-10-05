@@ -11,6 +11,7 @@ from app.core.exceptions import AppError
 from app.core.models import utcnow
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
+from app.modules.cv.repository import CandidateProfileRepository
 from app.modules.mailer.models import EmailMessage
 from app.modules.matching import batch_gateway, batch_service
 from app.modules.matching.batch_gateway import BatchInfo
@@ -441,3 +442,60 @@ def _no_real_events(monkeypatch):
         return None
 
     monkeypatch.setattr(batch_service.event_bus, "emit", _noop)
+
+
+async def test_career_score_is_lowered_when_the_offer_asks_far_more_years(
+    monkeypatch,
+) -> None:
+    """Seniority rule (Steve, 2026-10-05): 7 years of experience against an
+    offer asking 15 -> 5 years beyond the +3 window -> -40 (capped); the model's
+    own score stays readable in the analysis."""
+
+    async def _emit(event):
+        return None
+
+    monkeypatch.setattr(batch_service.event_bus, "emit", _emit)
+    user, profile = await _profile_with_user()
+    async with AsyncSessionLocal() as session:
+        await CandidateProfileRepository(session).update(
+            profile, {"total_experience": "7 ans"}
+        )
+        await session.commit()
+    offer = await _make_offer(description="Nous exigeons 15 ans d'expérience minimum.")
+    row = await _add_match(profile, offer, status=MatchStatus.pending.value)
+    fake = await _submit_then(monkeypatch)
+    fake.results = {str(row.id): _ANALYSIS_JSON}
+
+    async with AsyncSessionLocal() as session:
+        await MatchingBatchService(session).poll_batches()
+        await session.commit()
+
+    scored = await _reload(row)
+    assert scored.career_score == 40
+    assert scored.analysis["career_score_model"] == 80
+    assert scored.analysis["seniority_penalty"] == 40
+    # ATS scores are untouched.
+    assert (scored.ats_score, scored.ats_potential) == (78, 90)
+
+
+async def test_career_score_is_kept_when_the_offer_states_no_years(
+    monkeypatch,
+) -> None:
+    async def _emit(event):
+        return None
+
+    monkeypatch.setattr(batch_service.event_bus, "emit", _emit)
+    _, profile = await _profile_with_user()
+    row = await _add_match(
+        profile, await _make_offer(), status=MatchStatus.pending.value
+    )
+    fake = await _submit_then(monkeypatch)
+    fake.results = {str(row.id): _ANALYSIS_JSON}
+
+    async with AsyncSessionLocal() as session:
+        await MatchingBatchService(session).poll_batches()
+        await session.commit()
+
+    scored = await _reload(row)
+    assert scored.career_score == 80
+    assert "seniority_penalty" not in scored.analysis
