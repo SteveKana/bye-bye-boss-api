@@ -535,3 +535,30 @@ async def test_change_password_rejects_google_only_account_cleanly(
         LOGIN, json={"email": "googlechangepw@b.com", "password": "brandnewpass1"}
     )
     assert login.status_code == 200
+
+
+async def test_google_login_confirms_unverified_account_and_drops_its_password(
+    client: AsyncClient, monkeypatch
+) -> None:
+    # Anyone can sign up with someone else's address (no confirmation is
+    # needed to get in). When the real owner later signs in with Google, the
+    # account becomes theirs only: confirmed, and the password chosen by
+    # whoever created it no longer works.
+    await client.post(
+        REGISTER, json={"email": "victim@b.com", "password": "attackerpass1"}
+    )
+
+    _mock_google(monkeypatch, _google_claims("victim@b.com"))
+    r = await client.post(GOOGLE, json={"id_token": "fake-token"})
+    assert r.status_code == 200
+    assert r.json()["is_new_user"] is False
+
+    me = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {r.json()['access_token']}"},
+    )
+    assert me.json()["is_verified"] is True
+    login = await client.post(
+        LOGIN, json={"email": "victim@b.com", "password": "attackerpass1"}
+    )
+    assert login.status_code == 401

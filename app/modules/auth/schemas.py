@@ -118,3 +118,4 @@ class PublicUser(BaseSchema):
     email: EmailStr
     first_name: str | None
     last_name: str | None
+    is_verified: bool

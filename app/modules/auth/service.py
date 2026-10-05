@@ -151,6 +151,24 @@ class AuthService:
         if user is not None and not user.is_active:
             raise UnauthorizedError("Account is disabled.")
 
+        # Google just proved this address belongs to the person signing in.
+        # If an account with it already exists but was never confirmed, it
+        # may have been created by someone else typing in this address (no
+        # confirmation is required to sign up): confirm it now AND drop the
+        # password that whoever created it chose, so only this Google
+        # identity can open the account. A confirmed account keeps its
+        # password: its owner proved the address through the email link.
+        if user is not None and not user.is_verified:
+            user.is_verified = True
+            if user.password_hash is not None:
+                user.password_hash = None
+                logger.warning(
+                    "unverified_account_password_removed_on_google_login",
+                    user_id=str(user.id),
+                )
+            self.session.add(user)
+            await self.session.commit()
+
         is_new_user = user is None
         if user is None:
             user = await self.users.create(
