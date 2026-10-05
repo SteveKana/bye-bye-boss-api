@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.logging import get_logger
 from app.core.models import utcnow
+from app.core.monitoring_events import report_incident
 from app.modules.auth import AuthGateway, PublicUser
 from app.modules.cv import CandidateProfileRepository, ProfileStatus
 from app.modules.matching import CandidateMatchRepository
@@ -217,6 +218,21 @@ class DailyBriefService:
             if enabled:
                 report.channel_failures[failure] = (
                     report.channel_failures.get(failure, 0) + 1
+                )
+                label = {"email": "e-mail", "discord": "Discord"}.get(
+                    failure, "WhatsApp"
+                )
+                await report_incident(
+                    kind="alert",
+                    fingerprint=f"alert:{failure}",
+                    title=f"Envoi {label} refusé",
+                    context=f"Alertes · {label}",
+                    where="Alerte quotidienne",
+                    technical_cause=(
+                        f"Le canal {label} n'a pas confirmé l'envoi "
+                        "(détail dans les journaux du serveur)."
+                    ),
+                    user_id=user_id,
                 )
 
         now = utcnow()

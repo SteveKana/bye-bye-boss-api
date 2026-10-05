@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -52,6 +53,47 @@ class _JobSpec:
 
 _registry: list[_JobSpec] = []
 scheduler = AsyncIOScheduler(timezone="UTC")
+
+
+@dataclass
+class JobRun:
+    """What the admin dashboard shows for a job: its last pass since the
+    process started (kept in memory only -- a restart forgets it)."""
+
+    last_run: datetime
+    status: str  # "ok" | "error"
+    duration_ms: int
+
+
+job_runs: dict[str, JobRun] = {}
+
+
+def _instrument(spec: _JobSpec) -> Job:
+    async def run() -> None:
+        started = datetime.now(UTC)
+        status = "ok"
+        try:
+            await spec.func()
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            job_runs[spec.id] = JobRun(
+                last_run=started,
+                status=status,
+                duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
+            )
+
+    return run
+
+
+def registered_jobs() -> list[str]:
+    return [spec.id for spec in _registry]
+
+
+def next_run_time(job_id: str) -> datetime | None:
+    job = scheduler.get_job(job_id) if scheduler.running else None
+    return job.next_run_time if job else None
 
 
 def scheduled(
@@ -83,7 +125,9 @@ def start_scheduler() -> None:
     if not settings.SCHEDULER_ENABLED or not _registry:
         return
     for spec in _registry:
-        scheduler.add_job(spec.func, spec.trigger, id=spec.id, replace_existing=True)
+        scheduler.add_job(
+            _instrument(spec), spec.trigger, id=spec.id, replace_existing=True
+        )
     scheduler.start()
     logger.info("scheduler_started", jobs=[s.id for s in _registry])
 

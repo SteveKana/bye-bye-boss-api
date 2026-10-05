@@ -1,0 +1,5 @@
+{{ body_text }}
+
+—
+Vous recevez ce message car vous avez un compte {{ brand }}.
+Ne plus recevoir les annonces : {{ unsubscribe_url }}

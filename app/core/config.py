@@ -116,6 +116,21 @@ class Settings(BaseSettings):
     EMAIL_FROM_NAME: str = "Bye Bye Boss"
     # Where the public contact form (/contact page) delivers its messages.
     CONTACT_RECIPIENT_EMAIL: str = "stevykana21@gmail.com"
+    # -- Monitoring (admin dashboard) ----------------------------------------
+    # OpenAI list prices in USD per million tokens, [input, output], by model
+    # name -- used ONLY to turn the recorded token counts into an estimated
+    # cost for the dashboard. Check them against OpenAI's pricing page and
+    # override in .env (JSON) when they change; a model missing here is shown
+    # without a cost. The Batch API halves every price (MONITORING_BATCH_DISCOUNT).
+    MONITORING_AI_PRICES_USD_PER_M: dict[str, list[float]] = {
+        "gpt-5": [1.25, 10.0],
+        "gpt-5-mini": [0.25, 2.0],
+    }
+    MONITORING_BATCH_DISCOUNT: float = 0.5
+    MONITORING_USD_TO_EUR: float = 0.92
+    MONITORING_PAGE_VIEW_RETENTION_DAYS: int = 90
+    MONITORING_UNSUBSCRIBE_TOKEN_DAYS: int = 730
+
     MAIL_QUEUE_INTERVAL_MINUTES: int = 1
     MAIL_QUEUE_BATCH_SIZE: int = 20
     MAIL_MAX_ATTEMPTS: int = 5

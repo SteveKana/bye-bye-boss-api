@@ -30,6 +30,7 @@ from app.core.events import event_bus
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.core.models import utcnow
+from app.core.monitoring_events import record_ai_usage, report_incident
 from app.core.seniority import (
     candidate_years,
     career_score_penalty,
@@ -211,6 +212,19 @@ class MatchingBatchService:
                 except AppError:
                     continue  # retry the download on the next poll
             rows = await self.matches.list_in_batch(batch.id)
+            requests_billed = getattr(results, "requests", 0)
+            if requests_billed:
+                await record_ai_usage(
+                    stage=batch.stage,
+                    model=(
+                        get_settings().MATCHING_PREFILTER_MODEL
+                        if batch.stage == STAGE_PREFILTER
+                        else get_settings().MATCHING_OPENAI_MODEL
+                    ),
+                    requests=requests_billed,
+                    input_tokens=getattr(results, "input_tokens", 0),
+                    output_tokens=getattr(results, "output_tokens", 0),
+                )
 
             if batch.stage == STAGE_PREFILTER:
                 await self._apply_prefilter(rows, results, report)
@@ -226,6 +240,14 @@ class MatchingBatchService:
                 },
             )
             if failed:
+                await report_incident(
+                    kind="other",
+                    fingerprint=f"matching:batch_failed:{batch.stage}",
+                    title="Lot OpenAI en échec",
+                    context=f"Matching · {batch.stage}",
+                    where="OpenAI Batch API",
+                    technical_cause=f"Statut OpenAI : {info.status}",
+                )
                 report.batches_failed += 1
             else:
                 report.batches_completed += 1

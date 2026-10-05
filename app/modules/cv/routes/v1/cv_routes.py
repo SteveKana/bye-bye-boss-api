@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.dependencies import DBSession
 from app.core.events import event_bus
 from app.core.exceptions import BadRequestError
+from app.core.monitoring_events import report_incident
 from app.core.ratelimit import RateLimiter
 from app.modules.auth import CurrentUser
 from app.modules.cv.events import ProfileOnboardingCompleted
@@ -39,12 +40,26 @@ async def upload_cv(
             f"Le fichier dépasse la taille maximale de {settings.CV_MAX_UPLOAD_MB} Mo.",
             code="file_too_large",
         )
-    profile = await CvService(session).import_cv(
-        user_id=user.id,
-        filename=file.filename or "cv",
-        content_type=file.content_type,
-        data=data,
-    )
+    try:
+        profile = await CvService(session).import_cv(
+            user_id=user.id,
+            filename=file.filename or "cv",
+            content_type=file.content_type,
+            data=data,
+        )
+    except Exception as exc:
+        code = getattr(exc, "code", None) or type(exc).__name__
+        await report_incident(
+            kind="cv",
+            fingerprint=f"cv:import:{code}",
+            title="Import du CV impossible",
+            context=f"Import CV · {code}",
+            where=f"Fichier {file.content_type or 'inconnu'} de {len(data) // 1024} Ko",
+            technical_cause=str(exc)[:500],
+            user_message=getattr(exc, "message", None),
+            user_id=user.id,
+        )
+        raise
     return CandidateProfileRead.model_validate(profile)
 
 
