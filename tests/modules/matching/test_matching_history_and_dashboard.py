@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient
 from sqlmodel import select
@@ -161,29 +162,58 @@ async def test_dashboard_shows_unscored_matches_after_scored_ones(
     assert titles == ["scored", "pending-high"]
 
 
-async def test_dashboard_keeps_a_shown_offer_for_24h_then_drops_it(
+async def test_dashboard_keeps_todays_offers_and_drops_yesterdays(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
+    """The dashboard is "the offers of the day": one first shown earlier today
+    (Paris time) stays, one first shown yesterday is gone -- even if that was
+    less than 24 hours ago -- and one never shown is eligible."""
+    zone = ZoneInfo(get_settings().DASHBOARD_TIMEZONE)
+    midnight = (
+        utcnow().astimezone(zone).replace(hour=0, minute=0, second=0, microsecond=0)
+    )
     profile = await _profile()
-    recent = await _match(profile, "shown-1h-ago")
-    expired = await _match(profile, "shown-25h-ago")
-    never = await _match(profile, "never-shown")
+    today = await _match(profile, "shown-today")
+    yesterday = await _match(profile, "shown-yesterday-evening")
+    await _match(profile, "never-shown")
     async with AsyncSessionLocal() as session:
         repo = CandidateMatchRepository(session)
         await repo.update(
-            await repo.get(recent.id),
-            {"dashboard_first_shown_at": utcnow() - timedelta(hours=1)},
+            await repo.get(today.id),
+            {
+                "dashboard_first_shown_at": (
+                    midnight + timedelta(minutes=1)
+                ).astimezone(UTC)
+            },
         )
         await repo.update(
-            await repo.get(expired.id),
-            {"dashboard_first_shown_at": utcnow() - timedelta(hours=25)},
+            await repo.get(yesterday.id),
+            {
+                "dashboard_first_shown_at": (
+                    midnight - timedelta(minutes=1)
+                ).astimezone(UTC)
+            },
         )
         await session.commit()
 
     titles = await _titles(client, auth_headers, DASHBOARD)
 
-    assert sorted(titles) == ["never-shown", "shown-1h-ago"]
-    assert never.id  # (kept for readability above)
+    assert sorted(titles) == ["never-shown", "shown-today"]
+
+
+def test_start_of_today_is_paris_midnight_in_utc() -> None:
+    from app.modules.matching.routes.v1.matching_routes import (  # noqa: PLC0415
+        _start_of_today,
+    )
+
+    # 5 Oct 2026, 10:00 Paris (UTC+2 in summer) -> midnight Paris = 4 Oct 22:00 UTC
+    assert _start_of_today(datetime(2026, 10, 5, 8, 0, tzinfo=UTC)) == datetime(
+        2026, 10, 4, 22, 0, tzinfo=UTC
+    )
+    # 31 Oct 2026, 23:30 UTC = 1 Nov 00:30 Paris (UTC+1 after the clock change)
+    assert _start_of_today(datetime(2026, 10, 31, 23, 30, tzinfo=UTC)) == datetime(
+        2026, 10, 31, 23, 0, tzinfo=UTC
+    )
 
 
 async def test_dashboard_stamps_first_exposure_but_not_unreturned_offers(

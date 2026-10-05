@@ -22,6 +22,22 @@ def _envelope(code: str, message: str, details: Any = None) -> dict:
     return {"error": error}
 
 
+def _json_safe_errors(errors: list[dict]) -> list[dict]:
+    """Pydantic puts the raw exception in ``ctx`` for custom/email validators,
+    which JSON cannot serialize: keep only plain values (the rest as text)."""
+    safe = []
+    for err in errors:
+        err = dict(err)
+        ctx = err.get("ctx")
+        if ctx:
+            err["ctx"] = {
+                k: v if isinstance(v, str | int | float | bool | None) else str(v)
+                for k, v in ctx.items()
+            }
+        safe.append(err)
+    return safe
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
@@ -35,7 +51,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=422,
-            content=_envelope("validation_error", "Validation failed.", exc.errors()),
+            content=_envelope(
+                "validation_error",
+                "Validation failed.",
+                _json_safe_errors(exc.errors()),
+            ),
         )
 
     @app.exception_handler(StarletteHTTPException)

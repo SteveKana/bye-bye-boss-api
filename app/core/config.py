@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     SMTP_TIMEOUT_SECONDS: int = 15
     EMAIL_FROM: str = "contact@byebyeboss.fr"
     EMAIL_FROM_NAME: str = "Bye Bye Boss"
+    # Where the public contact form (/contact page) delivers its messages.
+    CONTACT_RECIPIENT_EMAIL: str = "stevykana21@gmail.com"
     MAIL_QUEUE_INTERVAL_MINUTES: int = 1
     MAIL_QUEUE_BATCH_SIZE: int = 20
     MAIL_MAX_ATTEMPTS: int = 5
@@ -239,11 +241,11 @@ class Settings(BaseSettings):
     MATCHING_MAX_ATTEMPTS: int = 3
     # /matching/top (the /opportunites history) returns this many most
     # recent offers; the dashboard shows DASHBOARD_TOP_COUNT of those that
-    # haven't been on it for more than DASHBOARD_WINDOW_HOURS since first
-    # shown.
+    # are new to the candidate or were first shown on it TODAY (calendar day
+    # in DASHBOARD_TIMEZONE) -- from the next day on they live in /opportunites.
     MATCHING_HISTORY_LIMIT: int = 25
     DASHBOARD_TOP_COUNT: int = 5
-    DASHBOARD_WINDOW_HOURS: int = 24
+    DASHBOARD_TIMEZONE: str = "Europe/Paris"
     # Minimum final ATS score for a scored match to appear on the dashboard
     # (the /opportunites ATS filter defaults to the same value front-side).
     DASHBOARD_MIN_ATS: int = 75

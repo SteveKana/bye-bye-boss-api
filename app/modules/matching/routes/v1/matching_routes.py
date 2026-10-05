@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
@@ -18,6 +19,14 @@ from app.modules.matching.skill_labels_service import SkillLabelService
 from app.modules.offers import JobOffer, JobOfferRead, JobOfferRepository
 
 router = APIRouter(prefix="/matching", tags=["matching"])
+
+
+def _start_of_today(now: datetime) -> datetime:
+    """Midnight of the current day in DASHBOARD_TIMEZONE, as an aware UTC
+    datetime -- what "shown today" is compared against."""
+    zone = ZoneInfo(get_settings().DASHBOARD_TIMEZONE)
+    local = now.astimezone(zone)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
 
 
 def _to_read(
@@ -119,14 +128,15 @@ async def top_matches(
 async def dashboard_matches(
     session: DBSession, user: CurrentUser
 ) -> list[CandidateMatchRead]:
-    """The dashboard's "Top 5 des opportunités" (Steve, 2026-10-04): only
-    offers the candidate hasn't been shown on the dashboard before -- or was
-    first shown within the last DASHBOARD_WINDOW_HOURS, so the day's list
-    survives a page refresh -- never one they already applied to, and, once
-    analysed, only with a final ATS score >= DASHBOARD_MIN_ATS. Best first
-    (career x ATS potential), offers still being analysed after the scored
-    ones. Returning an offer for the first time stamps it, which starts its
-    window.
+    """The dashboard's "Top 5 des opportunités" (Steve, 2026-10-05): the
+    offers of the day only -- ones the candidate hasn't been shown on the
+    dashboard before, or was first shown TODAY (calendar day, Paris time),
+    so the day's list survives a page refresh. Once the day is over an offer
+    drops off the dashboard and stays available in /opportunites. Never one
+    they already applied to, and, once analysed, only with a final ATS score
+    >= DASHBOARD_MIN_ATS. Best first (career x ATS potential), offers still
+    being analysed after the scored ones. Returning an offer for the first
+    time stamps it.
 
     Registered before "/{match_id}" so "dashboard" is never swallowed by
     that path param.
@@ -137,7 +147,7 @@ async def dashboard_matches(
     repo = CandidateMatchRepository(session)
     candidates = await repo.list_dashboard_candidates(
         profile.id,
-        shown_since=now - timedelta(hours=settings.DASHBOARD_WINDOW_HOURS),
+        shown_since=_start_of_today(now),
         min_ats=settings.DASHBOARD_MIN_ATS,
     )
 
