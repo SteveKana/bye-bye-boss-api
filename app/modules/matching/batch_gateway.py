@@ -129,10 +129,20 @@ def extract_output_text(body: dict[str, Any]) -> str | None:
     return "".join(parts) or None
 
 
-def parse_results(jsonl: str) -> dict[str, str | None]:
+class BatchResults(dict[str, "str | None"]):
+    """custom_id -> output text, plus the tokens the whole batch consumed
+    (`input_tokens`, `output_tokens`, `requests`) -- read by the admin cost
+    dashboard. A plain dict is fine wherever the usage is not needed."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    requests: int = 0
+
+
+def parse_results(jsonl: str) -> BatchResults:
     """custom_id -> model output text; None for a request that errored or
     produced no text (the caller retries those)."""
-    results: dict[str, str | None] = {}
+    results = BatchResults()
     for line in jsonl.splitlines():
         line = line.strip()
         if not line:
@@ -149,7 +159,12 @@ def parse_results(jsonl: str) -> dict[str, str | None]:
         if entry.get("error") or response.get("status_code") != 200:
             results[custom_id] = None
             continue
-        results[custom_id] = extract_output_text(response.get("body") or {})
+        body = response.get("body") or {}
+        results[custom_id] = extract_output_text(body)
+        usage = body.get("usage") or {}
+        results.input_tokens += int(usage.get("input_tokens") or 0)
+        results.output_tokens += int(usage.get("output_tokens") or 0)
+        results.requests += 1
     return results
 
 
@@ -163,5 +178,5 @@ def _download_sync(file_id: str) -> str:
     return content.text
 
 
-async def download_results(file_id: str) -> dict[str, str | None]:
+async def download_results(file_id: str) -> BatchResults:
     return parse_results(await asyncio.to_thread(_download_sync, file_id))

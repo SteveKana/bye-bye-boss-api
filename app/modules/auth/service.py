@@ -82,6 +82,10 @@ class AuthService:
         )
         return self.issue_tokens(user)
 
+    async def queue_verification(self, user: User, locale: str = "fr") -> None:
+        await self._queue_verification_email(user, locale)
+        await self.session.commit()
+
     async def _queue_verification_email(self, user: User, locale: str) -> None:
         token = create_verify_token(str(user.id))
         mail = build_verification_email(locale, token)

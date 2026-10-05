@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">Bonjour{% if first_name %} {{ first_name }}{% endif %},</p>
+<p style="margin:0 0 20px">
+{% if stage == "no_cv" %}
+  Votre compte <strong>{{ brand }}</strong> est prêt, mais nous n'avons pas encore votre CV.
+  Importez-le pour recevoir vos premières opportunités.
+{% else %}
+  Des opportunités correspondant à votre CV sont disponibles sur <strong>{{ brand }}</strong>.
+{% endif %}
+</p>
+<p style="margin:0 0 8px">
+  <a href="{{ link }}" style="display:inline-block;background:#5B3FE8;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px">
+    {% if stage == "no_cv" %}Importer mon CV{% else %}Voir mes opportunités{% endif %}
+  </a>
+</p>
+{% endblock %}
+
+{% block footer %}
+{{ brand }} — <a href="{{ unsubscribe_url }}" style="color:#9CA3AF">Ne plus recevoir ces messages</a>
+{% endblock %}
