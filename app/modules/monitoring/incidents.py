@@ -14,7 +14,6 @@ from app.modules.monitoring import queries
 from app.modules.monitoring.common import (
     as_utc,
     last_days,
-    mask_email,
     now_utc,
     paris_day,
     parse_uuid,
@@ -163,7 +162,7 @@ class IncidentService:
             result = await self.session.execute(
                 sa.select(queries.users.c.email).where(queries.users.c.id.in_(ids))
             )
-            emails = [mask_email(row[0]) for row in result.all()]
+            emails = [row[0] for row in result.all()]
         item = to_item(incident)
         return IncidentDetail(
             **item.model_dump(),

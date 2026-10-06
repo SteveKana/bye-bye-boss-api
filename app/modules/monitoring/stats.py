@@ -16,7 +16,6 @@ from app.modules.monitoring import queries as q
 from app.modules.monitoring.common import (
     as_utc,
     last_days,
-    mask_email,
     now_utc,
     paris_day,
     start_of_today_paris,
@@ -622,7 +621,7 @@ def _accounts_to_follow(
         follow.append(
             AccountToFollow(
                 user_id=u.id,
-                email=mask_email(u.email),
+                email=u.email,
                 created_at=as_utc(u.created_at),
                 mode=mode,  # type: ignore[arg-type]
                 stage=stage,  # type: ignore[arg-type]
@@ -694,7 +693,7 @@ async def users_list(session: AsyncSession) -> list[UserRow]:
         rows.append(
             UserRow(
                 user_id=u.id,
-                email=mask_email(u.email),
+                email=u.email,
                 first_name=u.first_name,
                 created_at=as_utc(u.created_at),
                 mode="google" if u.google_id else "password",

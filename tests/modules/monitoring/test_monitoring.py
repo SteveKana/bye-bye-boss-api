@@ -13,7 +13,7 @@ from app.core.monitoring_events import record_ai_usage, report_incident
 from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.mailer.models import EmailMessage
-from app.modules.monitoring.common import mask_email, normalize_path
+from app.modules.monitoring.common import normalize_path
 from app.modules.monitoring.models import AnnouncementOptOut, Incident, PageView
 from app.modules.monitoring.tokens import create_unsubscribe_token
 
@@ -69,7 +69,7 @@ async def test_overview_behavior_and_users_answer_on_an_empty_platform(
     assert behavior["funnel"][0]["key"] == "signed_up"
 
     users = (await client.get(f"{M}/users", headers=headers)).json()
-    assert users[0]["email"] == mask_email("admin@example.com")
+    assert users[0]["email"] == "admin@example.com"
     assert users[0]["is_admin"] is True
 
 
@@ -97,7 +97,7 @@ async def test_funnel_and_accounts_to_follow(client: AsyncClient, admin) -> None
     assert steps["profile_verified"] == 1
     follow = {a["stage"]: a for a in behavior["accounts_to_follow"]}
     assert follow["unverified"]["action"] == "resend_verification"
-    assert follow["unverified"]["email"] == "n***@example.com"
+    assert follow["unverified"]["email"] == "nover@example.com"
     assert follow["no_cv"]["user_id"] == str(nocv_id)
     assert behavior["signup_modes"][0]["count"] == 3
 
@@ -204,7 +204,7 @@ async def test_reported_incident_keeps_who_was_affected(
     detail = (
         await client.get(f"{M}/incidents/{listing['items'][0]['id']}", headers=headers)
     ).json()
-    assert detail["users"] == ["v***@example.com"]
+    assert detail["users"] == ["victim@example.com"]
     assert detail["user_message"] == "Impossible de lire votre CV"
 
 
