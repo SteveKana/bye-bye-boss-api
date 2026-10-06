@@ -37,3 +37,19 @@ class AuthGateway:
             return False
         await AuthService(self.session).queue_verification(user)
         return True
+
+    async def email_has_account(self, email: str) -> bool:
+        return await self.users.get_by_email_ci(email) is not None
+
+    async def create_invited_account(self, email: str) -> PublicUser | None:
+        """Account with e-mail only (no password, unverified) for a waitlist
+        lead; None when the address already has an account."""
+        user = await AuthService(self.session).create_invited_account(email)
+        return PublicUser.model_validate(user) if user else None
+
+    async def invitation_link(self, user_id: uuid.UUID) -> str | None:
+        """Link letting the owner choose a password (valid 14 days)."""
+        user = await self.users.get(user_id)
+        if user is None or not user.is_active:
+            return None
+        return AuthService(self.session).invitation_link(user)

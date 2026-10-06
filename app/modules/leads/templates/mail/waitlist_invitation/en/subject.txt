@@ -1,0 +1,1 @@
+{{ brand }} is now open: your account is waiting for you

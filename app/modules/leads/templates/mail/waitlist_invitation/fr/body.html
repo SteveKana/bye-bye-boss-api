@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">Bonjour,</p>
+
+<p style="margin:0 0 16px">Vous vous étiez inscrit sur la liste d'attente <strong>{{ brand }}</strong> : bonne nouvelle, <strong style="color:#5B3FE8">{{ brand }} est ouvert !</strong></p>
+
+<p style="margin:0 0 24px">Votre compte est déjà créé avec cette adresse email. Il ne vous reste qu'à choisir votre mot de passe :</p>
+
+<p style="margin:0 0 24px">
+  <a
+    href="{{ link }}"
+    style="display:inline-block;background:#5B3FE8;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px"
+  >
+    Choisir mon mot de passe
+  </a>
+</p>
+
+<p style="margin:0 0 8px;font-size:13px;color:#6B7280">Ou copiez ce lien dans votre navigateur :</p>
+<p style="margin:0 0 20px;font-size:13px;word-break:break-all">
+  <a href="{{ link }}" style="color:#5B3FE8">{{ link }}</a>
+</p>
+
+<p style="margin:0 0 16px;padding:12px 16px;background:#EEE9FF;border-radius:10px;font-size:14px;color:#5B3FE8">Vous préférez Google ? Rendez-vous sur <a href="{{ login_url }}" style="color:#5B3FE8">la page de connexion</a> et cliquez sur « Continuer avec Google » avec cette même adresse.</p>
+
+<p style="margin:0 0 20px">Ensuite, déposez votre CV : nous vous proposons les offres qui vous correspondent vraiment.</p>
+
+<p style="margin:0 0 20px;font-size:13px;color:#9CA3AF">Ce lien est valable {{ days }} jours. Passé ce délai, utilisez « Mot de passe oublié » sur la page de connexion.</p>
+
+<p style="margin:0">
+  À tout de suite,<br />
+  L'équipe {{ brand }}
+</p>
+{% endblock %}
