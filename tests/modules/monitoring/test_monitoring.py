@@ -384,3 +384,67 @@ async def test_deleting_an_account_purges_its_monitoring_data(
         assert (await session.exec(select(PageView))).all() == []
         incident = (await session.exec(select(Incident))).one()
         assert incident.user_ids == []
+
+
+async def test_cv_optimization_indicator(client: AsyncClient, admin) -> None:
+    from datetime import timedelta
+
+    from app.modules.matching.cv_optimization_models import CVOptimization
+    from app.modules.matching.models import CandidateMatch
+    from app.modules.offers.models import JobOffer
+
+    _, headers = admin
+    uid, _ = await _login(client, "opt@example.com", is_verified=True)
+    other, _ = await _login(client, "idle@example.com", is_verified=True)
+    async with AsyncSessionLocal() as session:
+        profile = CandidateProfile(
+            user_id=uid, status=ProfileStatus.complete.value, raw_text="cv"
+        )
+        session.add(profile)
+        offers = [
+            JobOffer(
+                source="t",
+                external_id=f"o{i}",
+                title=f"Offre {i}",
+                url=f"https://e.com/{i}",
+            )
+            for i in range(3)
+        ]
+        session.add_all(offers)
+        await session.flush()
+        matches = [
+            CandidateMatch(
+                candidate_profile_id=profile.id,
+                job_offer_id=o.id,
+                career_score=50,
+                ats_score=50,
+                ats_potential=60,
+                computed_at=utcnow(),
+            )
+            for o in offers
+        ]
+        session.add_all(matches)
+        await session.flush()
+        now = utcnow()
+        session.add(CVOptimization(candidate_match_id=matches[0].id, computed_at=now))
+        session.add(
+            CVOptimization(
+                candidate_match_id=matches[1].id, computed_at=now, confirmed_at=now
+            )
+        )
+        old = CVOptimization(candidate_match_id=matches[2].id, computed_at=now)
+        old.created_at = now - timedelta(days=40)
+        session.add(old)
+        await session.commit()
+
+    behavior = (await client.get(f"{M}/behavior?days=7", headers=headers)).json()
+    cv = behavior["cv_optimization"]
+    assert cv["generated_today"] == 2
+    assert cv["generated"] == 2
+    assert cv["kept"] == 1
+    assert cv["users"] == 1
+    assert cv["per_user"] == 2.0
+    assert {o["title"] for o in cv["top_offers"]} == {"Offre 0", "Offre 1"}
+    steps = {s["key"]: s["value"] for s in behavior["funnel"]}
+    assert steps["cv_optimized"] == 1
+    assert other != uid

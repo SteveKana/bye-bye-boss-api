@@ -28,6 +28,8 @@ from app.modules.monitoring.schemas import (
     BehaviorResponse,
     BehaviorTiles,
     CostDay,
+    CvOptimizationStats,
+    CvOptimizedOffer,
     DayCount,
     FunnelStep,
     HealthItem,
@@ -445,6 +447,24 @@ async def behavior(session: AsyncSession, days: int) -> BehaviorResponse:
     )
     n_alert = len(alerted_users & user_ids)
     n_app = len(applicant_users & user_ids)
+    optimizations = await _all(
+        session,
+        sa.select(
+            q.cv_optimizations.c.created_at,
+            q.cv_optimizations.c.confirmed_at,
+            q.matches.c.candidate_profile_id,
+            q.matches.c.job_offer_id,
+        ).select_from(
+            q.cv_optimizations.join(
+                q.matches, q.matches.c.id == q.cv_optimizations.c.candidate_match_id
+            )
+        ),
+    )
+    optimizing_users = {
+        profile_user[r.candidate_profile_id]
+        for r in optimizations
+        if r.candidate_profile_id in profile_user
+    } & user_ids
     funnel = [
         FunnelStep(key="signed_up", label="Inscrits", value=n_signed),
         FunnelStep(
@@ -476,6 +496,12 @@ async def behavior(session: AsyncSession, days: int) -> BehaviorResponse:
             label="1re candidature",
             value=n_app,
             note=f"{n_alert - n_app} jamais candidaté" if n_alert > n_app else None,
+        ),
+        FunnelStep(
+            key="cv_optimized",
+            label="CV adapté à une offre",
+            value=len(optimizing_users),
+            note=None,
         ),
     ]
 
@@ -525,6 +551,10 @@ async def behavior(session: AsyncSession, days: int) -> BehaviorResponse:
         for oid, scores in top_offers
     ]
 
+    cv_stats = await _cv_optimization_stats(
+        session, optimizations, profile_user, user_ids, since, today
+    )
+
     # Cost.
     usage = await _usage_rows(session, now - timedelta(days=max(days, 7)))
     any_usage = (
@@ -569,6 +599,7 @@ async def behavior(session: AsyncSession, days: int) -> BehaviorResponse:
         ],
         top_pages=top_pages,
         top_applied_offers=top_applied,
+        cv_optimization=cv_stats,
         cost_daily=[
             CostDay(
                 date=d.isoformat(),
@@ -581,6 +612,51 @@ async def behavior(session: AsyncSession, days: int) -> BehaviorResponse:
         accounts_to_follow=_accounts_to_follow(
             users, profile_by_user, applicant_users, now
         ),
+    )
+
+
+async def _cv_optimization_stats(
+    session: AsyncSession,
+    rows: list,
+    profile_user: dict,
+    user_ids: set,
+    since: datetime,
+    today: datetime,
+) -> CvOptimizationStats:
+    mine = [r for r in rows if profile_user.get(r.candidate_profile_id) in user_ids]
+    period = [r for r in mine if as_utc(r.created_at) >= since]
+    kept = [r for r in period if r.confirmed_at is not None]
+    users = {profile_user[r.candidate_profile_id] for r in period}
+    per_offer: dict = defaultdict(lambda: [0, 0])
+    for r in period:
+        per_offer[r.job_offer_id][0] += 1
+        if r.confirmed_at is not None:
+            per_offer[r.job_offer_id][1] += 1
+    top = sorted(per_offer.items(), key=lambda kv: kv[1][0], reverse=True)[:5]
+    info: dict = {}
+    if top:
+        for row in await _all(
+            session,
+            sa.select(q.offers.c.id, q.offers.c.title, q.offers.c.company_name).where(
+                q.offers.c.id.in_([oid for oid, _ in top])
+            ),
+        ):
+            info[row.id] = row
+    return CvOptimizationStats(
+        generated_today=sum(1 for r in mine if as_utc(r.created_at) >= today),
+        generated=len(period),
+        kept=len(kept),
+        users=len(users),
+        per_user=round(len(period) / len(users), 1) if users else None,
+        top_offers=[
+            CvOptimizedOffer(
+                title=info[oid].title if oid in info else "Offre supprimée",
+                company=(info[oid].company_name or "") if oid in info else "",
+                generated=counts[0],
+                kept=counts[1],
+            )
+            for oid, counts in top
+        ],
     )
 
 
