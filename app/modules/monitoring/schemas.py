@@ -143,6 +143,22 @@ class TopOffer(BaseModel):
     avg_score: int | None
 
 
+class CvOptimizedOffer(BaseModel):
+    title: str
+    company: str
+    generated: int
+    kept: int
+
+
+class CvOptimizationStats(BaseModel):
+    generated_today: int
+    generated: int
+    kept: int
+    users: int
+    per_user: float | None
+    top_offers: list[CvOptimizedOffer]
+
+
 class CostDay(BaseModel):
     date: str
     detailed_eur: float
@@ -166,6 +182,7 @@ class BehaviorResponse(BaseModel):
     signup_modes: list[SignupMode]
     top_pages: list[TopPage]
     top_applied_offers: list[TopOffer]
+    cv_optimization: CvOptimizationStats
     cost_daily: list[CostDay]
     cost_note: str
     accounts_to_follow: list[AccountToFollow]

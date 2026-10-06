@@ -50,6 +50,13 @@ offers = sa.table(
     sa.column("source"),
     sa.column("created_at", sa.DateTime(timezone=True)),
 )
+cv_optimizations = sa.table(
+    "cv_optimizations",
+    sa.column("id", sa.Uuid),
+    sa.column("candidate_match_id", sa.Uuid),
+    sa.column("created_at", sa.DateTime(timezone=True)),
+    sa.column("confirmed_at", sa.DateTime(timezone=True)),
+)
 brief_entries = sa.table(
     "notification_brief_entries",
     sa.column("user_id", sa.Uuid),
