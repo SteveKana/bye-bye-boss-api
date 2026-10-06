@@ -1,0 +1,19 @@
+Hello,
+
+You joined the {{ brand }} waitlist: good news, {{ brand }} is now open!
+
+Your account is already created with this email address. All that's left is
+to choose your password:
+
+{{ link }}
+
+This link is valid for {{ days }} days. After that, use "Forgot password" on
+the sign-in page.
+
+Prefer Google? Go to {{ login_url }} and click "Continue with Google" with
+this same address.
+
+Then upload your CV: we'll show you the job offers that truly match you.
+
+See you inside,
+The {{ brand }} team

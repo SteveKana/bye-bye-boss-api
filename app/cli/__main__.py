@@ -7,6 +7,9 @@ Commands:
     sync-offers                   fetch job offers from configured providers now
     run-matching                  shortlist offers + submit pending OpenAI batches
     poll-matching-batches         apply finished OpenAI matching batches now
+    import-leads [--apply] [--limit N]
+                                  waitlist leads -> accounts + one invitation
+                                   mail each (dry run unless --apply)
     backfill-contract-type        guess contract_type for already-stored offers
                                    that have none (one-off, safe to re-run)
 
@@ -248,6 +251,36 @@ def _cmd_poll_matching_batches(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_import_leads(args: argparse.Namespace) -> int:
+    """Waitlist leads -> accounts (e-mail only) + ONE invitation mail each.
+    Dry run unless --apply; leads that already have an account, or were
+    already invited, are skipped, so re-running is harmless."""
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.leads.importer import import_leads
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            r = await import_leads(session, apply=args.apply, limit=args.limit)
+        mode = "APPLIQUÉ" if args.apply else "SIMULATION (rien n'est créé ni envoyé)"
+        print(f"== {mode} ==")
+        print(f"leads au total: {r.leads_total}")
+        print(f"déjà un compte (ignorés): {len(r.already_accounts)}")
+        for e in r.already_accounts:
+            print(f"   - {e}")
+        print(f"déjà invités (ignorés): {len(r.already_invited)}")
+        print(f"à importer: {len(r.to_import)}")
+        for e in r.to_import:
+            print(f"   - {e}")
+        if args.apply:
+            print(f"comptes créés: {len(r.accounts_created)}")
+            print(f"invitations en file d'envoi: {len(r.invitations_queued)}")
+
+    asyncio.run(_run())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -277,6 +310,15 @@ def main(argv: list[str] | None = None) -> int:
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
     ).set_defaults(func=_cmd_backfill_contract_type)
+    p_leads = sub.add_parser(
+        "import-leads",
+        help="waitlist leads -> accounts + one invitation mail (dry run by default)",
+    )
+    p_leads.add_argument(
+        "--apply", action="store_true", help="really create accounts and queue mails"
+    )
+    p_leads.add_argument("--limit", type=int, default=None, help="at most N leads")
+    p_leads.set_defaults(func=_cmd_import_leads)
     # backfill-regret-index subcommand disabled 2026-10-03, see
     # _cmd_backfill_regret_index's own docstring above.
     # sub.add_parser(

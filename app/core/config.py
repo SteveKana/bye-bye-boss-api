@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_TTL_MINUTES: int = 60 * 24 * 7  # 7 days
     RESET_TOKEN_TTL_MINUTES: int = 30
     VERIFY_TOKEN_TTL_MINUTES: int = 60 * 24  # 1 day
+    INVITATION_TOKEN_TTL_MINUTES: int = 60 * 24 * 14  # 14 days (waitlist invitation)
     BCRYPT_ROUNDS: int = 12
 
     # ---- Google Sign-In ---------------------------------------------------
