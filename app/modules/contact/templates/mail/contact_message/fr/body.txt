@@ -1,0 +1,10 @@
+Nouveau message depuis le formulaire de contact {{ brand }}.
+
+De : {{ sender_name }} <{{ email }}>
+Sujet : {{ topic }}
+Langue du visiteur : {{ visitor_locale }}
+
+{{ message }}
+
+---
+Pour répondre, écrivez directement à {{ email }}.

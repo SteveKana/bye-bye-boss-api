@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.models import utcnow
+from app.core.monitoring_events import report_incident
 from app.modules.mailer.models import EmailMessage, EmailStatus
 from app.modules.mailer.repository import EmailRepository
 from app.modules.mailer.transports import send_email
@@ -56,6 +57,14 @@ class MailerService:
                     message.status = EmailStatus.failed.value
                     logger.error(
                         "email_gave_up", to=message.to_email, attempts=message.attempts
+                    )
+                    await report_incident(
+                        kind="other",
+                        fingerprint="mail:gave_up",
+                        title="E-mail non envoyé après plusieurs essais",
+                        context="E-mails",
+                        where="File d'envoi des e-mails",
+                        technical_cause=(message.last_error or "")[:500],
                     )
                 else:
                     logger.warning(

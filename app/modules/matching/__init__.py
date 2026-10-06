@@ -1,0 +1,81 @@
+"""Matching module — public surface.
+
+Scores each candidate's CV against relevant job offers using an LLM (career
+fit, ATS compatibility, blocking requirements, concrete CV improvement
+actions) -- ported from the standalone `matchcareer_engine` prototype, fixed
+to run safely inside this async backend (see gateway.py's docstring).
+
+Runs entirely in the background (see jobs.py), as a three-stage pipeline
+(2026-10-04 redesign): an embedding-similarity shortlist (shortlist.py)
+picks ~30 offers per candidate, a cheaper model scores them on the ATS grid
+(only ATS >= 75 survive), and the full analysis runs on at most 5 -- the two
+LLM stages through OpenAI's Batch API (batch_service.py). Results are stored
+in `candidate_matches` so the dashboard only ever reads, never waits on the
+LLM. Depends on `cv` (the
+candidate's extracted CV text), `offers` (the pool to match against), and
+`mailer` (to send the "first matches ready" email after a brand-new
+profile's immediate matching run -- see emails.py and jobs.py).
+
+The Regret Index (employee-sentiment risk score) was computed via
+regret_service.py from SimplyHired.fr's public company-review pages (see
+CompanyRegretProfile's docstring for the sourcing decision and its
+disclosed legal tradeoffs, Steve, 2026-09-30), refreshed for every known
+employer once a month (regret_jobs.py) and computed on-demand for a
+brand-new one the first time it's matched.
+
+DISABLED 2026-10-03 (Steve: masquer/désactiver tout l'indice de regret,
+front et back) -- the monthly job's own import below is commented out, so
+it's no longer registered with the scheduler at all: no SimplyHired or
+Bright Data request fires automatically anymore, and MatchingService no
+longer calls RegretService either (see service.py). The regret_service.py/
+regret_jobs.py/simplyhired_gateway.py/indeed_gateway.py modules themselves
+are left intact and untouched so the feature can be turned back on later
+by uncommenting these same spots, rather than rebuilt.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from app.core.module import Module
+
+# Import side effects: register the models (Alembic), the scheduled jobs,
+# and the event listeners (reacts to cv's ProfileOnboardingCompleted).
+from app.modules.matching import (
+    cv_optimization_models as cv_optimization_models,  # noqa: F401
+)
+from app.modules.matching import jobs as jobs  # noqa: F401
+from app.modules.matching import listeners as listeners  # noqa: F401
+from app.modules.matching import models as models  # noqa: F401
+
+# regret_jobs import disabled 2026-10-03 -- this import's only purpose was
+# the @scheduled decorator's side effect (registering the monthly refresh
+# with the scheduler); not importing it at all means that registration
+# never happens, so the job can never fire. See module docstring above.
+# from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
+from app.modules.matching.events import MatchesScored
+from app.modules.matching.repository import CandidateMatchRepository
+from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
+from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
+from app.modules.matching.service import MatchingService
+
+_router = APIRouter()
+_router.include_router(matching_routes.router)
+_router.include_router(cv_optimization_routes.router)
+
+module = Module(
+    name="matching",
+    router=_router,
+    order=50,
+    depends_on=["auth", "cv", "offers", "mailer"],
+    tags=["matching"],
+)
+
+__all__ = [
+    "module",
+    "CandidateMatchRepository",
+    "CandidateMatchRead",
+    "CVOptimizationRead",
+    "MatchingService",
+    "MatchesScored",
+]

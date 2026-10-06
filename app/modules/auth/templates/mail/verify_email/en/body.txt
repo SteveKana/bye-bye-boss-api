@@ -1,0 +1,11 @@
+Hi,
+
+Thanks for signing up for {{ brand }}.
+To activate your account, confirm your email address by opening this link:
+
+{{ link }}
+
+This link expires in 24 hours.
+If you didn't create this account, just ignore this email.
+
+The {{ brand }} team

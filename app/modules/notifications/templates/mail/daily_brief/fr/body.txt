@@ -1,0 +1,13 @@
+Bonjour{% if first_name %} {{ first_name }}{% endif %},
+
+Voici les offres qui correspondent le mieux à votre profil aujourd'hui :
+
+{% for item in items -%}
+{{ item.career_score }}/100 · {{ item.title }} chez {{ item.company_name }}
+{{ item.url }}
+
+{% endfor -%}
+Vous recevez cet email car les notifications par email sont activées dans vos préférences {{ brand }}. Pour les désactiver :
+{{ settings_url }}
+
+L'équipe {{ brand }}

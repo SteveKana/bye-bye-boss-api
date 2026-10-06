@@ -16,9 +16,10 @@ from app.core.module import Module
 from app.modules.auth import listeners as listeners  # noqa: F401
 from app.modules.auth import models as models  # noqa: F401
 from app.modules.auth.dependencies import AdminUser, CurrentUser, get_current_user
-from app.modules.auth.events import UserDeleted, UserRegistered
+from app.modules.auth.events import UserDeleted, UserDeletionRequested, UserRegistered
 from app.modules.auth.gateway import AuthGateway
 from app.modules.auth.models import SubscriptionPlan
+from app.modules.auth.repository import UserRepository
 from app.modules.auth.routes.v1 import auth_routes, user_routes
 from app.modules.auth.schemas import PublicUser
 from app.modules.auth.seed import seed_admin
@@ -31,6 +32,7 @@ module = Module(
     name="auth",
     router=_router,
     order=10,
+    depends_on=["mailer"],
     on_startup=seed_admin,
     tags=["auth"],
 )
@@ -45,4 +47,6 @@ __all__ = [
     "SubscriptionPlan",
     "UserRegistered",
     "UserDeleted",
+    "UserDeletionRequested",
+    "UserRepository",
 ]

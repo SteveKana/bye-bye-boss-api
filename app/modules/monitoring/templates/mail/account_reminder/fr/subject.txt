@@ -1,0 +1,1 @@
+{% if stage == "no_cv" %}Importez votre CV pour recevoir vos premières opportunités{% else %}Vos opportunités vous attendent{% endif %}

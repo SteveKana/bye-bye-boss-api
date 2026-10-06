@@ -1,0 +1,779 @@
+{
+  "company_name": "",
+  "career_score": 78,
+  "ats_score": 46,
+  "ats_potential": 54,
+  "cv_skills": [
+    {
+      "concept": "product_ownership",
+      "group": "responsibility"
+    },
+    {
+      "concept": "requirements_gathering",
+      "group": "responsibility"
+    },
+    {
+      "concept": "workshop_facilitation",
+      "group": "responsibility"
+    },
+    {
+      "concept": "stakeholder_management",
+      "group": "responsibility"
+    },
+    {
+      "concept": "functional_specification",
+      "group": "responsibility"
+    },
+    {
+      "concept": "technical_specification",
+      "group": "responsibility"
+    },
+    {
+      "concept": "user_story",
+      "group": "methodology"
+    },
+    {
+      "concept": "backlog_management",
+      "group": "methodology"
+    },
+    {
+      "concept": "acceptance_testing",
+      "group": "responsibility"
+    },
+    {
+      "concept": "test_execution",
+      "group": "responsibility"
+    },
+    {
+      "concept": "non_regression_testing",
+      "group": "responsibility"
+    },
+    {
+      "concept": "defect_management",
+      "group": "responsibility"
+    },
+    {
+      "concept": "data_quality_management",
+      "group": "responsibility"
+    },
+    {
+      "concept": "data_modeling",
+      "group": "responsibility"
+    },
+    {
+      "concept": "api_contract_design",
+      "group": "responsibility"
+    },
+    {
+      "concept": "api_rest",
+      "group": "tool"
+    },
+    {
+      "concept": "soap_api",
+      "group": "tool"
+    },
+    {
+      "concept": "sql",
+      "group": "tool"
+    },
+    {
+      "concept": "postgresql",
+      "group": "tool"
+    },
+    {
+      "concept": "sql_server",
+      "group": "tool"
+    },
+    {
+      "concept": "oracle_database",
+      "group": "tool"
+    },
+    {
+      "concept": "pl_sql",
+      "group": "tool"
+    },
+    {
+      "concept": "power_bi",
+      "group": "tool"
+    },
+    {
+      "concept": "kibana",
+      "group": "tool"
+    },
+    {
+      "concept": "dynatrace",
+      "group": "tool"
+    },
+    {
+      "concept": "jira",
+      "group": "tool"
+    },
+    {
+      "concept": "confluence",
+      "group": "tool"
+    },
+    {
+      "concept": "postman",
+      "group": "tool"
+    },
+    {
+      "concept": "azure_devops",
+      "group": "tool"
+    },
+    {
+      "concept": "oracle_sql_developer",
+      "group": "tool"
+    },
+    {
+      "concept": "oracle_service_bus",
+      "group": "tool"
+    },
+    {
+      "concept": "knime",
+      "group": "tool"
+    },
+    {
+      "concept": "gcp_bigquery",
+      "group": "tool"
+    },
+    {
+      "concept": "xml",
+      "group": "tool"
+    },
+    {
+      "concept": "html_css",
+      "group": "tool"
+    },
+    {
+      "concept": "javascript",
+      "group": "tool"
+    },
+    {
+      "concept": "laravel_php",
+      "group": "tool"
+    },
+    {
+      "concept": "flutter",
+      "group": "tool"
+    },
+    {
+      "concept": "spring_batch",
+      "group": "tool"
+    },
+    {
+      "concept": "jdeveloper",
+      "group": "tool"
+    },
+    {
+      "concept": "scrum",
+      "group": "methodology"
+    },
+    {
+      "concept": "kanban",
+      "group": "methodology"
+    },
+    {
+      "concept": "safe",
+      "group": "methodology"
+    },
+    {
+      "concept": "agile_ceremonies",
+      "group": "methodology"
+    },
+    {
+      "concept": "project_reporting",
+      "group": "responsibility"
+    },
+    {
+      "concept": "l2_support",
+      "group": "responsibility"
+    },
+    {
+      "concept": "retail_sector",
+      "group": "sector"
+    },
+    {
+      "concept": "public_sector",
+      "group": "sector"
+    },
+    {
+      "concept": "pharma_sector",
+      "group": "sector"
+    },
+    {
+      "concept": "functional_lead",
+      "group": "experience"
+    },
+    {
+      "concept": "product_owner",
+      "group": "experience"
+    },
+    {
+      "concept": "proxy_product_owner",
+      "group": "experience"
+    },
+    {
+      "concept": "front_end_developer",
+      "group": "experience"
+    },
+    {
+      "concept": "assistant_project_manager",
+      "group": "experience"
+    },
+    {
+      "concept": "masters_information_systems",
+      "group": "education"
+    },
+    {
+      "concept": "safe_popm_certification",
+      "group": "certification"
+    },
+    {
+      "concept": "english_b2",
+      "group": "language"
+    },
+    {
+      "concept": "french_native",
+      "group": "language"
+    }
+  ],
+  "job_skills": [
+    {
+      "skill": "experience_years_8_to_10",
+      "category": "experience",
+      "importance": "required"
+    },
+    {
+      "skill": "functional_analysis",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "application_design",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "functional_specification",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "user_story",
+      "category": "methodology",
+      "importance": "required"
+    },
+    {
+      "skill": "test_strategy",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "test_plan",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "qa_validation",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "team_liaison_business_archi_dev",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "technical_environment_understanding",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "jira",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "confluence",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "java_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "oracle_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "postgresql_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "git_basics",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "english_professional",
+      "category": "language",
+      "importance": "required"
+    },
+    {
+      "skill": "communication",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "analysis_synthesis",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "autonomy_rigor",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "teamwork_complex_env",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "impact_analysis",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "detailed_functional_design",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "documentation_maintenance",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "test_data_management",
+      "category": "skill",
+      "importance": "preferred"
+    },
+    {
+      "skill": "non_regression_testing",
+      "category": "skill",
+      "importance": "preferred"
+    }
+  ],
+  "mandatory_requirements": [
+    {
+      "skill": "experience_years_8_to_10",
+      "category": "experience",
+      "importance": "required"
+    },
+    {
+      "skill": "functional_analysis",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "application_design",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "functional_specification",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "user_story",
+      "category": "methodology",
+      "importance": "required"
+    },
+    {
+      "skill": "test_strategy",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "test_plan",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "qa_validation",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "team_liaison_business_archi_dev",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "technical_environment_understanding",
+      "category": "skill",
+      "importance": "required"
+    },
+    {
+      "skill": "jira",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "confluence",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "java_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "oracle_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "postgresql_advanced",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "git_basics",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "english_professional",
+      "category": "language",
+      "importance": "required"
+    },
+    {
+      "skill": "communication",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "analysis_synthesis",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "autonomy_rigor",
+      "category": "soft_skill",
+      "importance": "required"
+    },
+    {
+      "skill": "teamwork_complex_env",
+      "category": "soft_skill",
+      "importance": "required"
+    }
+  ],
+  "preferred_requirements": [
+    {
+      "skill": "impact_analysis",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "detailed_functional_design",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "documentation_maintenance",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "test_data_management",
+      "category": "skill",
+      "importance": "preferred"
+    },
+    {
+      "skill": "non_regression_testing",
+      "category": "skill",
+      "importance": "preferred"
+    }
+  ],
+  "blocking_requirements": [
+    {
+      "skill": "experience_years_8_to_10",
+      "level": "hard_blocker",
+      "reason": "Minimum 8–10 ans requis en conception applicative et validation fonctionnelle ; expérience pertinente calculée à ~4,8 ans.",
+      "gap_value": 3.2,
+      "gap_percent": 40.6
+    }
+  ],
+  "blocking_message": "Le principal point bloquant est la séniorité: la mission exige 8–10 ans d'expérience en analyse/conception et validation fonctionnelle, alors que le parcours démontre environ 4,8 ans pertinents (CNAF + Weekr + E.Leclerc). Les autres écarts (niveau avancé explicite sur Java/Oracle/PostgreSQL, mention de Git) sont secondaires et améliorables par reformulation, mais ne compensent pas la lacune de séniorité.",
+  "matches": [
+    {
+      "skill": "experience_years_8_to_10",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 95
+    },
+    {
+      "skill": "functional_analysis",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "application_design",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "functional_specification",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "user_story",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "test_strategy",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "test_plan",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "qa_validation",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "team_liaison_business_archi_dev",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "technical_environment_understanding",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "jira",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "confluence",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "java_advanced",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 55
+    },
+    {
+      "skill": "oracle_advanced",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "postgresql_advanced",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 75
+    },
+    {
+      "skill": "git_basics",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 80
+    },
+    {
+      "skill": "english_professional",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "communication",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "analysis_synthesis",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "autonomy_rigor",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "teamwork_complex_env",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "impact_analysis",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "detailed_functional_design",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "documentation_maintenance",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 65
+    },
+    {
+      "skill": "test_data_management",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 65
+    },
+    {
+      "skill": "non_regression_testing",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 75
+    }
+  ],
+  "ats_gaps": [
+    {
+      "skill": "experience_years_8_to_10",
+      "missing_in_cv": true,
+      "why_it_matters": "Filtre éliminatoire fréquent pour missions freelance senior: seuil minimal d'années d'expérience.",
+      "cv_fix_example": "Ne peut pas être comblé. Valoriser l'impact et l'autonomie sur des cycles complets pour atténuer la perception (ex.: «Pilotage bout-en-bout analyse→conception→recette sur 3 programmes majeurs, >30 sprints»)."
+    },
+    {
+      "skill": "test_strategy",
+      "missing_in_cv": false,
+      "why_it_matters": "Les ATS recherchent explicitement «stratégie de recette» au-delà de «recette/acceptance tests».",
+      "cv_fix_example": "Ajouter: «Définition de la stratégie de recette (critères d'entrée/sortie, périmètres, risques), coordination des campagnes, reporting qualité»."
+    },
+    {
+      "skill": "test_plan",
+      "missing_in_cv": false,
+      "why_it_matters": "La formalisation des plans et cas de tests est explicitement demandée.",
+      "cv_fix_example": "Ajouter: «Élaboration des plans de tests et cas de tests, constitution des jeux de données, traçabilité exigences→tests (Jira/Xray)»."
+    },
+    {
+      "skill": "git_basics",
+      "missing_in_cv": true,
+      "why_it_matters": "Exigence requise (notions). L'absence textuelle peut faire échouer un filtrage ATS.",
+      "cv_fix_example": "Si vrai: «Git (notions) — pratiques de branchement, revue de code en lecture, consultation des pipelines via Azure DevOps»."
+    },
+    {
+      "skill": "java_advanced",
+      "missing_in_cv": false,
+      "why_it_matters": "Niveau avancé requis. Le CV montre une exposition (Java/Spring Batch) mais pas le niveau attendu.",
+      "cv_fix_example": "Positionner clairement le niveau côté fonctionnel: «Java (connaissance avancée côté fonctionnel: lecture de logs/traces, revue de payloads, compréhension des batchs Spring)»."
+    },
+    {
+      "skill": "oracle_advanced",
+      "missing_in_cv": false,
+      "why_it_matters": "Le niveau avancé doit être explicite pour passer l'ATS.",
+      "cv_fix_example": "«Oracle/PL-SQL (avancé fonctionnel): requêtes complexes, analyse de performances, investigation d'anomalies en PROD/RECETTE»."
+    },
+    {
+      "skill": "postgresql_advanced",
+      "missing_in_cv": false,
+      "why_it_matters": "Même si PostgreSQL est cité, le niveau avancé n'est pas revendiqué explicitement.",
+      "cv_fix_example": "«PostgreSQL (avancé) — optimisation de requêtes, indexation, analyse d'explain plans (contexte Knime/ETL et GCP/BigQuery)»."
+    },
+    {
+      "skill": "documentation_maintenance",
+      "missing_in_cv": true,
+      "why_it_matters": "La mission attend la tenue à jour de la documentation applicative.",
+      "cv_fix_example": "Ajouter: «Maintenance et enrichissement de la documentation applicative (Confluence): DOR, DOD, specs détaillées, changelogs»."
+    }
+  ],
+  "actions": [
+    {
+      "action": "Quantifier l'expérience pertinente par cycle projet",
+      "details": "Ajouter une ligne récap: «Analyse/conception/recette: ~4,8 ans (57 mois) sur CNAF, Weekr, E.Leclerc)» pour objectiver l'étendue."
+    },
+    {
+      "action": "Rendre explicites stratégie de recette et plans de tests",
+      "details": "Sous CNAF et E.Leclerc: détailler «stratégie de recette», «plans de tests», «cas de tests», «jeux de données», «tests de non-régression»."
+    },
+    {
+      "action": "Préciser les livrables de conception",
+      "details": "Mentionner «conception fonctionnelle détaillée», «études d'impact», «modélisation de données», «contrats d'interface/API»."
+    },
+    {
+      "action": "Aligner l'outillage aux mots-clés ATS",
+      "details": "Créer un bloc «Environnement technique»: Jira (confirmé), Confluence (confirmé), PostgreSQL (avancé), Oracle/PL-SQL (avancé fonctionnel), Java (connaissances avancées côté fonctionnel), Git (notions si vrai), Postman, Dynatrace, Kibana, Knime, GCP/BigQuery."
+    },
+    {
+      "action": "Expliciter l'anglais professionnel",
+      "details": "Transformer «Anglais B2 (TOEIC)» en «Anglais professionnel (B2), échanges oraux/écrits en contexte projet»."
+    },
+    {
+      "action": "Renommer certaines tâches pour le matching sémantique",
+      "details": "Ex.: «cadrage projet» -> «analyse fonctionnelle & études d'impact», «pilotage de la recette» -> «stratégie de recette & qualification fonctionnelle»."
+    },
+    {
+      "action": "Regrouper les réussites mesurables",
+      "details": "E.Leclerc: préciser «dizaines de millions d'enregistrements contrôlés», «réduction anomalies X%», «SLA de livraison respectés sur N sprints»."
+    },
+    {
+      "action": "Séparer niveaux 'avancé / confirmé / notions'",
+      "details": "Normaliser les niveaux: avancé (PostgreSQL, Oracle/PL-SQL, SQL), confirmé (Jira, Confluence, Postman), notions (Git si vrai)."
+    },
+    {
+      "action": "Clarifier le rôle face aux équipes",
+      "details": "Ajouter «interface équipes métier/architecture/développement: préparation, présentation et accompagnement des conceptions»."
+    },
+    {
+      "action": "Ajouter un bloc 'Méthodes & gouvernance'",
+      "details": "Scrum, Kanban, SAFe (POPM certifié), DOR/DOD, backlog refinement, PI Planning."
+    }
+  ],
+  "career_explanation": [
+    "Trajectoire centrée produit/fonctionnel (PO/Proxy PO/Leader fonctionnel) alignée avec un poste de Business Analyst Fonctionnel.",
+    "Cycle complet maîtrisé: recueil du besoin → spécifications → accompagnement dev → recette/qualification → mise en prod.",
+    "Exposition multi-environnements techniques (Java, Oracle, PostgreSQL, APIs, ETL, monitoring) permettant une bonne compréhension applicative.",
+    "Secteurs variés (Retail, Secteur public, Industrie pharma) transférables au contexte proposé.",
+    "Écart principal: niveau de séniorité (4,8 ans pertinents vs 8–10 ans attendus)."
+  ],
+  "ats_explanation": [
+    "Score brut élevé sur les mots-clés requis: analyse fonctionnelle, conception applicative, specs, user stories, Jira/Confluence, validation/recette, travail avec métiers/archi/dev, anglais B2.",
+    "Pénalité majeure (hard_blocker) appliquée pour la séniorité: 8–10 ans requis vs ~4,8 ans (écart ~40,6%).",
+    "Pénalités légères (soft) pour l'absence de mention explicite: Git (notions), niveaux 'avancé' sur Java/Oracle/PostgreSQL, 'stratégie de recette' et 'plans de tests'.",
+    "ATS Potential limité (54) car le hard_blocker de séniorité est non corrigeable par wording ; toutefois plusieurs gains rapides sont possibles en rendant explicites stratégie de recette, plans de tests, Git (si vrai) et niveaux techniques."
+  ]
+}

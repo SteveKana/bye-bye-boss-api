@@ -14,7 +14,10 @@ dependencies = [
     "alembic>=1.13",
     "pydantic[email]>=2.7",
     "pydantic-settings>=2.3",
-    "pyjwt>=2.9",
+    # [crypto] pulls in `cryptography`, needed for RS256 -- our own tokens are
+    # HS256 (core/security.py), but verifying a Google ID token (RS256,
+    # google_oauth.py) requires it.
+    "pyjwt[crypto]>=2.9",
     "bcrypt>=4.2",
     "httpx>=0.27",
     "structlog>=24.4",
@@ -25,6 +28,15 @@ dependencies = [
     "jinja2>=3.1",
     "pypdf>=4.3",
     "python-docx>=1.1",
+    "openai>=1.40.0",
+    # HTML parsing for the Regret Index's SimplyHired scrape
+    # (simplyhired_gateway.py) -- html.parser backend, no lxml/C-extension
+    # needed.
+    "beautifulsoup4>=4.12",
+    # PDF generation for "Créer cette variante de CV" (cv_pdf.py) -- pure
+    # Python, no system-level libraries to install on the server (unlike an
+    # HTML-to-PDF renderer such as WeasyPrint, which needs Cairo/Pango).
+    "reportlab>=4.2",
 ]
 
 [project.optional-dependencies]

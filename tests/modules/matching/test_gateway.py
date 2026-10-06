@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from app.core.config import get_settings
+from app.modules.matching import gateway
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+# A real GPT-5 response captured from the standalone matchcareer_engine
+# prototype (Steve's own CV vs. a real "Product Owner Data" offer at Astek),
+# not a hand-written fixture -- if our ported LLMAnalysis schema can't parse
+# this, it can't parse what the model actually returns.
+_REAL_RESPONSE = (_FIXTURES / "astek_po_data_real_response.json").read_text()
+
+# A second real response, captured from production (2026-09-20, a Scrum
+# Master offer at Numih France) -- unlike the fixture above, this one has a
+# non-empty blocking_requirements list, and it's what caught a real bug: the
+# model returned "gap_value": "5y" (a magnitude with a unit) instead of a
+# bare number, which the schema didn't accept yet. Kept as a regression test.
+_REAL_RESPONSE_WITH_BLOCKERS = (
+    _FIXTURES / "numih_scrum_master_real_response.json"
+).read_text()
+
+# A third real response, captured from production (2026-09-21, a Business
+# Analyst Fonctionnel mission, employer not named) -- caught another real
+# bug: the model returned cv_skills as {"concept": ..., "group": ...}
+# objects (mirroring job_skills' own shape) instead of the flat concept
+# strings ETAPE 1 of the prompt asks for. Every entry failed validation,
+# which silently dropped the whole analysis (matching.service just skips a
+# pair on a schema error) -- kept as a regression test.
+_REAL_RESPONSE_WITH_CATEGORIZED_CV_SKILLS = (
+    _FIXTURES / "business_analyst_fonctionnel_real_response.json"
+).read_text()
+
+# A fourth real response, captured from production (2026-09-21, a Product
+# Owner Low-Code mission) -- caught a third real bug: the model returned a
+# blocking_requirements entry with "level": "soft_blocker", a value the
+# prompt itself defines (see prompt.py, ETAPE 5/8/9) but BlockerLevel didn't
+# accept -- every prior incident was the model deviating from the prompt;
+# this one was the schema being stricter than the prompt it was meant to
+# match. Kept as a regression test.
+_REAL_RESPONSE_WITH_SOFT_BLOCKER = (
+    _FIXTURES / "product_owner_lowcode_soft_blocker_real_response.json"
+).read_text()
+
+
+async def test_analyse_match_without_api_key_raises_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", None)
+    with pytest.raises(gateway.MatchingUnavailableError):
+        await gateway.analyse_match("cv text", "offer text")
+
+
+async def test_analyse_match_parses_real_captured_response(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(gateway, "_call_openai_sync", lambda **kwargs: _REAL_RESPONSE)
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.company_name == "Astek"
+    assert analysis.career_score == 86
+    assert analysis.ats_score == 72
+    assert analysis.ats_potential == 90
+    assert analysis.ats_potential >= analysis.ats_score
+    assert analysis.blocking_requirements == []
+    assert len(analysis.matches) == 24
+    assert len(analysis.ats_gaps) == 9
+    assert len(analysis.actions) == 9
+    soapui = next(m for m in analysis.matches if m.skill == "soapui")
+    assert soapui.result.value == "missing"
+
+
+async def test_analyse_match_parses_real_response_with_string_gap_values(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway, "_call_openai_sync", lambda **kwargs: _REAL_RESPONSE_WITH_BLOCKERS
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.company_name == "Numih France"
+    assert analysis.career_score == 36
+    assert analysis.ats_score == 20
+    assert analysis.ats_potential == 30
+    assert len(analysis.blocking_requirements) == 3
+    assert len(analysis.matches) == 17
+    assert len(analysis.ats_gaps) == 6
+    assert len(analysis.actions) == 7
+
+    java_gap = analysis.blocking_requirements[0]
+    assert java_gap.skill == "java_backend_development_5y"
+    assert java_gap.level.value == "hard_blocker"
+    assert java_gap.gap_value == "5y"  # kept as-is, not coerced/parsed
+    assert java_gap.gap_percent == 100
+
+
+async def test_analyse_match_parses_real_response_with_categorized_cv_skills(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway,
+        "_call_openai_sync",
+        lambda **kwargs: _REAL_RESPONSE_WITH_CATEGORIZED_CV_SKILLS,
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.career_score == 78
+    assert analysis.ats_score == 46
+    assert analysis.ats_potential == 54
+    # The {"concept": ..., "group": ...} wrapper is unwrapped down to the
+    # concept string -- there's no field on this side to keep "group" in,
+    # same trade-off job_skills' accept_plain_string makes in reverse.
+    assert len(analysis.cv_skills) == 58
+    assert analysis.cv_skills[0] == "product_ownership"
+    assert all(isinstance(skill, str) for skill in analysis.cv_skills)
+
+
+async def test_analyse_match_parses_real_response_with_soft_blocker(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway,
+        "_call_openai_sync",
+        lambda **kwargs: _REAL_RESPONSE_WITH_SOFT_BLOCKER,
+    )
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+
+    assert analysis.career_score == 80
+    assert analysis.ats_score == 60
+    assert analysis.ats_potential == 70
+    assert len(analysis.blocking_requirements) == 1
+    soft_blocker = analysis.blocking_requirements[0]
+    assert soft_blocker.skill == "microsoft_power_platform"
+    assert soft_blocker.level.value == "soft_blocker"
+
+
+async def test_analyse_match_defaults_to_configured_model(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(get_settings(), "MATCHING_OPENAI_MODEL", "gpt-5")
+    captured: dict = {}
+
+    def _fake_call(**kwargs):
+        captured.update(kwargs)
+        return _REAL_RESPONSE
+
+    monkeypatch.setattr(gateway, "_call_openai_sync", _fake_call)
+
+    await gateway.analyse_match("cv text", "offer text")
+
+    assert captured["model"] == "gpt-5"
+
+
+async def test_analyse_match_model_override_takes_precedence(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(get_settings(), "MATCHING_OPENAI_MODEL", "gpt-5")
+    captured: dict = {}
+
+    def _fake_call(**kwargs):
+        captured.update(kwargs)
+        return _REAL_RESPONSE
+
+    monkeypatch.setattr(gateway, "_call_openai_sync", _fake_call)
+
+    await gateway.analyse_match("cv text", "offer text", model="gpt-5-mini")
+
+    assert captured["model"] == "gpt-5-mini"
+
+
+async def test_analyse_match_wraps_response_in_json_fence(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    fenced = f"```json\n{_REAL_RESPONSE}\n```"
+    monkeypatch.setattr(gateway, "_call_openai_sync", lambda **kwargs: fenced)
+
+    analysis = await gateway.analyse_match("cv text", "offer text")
+    assert analysis.career_score == 86
+
+
+async def test_analyse_match_bad_json_raises_failed(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(
+        gateway, "_call_openai_sync", lambda **kwargs: "not json at all"
+    )
+    with pytest.raises(gateway.MatchingFailedError):
+        await gateway.analyse_match("cv text", "offer text")
+
+
+async def test_analyse_match_schema_violation_raises_failed(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "OPENAI_API_KEY", "sk-test")
+    # career_score is required -- missing it should fail Pydantic validation.
+    monkeypatch.setattr(
+        gateway, "_call_openai_sync", lambda **kwargs: json.dumps({"ats_score": 50})
+    )
+    with pytest.raises(gateway.MatchingFailedError):
+        await gateway.analyse_match("cv text", "offer text")

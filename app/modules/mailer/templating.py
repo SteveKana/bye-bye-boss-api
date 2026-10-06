@@ -72,6 +72,7 @@ def render_mail(
 
     ctx = {
         "brand": settings.EMAIL_FROM_NAME,
+        "logo_url": f"{settings.APP_URL.rstrip('/')}/logo-v2.png",
         "locale": resolved,
         **context,
     }

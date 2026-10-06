@@ -4,18 +4,26 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.config import get_settings
 from app.core.dependencies import DBSession
+from app.core.exceptions import AppError
 from app.core.ratelimit import RateLimiter
 from app.modules.auth.dependencies import CurrentUser
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    EmailVerifyRequest,
+    GoogleAuthRequest,
+    GoogleAuthResponse,
     LoginRequest,
     MessageResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
     PasswordResetRequestResponse,
     RefreshRequest,
+    ResendVerificationRequest,
     TokenPair,
     UserCreate,
     UserRead,
+    UserUpdate,
 )
 from app.modules.auth.service import AuthService
 
@@ -26,22 +34,41 @@ login_limit = RateLimiter(times=10, seconds=60, scope="auth:login")
 register_limit = RateLimiter(times=5, seconds=60, scope="auth:register")
 refresh_limit = RateLimiter(times=20, seconds=60, scope="auth:refresh")
 reset_limit = RateLimiter(times=5, seconds=60, scope="auth:reset")
+password_limit = RateLimiter(times=5, seconds=60, scope="auth:change-password")
+verify_limit = RateLimiter(times=10, seconds=60, scope="auth:verify")
+delete_limit = RateLimiter(times=5, seconds=60, scope="auth:delete-account")
 
 
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=TokenPair,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(register_limit)],
 )
-async def register(data: UserCreate, session: DBSession) -> UserRead:
-    user = await AuthService(session).register(data)
-    return UserRead.model_validate(user)
+async def register(data: UserCreate, session: DBSession) -> TokenPair:
+    # Signs the user straight in (see AuthService.register) so the frontend
+    # can send them directly into onboarding, same as a Google signup.
+    return await AuthService(session).register(data)
 
 
 @router.post("/login", response_model=TokenPair, dependencies=[Depends(login_limit)])
 async def login(data: LoginRequest, session: DBSession) -> TokenPair:
     return await AuthService(session).login(data.email, data.password)
+
+
+@router.post(
+    "/google", response_model=GoogleAuthResponse, dependencies=[Depends(login_limit)]
+)
+async def login_with_google(
+    data: GoogleAuthRequest, session: DBSession
+) -> GoogleAuthResponse:
+    client_id = get_settings().GOOGLE_CLIENT_ID
+    if not client_id:
+        raise AppError("Google sign-in is not configured on this server.")
+    tokens, is_new_user = await AuthService(session).login_with_google(
+        data.id_token, client_id=client_id
+    )
+    return GoogleAuthResponse(**tokens.model_dump(), is_new_user=is_new_user)
 
 
 @router.post(
@@ -61,7 +88,7 @@ async def request_password_reset(
     data: PasswordResetRequest, session: DBSession
 ) -> PasswordResetRequestResponse:
     # Always return 202 with the same body so callers can't enumerate accounts.
-    token = await AuthService(session).request_password_reset(data.email)
+    token = await AuthService(session).request_password_reset(data.email, data.locale)
     detail = "If the account exists, a reset link has been sent."
     if get_settings().DEBUG:
         return PasswordResetRequestResponse(detail=detail, reset_token=token)
@@ -80,6 +107,67 @@ async def confirm_password_reset(
     return MessageResponse(detail="Password updated.")
 
 
+@router.post(
+    "/verify-email",
+    response_model=MessageResponse,
+    dependencies=[Depends(verify_limit)],
+)
+async def verify_email(data: EmailVerifyRequest, session: DBSession) -> MessageResponse:
+    await AuthService(session).verify_email(data.token)
+    return MessageResponse(detail="Email verified.")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_limit)],
+)
+async def resend_verification(
+    data: ResendVerificationRequest, session: DBSession
+) -> MessageResponse:
+    # Always the same 202 body so callers cannot probe who is registered.
+    await AuthService(session).resend_verification(data.email, data.locale)
+    return MessageResponse(
+        detail="If the account exists and is unverified, an email has been sent."
+    )
+
+
 @router.get("/me", response_model=UserRead)
 async def me(user: CurrentUser) -> UserRead:
     return UserRead.model_validate(user)
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_me(
+    data: UserUpdate, user: CurrentUser, session: DBSession
+) -> UserRead:
+    updated = await AuthService(session).update_profile(user, data)
+    return UserRead.model_validate(updated)
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(delete_limit)],
+)
+async def delete_me(
+    data: DeleteAccountRequest, user: CurrentUser, session: DBSession
+) -> None:
+    """Permanently deletes the caller's account and all their data -- see
+    AuthService.delete_account."""
+    await AuthService(session).delete_account(user, data.email)
+
+
+@router.post(
+    "/change-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(password_limit)],
+)
+async def change_password(
+    data: ChangePasswordRequest, user: CurrentUser, session: DBSession
+) -> MessageResponse:
+    await AuthService(session).change_password(
+        user, data.current_password, data.new_password
+    )
+    return MessageResponse(detail="Password updated.")

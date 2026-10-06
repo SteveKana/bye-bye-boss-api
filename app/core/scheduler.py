@@ -8,18 +8,29 @@ Register jobs from anywhere at import time:
     async def sync_data() -> None:
         ...
 
-    @scheduled(cron="0 0 1 * *")   # 1st of month, 00:00
+    @scheduled(cron="0 0 1 * *")   # 1st of month, 00:00 UTC
     async def monthly_report() -> None:
+        ...
+
+    @scheduled(cron="0 18 * * *", timezone="Europe/Paris")   # 18:00 Paris time
+    async def evening_job() -> None:
         ...
 
 Jobs only run if `SCHEDULER_ENABLED` is true. The scheduler is started/stopped
 by the app lifespan.
+
+`cron` is interpreted in the scheduler's own timezone (UTC, see `scheduler`
+below) unless `timezone` is given -- pass it whenever the schedule is meant
+to track a human's clock (e.g. "18:00 in France") rather than a fixed UTC
+instant, so it keeps landing at the same local time across DST changes
+instead of drifting by an hour twice a year.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -44,21 +55,65 @@ _registry: list[_JobSpec] = []
 scheduler = AsyncIOScheduler(timezone="UTC")
 
 
+@dataclass
+class JobRun:
+    """What the admin dashboard shows for a job: its last pass since the
+    process started (kept in memory only -- a restart forgets it)."""
+
+    last_run: datetime
+    status: str  # "ok" | "error"
+    duration_ms: int
+
+
+job_runs: dict[str, JobRun] = {}
+
+
+def _instrument(spec: _JobSpec) -> Job:
+    async def run() -> None:
+        started = datetime.now(UTC)
+        status = "ok"
+        try:
+            await spec.func()
+        except Exception:
+            status = "error"
+            raise
+        finally:
+            job_runs[spec.id] = JobRun(
+                last_run=started,
+                status=status,
+                duration_ms=int((datetime.now(UTC) - started).total_seconds() * 1000),
+            )
+
+    return run
+
+
+def registered_jobs() -> list[str]:
+    return [spec.id for spec in _registry]
+
+
+def next_run_time(job_id: str) -> datetime | None:
+    job = scheduler.get_job(job_id) if scheduler.running else None
+    return job.next_run_time if job else None
+
+
 def scheduled(
     *,
     interval_minutes: int | None = None,
     cron: str | None = None,
+    timezone: str | None = None,
     id: str | None = None,
 ) -> Callable[[Job], Job]:
     if (interval_minutes is None) == (cron is None):
         raise ValueError("Provide exactly one of `interval_minutes` or `cron`.")
+    if timezone is not None and interval_minutes is not None:
+        raise ValueError("`timezone` only applies to a `cron` trigger.")
 
     def decorator(func: Job) -> Job:
         trigger: object
         if interval_minutes is not None:
             trigger = IntervalTrigger(minutes=interval_minutes)
         else:
-            trigger = CronTrigger.from_crontab(cron)  # type: ignore[arg-type]
+            trigger = CronTrigger.from_crontab(cron, timezone=timezone)  # type: ignore[arg-type]
         _registry.append(_JobSpec(func=func, trigger=trigger, id=id or func.__name__))
         return func
 
@@ -70,7 +125,9 @@ def start_scheduler() -> None:
     if not settings.SCHEDULER_ENABLED or not _registry:
         return
     for spec in _registry:
-        scheduler.add_job(spec.func, spec.trigger, id=spec.id, replace_existing=True)
+        scheduler.add_job(
+            _instrument(spec), spec.trigger, id=spec.id, replace_existing=True
+        )
     scheduler.start()
     logger.info("scheduler_started", jobs=[s.id for s in _registry])
 

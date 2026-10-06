@@ -5,21 +5,43 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.core.models import utcnow
+from app.core.text import strip_nul
 from app.modules.cv import extraction, gateway
-from app.modules.cv.models import CandidateProfile, ProfileStatus
+from app.modules.cv.models import AvailabilityStatus, CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
 from app.modules.cv.schemas import PreferencesUpdate
 
 # Fields the LLM is asked to fill on the flat (non-list) part of the profile.
+# Availability is deliberately excluded: it's a live preference (immediate /
+# a date / serving notice / unavailable), not something reliably extractable
+# as free text, and is defaulted below instead.
 _FLAT_FIELDS = (
     "first_name",
     "last_name",
     "email",
     "location",
-    "availability",
     "total_experience",
+    "professional_summary",
 )
-_LIST_FIELDS = ("experiences", "skills", "formations", "languages", "certifications")
+_LIST_FIELDS = (
+    "experiences",
+    "skills",
+    "formations",
+    "languages",
+    "certifications",
+    "identified_roles",
+    "domains",
+    "skill_categories",
+)
+
+
+def _derive_headline(extracted: dict) -> str | None:
+    """Most recent experience's title -- CVs list jobs most-recent-first.
+    There's no dedicated headline field in a CV, so this is a best-effort
+    seed rather than something re-extracted on every import."""
+    experiences = extracted.get("experiences") or []
+    return (experiences[0].get("title") or None) if experiences else None
 
 
 class CvService:
@@ -37,24 +59,68 @@ class CvService:
     ) -> CandidateProfile:
         """Extract text from the file, structure it via the LLM, and persist
         it as a draft profile (creating or replacing the previous draft)."""
-        raw_text = extraction.extract_text(
+        raw_text, kind = extraction.extract_text(
             filename=filename, content_type=content_type, data=data
         )
-        extracted = await gateway.structure_cv_text(raw_text)
+        raw_text = strip_nul(raw_text)
+        extracted = strip_nul(await gateway.structure_cv_text(raw_text))
 
         profile = await self.profiles.get_by_user(user_id)
         values = {field: extracted.get(field) or None for field in _FLAT_FIELDS}
+        values["headline"] = _derive_headline(extracted)
         for field in _LIST_FIELDS:
             values[field] = extracted.get(field) or []
         values["raw_text"] = raw_text
-        values["status"] = ProfileStatus.draft.value
+        # A new/re-imported CV invalidates the cached matching embedding
+        # (see core/embeddings.py) -- it's recomputed lazily, from the
+        # new raw_text, the next time matching runs for this profile (see
+        # MatchingService._run_for_profile). Never left stale here.
+        values["embedding"] = None
+        values["cv_filename"] = filename
+        values["cv_content_type"] = content_type
+        # This is the one place a CV is actually (re-)parsed -- see the
+        # field's docstring in models.py for why it's kept apart from the
+        # generic, always-bumped `updated_at`.
+        values["cv_analyzed_at"] = utcnow()
+
+        # A re-import bounces the candidate back to "draft" so they
+        # re-confirm the freshly-extracted info -- but only while they've
+        # never actually finished onboarding yet (`onboarding_matched_at`
+        # still unset, see that field's docstring). Once a profile has
+        # completed onboarding at least once, re-importing a CV instead
+        # refreshes the CV-derived fields in place and leaves status alone
+        # ("complete"): bouncing an already-onboarded candidate back to the
+        # preferences step on every CV update served no purpose once
+        # `onboarding_matched_at` already guards, on its own, against a
+        # candidate forcing repeat LLM-costed matching runs (see
+        # ProfileOnboardingCompleted) -- it only forced a redundant
+        # reconfirmation click (Steve, 2026-09-29: "ça n'a aucun sens").
+        # Their matches still get refreshed against the new CV, just not
+        # instantly: the next scheduled sync (see matching.jobs.sync_matches)
+        # naturally re-scores this profile, since a re-import always bumps
+        # `updated_at` and clears the cached embedding above.
+        if profile is None or profile.onboarding_matched_at is None:
+            values["status"] = ProfileStatus.draft.value
 
         if profile is None:
+            # availability_status defaults to "immediate" on the column
+            # itself, so a fresh profile gets a sensible default without
+            # guessing from unreliable free-text extraction.
             profile = await self.profiles.create(
                 CandidateProfile(user_id=user_id, **values)
             )
         else:
+            # Re-importing a CV shouldn't silently reset a preference the
+            # user set themselves (availability isn't really a CV fact).
+            # headline behaves like the other flat CV fields (name, email,
+            # location): always refreshed from the latest import. Editing
+            # it by hand is a display tweak that lasts until the next CV
+            # import, not a permanent override.
             profile = await self.profiles.update(profile, values)
+
+        # Saved after the LLM call succeeds, so a failed import never
+        # leaves an orphaned file with no matching profile data.
+        extraction.save_original_file(user_id=user_id, kind=kind, data=data)
 
         await self.session.commit()
         return profile
@@ -65,28 +131,89 @@ class CvService:
             raise NotFoundError("Aucun profil trouvé. Importez d'abord un CV.")
         return profile
 
+    def get_cv_file(self, profile: CandidateProfile):
+        """Returns (path, filename, content_type) for downloading the
+        original uploaded file back."""
+        kind = (
+            "docx" if (profile.cv_filename or "").lower().endswith(".docx") else "pdf"
+        )
+        path = extraction.stored_file_path(profile.user_id, kind)
+        filename = profile.cv_filename or path.name
+        content_type = profile.cv_content_type or (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            if kind == "docx"
+            else "application/pdf"
+        )
+        return path, filename, content_type
+
     async def apply_verification(
         self, *, user_id: uuid.UUID, data: dict
-    ) -> CandidateProfile:
+    ) -> tuple[CandidateProfile, bool]:
+        """Saves the verified CV fields. Since 2026-10-05 (Steve) this is
+        also the END of onboarding -- the preferences step is gone -- so the
+        profile becomes "complete" here. Returns (profile,
+        is_first_completion): True only the very first time this account
+        ever completes onboarding (tracked by `onboarding_matched_at`, set
+        once and never cleared, so re-importing a CV can't be used to force
+        repeat LLM-costed matching runs). The route uses it to fire the
+        one-off immediate matching run."""
         profile = await self.get_for_user(user_id)
+        is_first_completion = profile.onboarding_matched_at is None
         updates = {k: v for k, v in data.items() if v is not None}
+        # Marks that this profile has been through the verification step at
+        # least once -- see the field's docstring in models.py for why this
+        # is a plain "last saved" timestamp rather than something cleared on
+        # re-import.
+        updates["verification_completed_at"] = utcnow()
+        updates["status"] = ProfileStatus.complete.value
+        if is_first_completion:
+            updates["onboarding_matched_at"] = utcnow()
+        # Only one of availability_date / notice_period_months is ever
+        # meaningful, matching whichever status was just set — clear the
+        # other explicitly, since the generic filter above drops None values
+        # and would otherwise let a stale one linger.
+        status = updates.get("availability_status")
+        if status == AvailabilityStatus.date.value:
+            updates["notice_period_months"] = None
+        elif status == AvailabilityStatus.notice.value:
+            updates["availability_date"] = None
+        elif status in (
+            AvailabilityStatus.immediate.value,
+            AvailabilityStatus.unavailable.value,
+        ):
+            updates["availability_date"] = None
+            updates["notice_period_months"] = None
         profile = await self.profiles.update(profile, updates)
         await self.session.commit()
-        return profile
+        return profile, is_first_completion
 
     async def apply_preferences(
         self, *, user_id: uuid.UUID, data: PreferencesUpdate
-    ) -> CandidateProfile:
+    ) -> tuple[CandidateProfile, bool]:
+        """Returns (profile, is_first_completion). `is_first_completion` is
+        True only the very first time this account ever completes
+        onboarding -- tracked by `onboarding_matched_at` (set once,
+        permanently, right here) rather than by comparing against
+        ProfileStatus.complete: status alone flips back to draft on every
+        CV re-import (see import_cv above), which would let a candidate
+        force repeat, LLM-costed immediate matching runs just by
+        re-importing their CV and resaving preferences. See
+        cv.routes.v1.cv_routes.update_preferences, which uses this to fire
+        that immediate, one-off matching run exactly once per account,
+        ever."""
         profile = await self.get_for_user(user_id)
-        profile = await self.profiles.update(
-            profile,
-            {
-                "contract_types": data.contract_types,
-                "remote_preferences": data.remote_preferences,
-                "mobility": data.mobility,
-                "salary_target": data.salary_target,
-                "status": ProfileStatus.complete.value,
-            },
-        )
+        is_first_completion = profile.onboarding_matched_at is None
+        updates = {
+            "contract_types": data.contract_types,
+            "remote_preferences": data.remote_preferences,
+            "mobility": data.mobility,
+            "mobility_region": data.mobility_region,
+            "salary_target": data.salary_target,
+            "daily_rate": data.daily_rate,
+            "status": ProfileStatus.complete.value,
+        }
+        if is_first_completion:
+            updates["onboarding_matched_at"] = utcnow()
+        profile = await self.profiles.update(profile, updates)
         await self.session.commit()
-        return profile
+        return profile, is_first_completion

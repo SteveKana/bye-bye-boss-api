@@ -18,10 +18,35 @@ class User(BaseModel, table=True):
     __tablename__ = "users"
 
     email: str = Field(index=True, unique=True, nullable=False)
-    password_hash: str = Field(nullable=False)
-    full_name: str | None = Field(default=None)
+    # Nullable: an account created via "Continuer avec Google" (see
+    # AuthService.login_with_google) has no password at all until the user
+    # sets one through the normal reset-password flow -- Google already
+    # vouches for the email, so there's nothing to hash at signup time.
+    # core/security.verify_password and AuthService.authenticate both guard
+    # against None here rather than erroring.
+    password_hash: str | None = Field(default=None, nullable=True)
+    first_name: str | None = Field(default=None)
+    last_name: str | None = Field(default=None)
     is_active: bool = Field(default=True, nullable=False)
+    is_verified: bool = Field(default=False, nullable=False)
     isadmin: bool = Field(default=False, nullable=False)
+
+    # Google's own, stable user id ("sub" claim) for an account created or
+    # linked via "Continuer avec Google" -- kept alongside the email match
+    # so the frontend can show "connecté via Google" and so a future email
+    # change on the Google side doesn't orphan the link. Unique but nullable
+    # (most users never sign in with Google at all).
+    google_id: str | None = Field(default=None, index=True, unique=True, nullable=True)
+
+    # From Google's ID token "picture" claim -- captured once, at the same
+    # moment google_id itself is (new Google signup, or an existing
+    # password account linking Google for the first time), never
+    # refreshed on later logins. Mirrors this file's existing pattern:
+    # first_name/last_name from Google aren't refreshed on repeat logins
+    # either (see AuthService.login_with_google). Stays None for an
+    # account that never signed in with Google -- the frontend falls back
+    # to an initials avatar in that case.
+    picture_url: str | None = Field(default=None, nullable=True)
 
     # Subscription plan — gates the manual-rescore frequency bypass (spec §6).
     # Stored as a plain string; allowed values live in `SubscriptionPlan`.

@@ -21,8 +21,9 @@ Emit (from a service):
     await event_bus.emit(UserRegistered(user_id=user.id, email=user.email))
 
 Listeners run concurrently; a failing listener is logged and never breaks the
-emitter. Handlers are decoupled from the DB transaction — emit *after* commit
-for side effects that must only happen on success.
+emitter (unless the emitter asks for `raise_on_error=True`). Handlers are
+decoupled from the DB transaction — emit *after* commit for side effects that
+must only happen on success.
 """
 
 from __future__ import annotations
@@ -67,21 +68,32 @@ class EventBus:
 
         return decorator
 
-    async def emit(self, event: Event) -> None:
+    async def emit(self, event: Event, *, raise_on_error: bool = False) -> None:
+        """Run every listener concurrently and wait for all of them.
+
+        By default a failing listener is only logged. With `raise_on_error`
+        the first failure is re-raised once ALL listeners have finished --
+        for the rare emitter that must not carry on after a failed reaction
+        (e.g. account deletion, which must not remove the user row while
+        another module's data purge failed)."""
         handlers = self._handlers.get(type(event), [])
         if not handlers:
             return
         results = await asyncio.gather(
             *(h(event) for h in handlers), return_exceptions=True
         )
+        first_error: Exception | None = None
         for handler, result in zip(handlers, results, strict=True):
             if isinstance(result, Exception):
                 logger.error(
                     "event_listener_failed",
-                    event=type(event).__name__,
+                    event_name=type(event).__name__,
                     handler=getattr(handler, "__qualname__", str(handler)),
                     error=str(result),
                 )
+                first_error = first_error or result
+        if raise_on_error and first_error is not None:
+            raise first_error
 
 
 event_bus = EventBus()

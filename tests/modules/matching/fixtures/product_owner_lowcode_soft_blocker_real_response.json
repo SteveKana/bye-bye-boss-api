@@ -1,0 +1,426 @@
+{
+  "company_name": "",
+  "career_score": 80,
+  "ats_score": 60,
+  "ats_potential": 70,
+  "cv_skills": [
+    "product_ownership",
+    "requirements_gathering",
+    "workshop_facilitation",
+    "user_story",
+    "epic_management",
+    "backlog_management",
+    "agile",
+    "scrum",
+    "kanban",
+    "safe",
+    "definition_of_ready",
+    "acceptance_criteria",
+    "functional_testing",
+    "uat",
+    "test_automation_coordination",
+    "data_quality_management",
+    "kpi_reporting",
+    "reporting_to_stakeholders",
+    "stakeholder_management",
+    "release_planning",
+    "sprint_ceremonies",
+    "demo_presentation",
+    "support_level2",
+    "incident_analysis",
+    "change_management_support",
+    "sql",
+    "power_bi",
+    "kibana",
+    "dynatrace",
+    "postman",
+    "jira",
+    "confluence",
+    "azure_devops",
+    "gcp_bigquery",
+    "knime",
+    "sap_businessobjects",
+    "api_rest",
+    "api_design",
+    "web_services",
+    "data_modeling",
+    "etl",
+    "oracle",
+    "pl_sql",
+    "spring_batch",
+    "oracle_service_bus",
+    "html_css",
+    "javascript",
+    "laravel_php",
+    "flutter",
+    "prototyping_adobe_xd",
+    "trello",
+    "draft_io",
+    "dsfr",
+    "retail_sector",
+    "public_sector",
+    "pharma_industry",
+    "masters_information_systems",
+    "cert_safe_popm",
+    "french_native",
+    "english_b2"
+  ],
+  "job_skills": [
+    {
+      "skill": "requirements_gathering",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "workshop_facilitation",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "prototyping_wireframing",
+      "category": "tool_method",
+      "importance": "preferred"
+    },
+    {
+      "skill": "business_value_prioritization",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "roi_definition",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "backlog_management",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "user_story",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "epic_management",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "agile_ceremonies",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "functional_testing",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "user_guides",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "kpi_tracking",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "tma_collaboration",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "mco_followup",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "incident_analysis",
+      "category": "responsibility",
+      "importance": "required"
+    },
+    {
+      "skill": "mvp_definition",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "release_planning",
+      "category": "responsibility",
+      "importance": "preferred"
+    },
+    {
+      "skill": "microsoft_power_platform",
+      "category": "tool",
+      "importance": "required"
+    },
+    {
+      "skill": "nintex",
+      "category": "tool",
+      "importance": "preferred"
+    },
+    {
+      "skill": "french_c1_c2",
+      "category": "language",
+      "importance": "required"
+    },
+    {
+      "skill": "english_b2",
+      "category": "language",
+      "importance": "preferred"
+    }
+  ],
+  "mandatory_requirements": [
+    "requirements_gathering",
+    "workshop_facilitation",
+    "business_value_prioritization",
+    "backlog_management",
+    "user_story",
+    "agile_ceremonies",
+    "functional_testing",
+    "tma_collaboration",
+    "mco_followup",
+    "incident_analysis",
+    "microsoft_power_platform",
+    "french_c1_c2"
+  ],
+  "preferred_requirements": [
+    "prototyping_wireframing",
+    "roi_definition",
+    "epic_management",
+    "user_guides",
+    "kpi_tracking",
+    "mvp_definition",
+    "release_planning",
+    "nintex",
+    "english_b2"
+  ],
+  "blocking_requirements": [
+    {
+      "skill": "microsoft_power_platform",
+      "level": "soft_blocker",
+      "reason": "Compétence technique impérative (Microsoft low-code) non explicitée sur le CV; outil non réglementaire donc non-qualitatif dur.",
+      "gap_value": null,
+      "gap_percent": null
+    }
+  ],
+  "blocking_message": "Le principal frein ATS est l'absence explicite d'expérience sur l'écosystème low-code Microsoft (Power Apps/Power Automate/SharePoint), indiqué comme impératif. Le reste du rôle (recueil, ateliers, backlog, US, rituels, recette) est bien couvert. Sans preuve d'usage Microsoft low-code, de nombreuses plateformes ou recruteurs filtreront le CV malgré la forte proximité fonctionnelle.",
+  "matches": [
+    {
+      "skill": "requirements_gathering",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "workshop_facilitation",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "prototyping_wireframing",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 65
+    },
+    {
+      "skill": "business_value_prioritization",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 70
+    },
+    {
+      "skill": "roi_definition",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 55
+    },
+    {
+      "skill": "user_story",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "epic_management",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 80
+    },
+    {
+      "skill": "backlog_management",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "agile_ceremonies",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 95
+    },
+    {
+      "skill": "functional_testing",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 90
+    },
+    {
+      "skill": "user_guides",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 40
+    },
+    {
+      "skill": "kpi_tracking",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "tma_collaboration",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "mco_followup",
+      "importance": "required",
+      "result": "partially_matched",
+      "confidence": 55
+    },
+    {
+      "skill": "incident_analysis",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 85
+    },
+    {
+      "skill": "mvp_definition",
+      "importance": "preferred",
+      "result": "partially_matched",
+      "confidence": 60
+    },
+    {
+      "skill": "release_planning",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 75
+    },
+    {
+      "skill": "microsoft_power_platform",
+      "importance": "required",
+      "result": "missing",
+      "confidence": 20
+    },
+    {
+      "skill": "nintex",
+      "importance": "preferred",
+      "result": "missing",
+      "confidence": 20
+    },
+    {
+      "skill": "french_c1_c2",
+      "importance": "required",
+      "result": "matched",
+      "confidence": 100
+    },
+    {
+      "skill": "english_b2",
+      "importance": "preferred",
+      "result": "matched",
+      "confidence": 85
+    }
+  ],
+  "ats_gaps": [
+    {
+      "skill": "microsoft_power_platform",
+      "missing_in_cv": true,
+      "why_it_matters": "Compétence impérative pour un poste de Product Owner Low-Code sur écosystème Microsoft (Power Apps/Power Automate/SharePoint/Dataverse). Filtre ATS fréquent.",
+      "cv_fix_example": "Si réel: Product Owner – Pilotage de features Power Apps et automatisations Power Automate; backlog, US, critères d’acceptation; coordination TMA; suivi MCO SharePoint/Dataverse. Outils: Power Apps, Power Automate, SharePoint, Dataverse."
+    },
+    {
+      "skill": "nintex",
+      "missing_in_cv": true,
+      "why_it_matters": "Outil low-code apprécié dans l’écosystème Microsoft/SharePoint; améliore le matching sémantique.",
+      "cv_fix_example": "Si réel: Automatisation de processus sous Nintex (workflow, formulaires) – conception, tests d’acceptation, déploiement, MCO."
+    },
+    {
+      "skill": "tma_collaboration",
+      "missing_in_cv": false,
+      "why_it_matters": "Le poste implique la collaboration avec la TMA et le suivi MCO. Votre CV évoque du support N2 mais pas explicitement la TMA/MCO.",
+      "cv_fix_example": "CNAF – Coordination avec TMA: priorisation des correctifs, suivi SLA/incident backlog, animation CAB, préparation mises en production (MCO)."
+    },
+    {
+      "skill": "kpi_tracking",
+      "missing_in_cv": false,
+      "why_it_matters": "Le suivi de KPIs produit et ROI est cité; votre CV mentionne reporting et qualité de données, mais pas KPIs produit/ROI.",
+      "cv_fix_example": "Mise en place de KPIs produit (adoption, temps de cycle, taux d’erreur post-release) et suivi ROI/ROIS; tableaux de bord Power BI partagés aux parties prenantes."
+    },
+    {
+      "skill": "user_guides",
+      "missing_in_cv": true,
+      "why_it_matters": "La rédaction/mise à jour des guides utilisateurs est listée; améliore la couverture fonctionnelle.",
+      "cv_fix_example": "Rédaction de guides utilisateurs et release notes; communication aux métiers lors des releases (canal Teams/Confluence)."
+    },
+    {
+      "skill": "prototyping_wireframing",
+      "missing_in_cv": false,
+      "why_it_matters": "La phase discovery inclut maquettes et expression de besoin; vous citez Adobe XD/UX mais sans relier explicitement aux ateliers.",
+      "cv_fix_example": "Animation d’ateliers discovery et formalisation via maquettes haute fid. (Adobe XD) et SFD; validation métier avant chiffrage."
+    }
+  ],
+  "actions": [
+    {
+      "action": "Clarifier l’exposition Low-Code Microsoft (si existante) ou entreprendre une courte formation certifiante",
+      "details": "Si vous avez touché Power Apps/Power Automate/SharePoint, créez une sous-rubrique 'Low-code Microsoft' et citez cas d’usage. Sinon, suivez PL-900 (Microsoft Power Platform Fundamentals) et indiquez 'PL-900 en cours (mois/année)'."
+    },
+    {
+      "action": "Rendre explicite la collaboration TMA/MCO",
+      "details": "Ajoutez des puces: 'Coordination TMA: triage incidents, priorisation correctifs, suivi SLA, MEP, MCO'. Reliez-le au support N2 existant."
+    },
+    {
+      "action": "Ajouter livrables attendus (CDC/SFD) et discovery",
+      "details": "Insérez: 'Rédaction CDC/SFD, maquettes (Adobe XD), validation chiffrage et devis post-ateliers'. Cela aligne vos pratiques aux livrables de l’offre."
+    },
+    {
+      "action": "Introduire KPIs produit et ROI/ROIS",
+      "details": "Ajoutez des exemples: 'Suivi de l’adoption (DAU/WAU), temps de cycle, taux de défaut post-release (-30%), ROIS projet (x% coûts évités)'."
+    },
+    {
+      "action": "Renforcer le wording ATS autour du backlog et de l’Agile",
+      "details": "Ajoutez les mots-clés: 'priorisation par valeur métier, MoSCoW, MVP, release planning, Definition of Done, critères d’acceptation'."
+    },
+    {
+      "action": "Aligner les outils sur l’écosystème Microsoft",
+      "details": "Mettez en avant ce que vous avez déjà: Power BI, Azure DevOps. Ajoutez si réel: SharePoint/Teams/Dataverse; sinon retirez les outils trop éloignés de l’offre en haut de liste."
+    },
+    {
+      "action": "Quantifier les impacts",
+      "details": "Pour chaque mission, ajoutez 1–2 mesures: 'réduction temps de traitement -25%', 'amélioration qualité données (taux d’anomalies -40%)', 'lead time -20%'."
+    },
+    {
+      "action": "Section 'Compétences clés' optimisée ATS",
+      "details": "Créez un bloc: 'Backlog management • Epics & User Stories • Agile/Scrum/SAFe • Recette fonctionnelle/UAT • Ateliers discovery • KPIs & ROI • TMA/MCO • Microsoft Power BI/Azure DevOps (et Power Platform si réel)'."
+    },
+    {
+      "action": "Relier Knime/ETL à la logique low-code",
+      "details": "Formulez: 'Expérience low-code ETL (Knime): conception de workflows sans code/low-code, critères d’acceptation, déploiement'. Utile pour montrer transférabilité."
+    }
+  ],
+  "career_explanation": [
+    "Expérience pertinente en pilotage produit et proxy PO depuis 02/2022 (~4,75 ans cumulés jusqu’à 09/2026) couvrant backlog, US, rituels, recette, reporting.",
+    "Contexte multi-secteurs (Retail, Secteur Public, Industrie pharma) montrant adaptabilité et transversalité attendues d’un PO.",
+    "Compétences data/BI (SQL, Power BI) et suivi opérationnel (Kibana, Dynatrace) utiles pour KPIs produit et pilotage qualité.",
+    "Écart principal: absence explicite de low-code Microsoft; toutefois, expérience low-code/ETL (Knime) et Azure DevOps indiquent une bonne transférabilité vers l’écosystème Microsoft."
+  ],
+  "ats_explanation": [
+    "Score brut élevé sur exigences fonctionnelles (recueil, ateliers, US, backlog, rituels, recette) => bonne couverture des mots-clés essentiels.",
+    "Pénalités: soft_blocker sur 'Microsoft Power Platform' (impératif manquant) impacte significativement le score ATS.",
+    "Autres gaps non bloquants: Nintex (préféré, manquant), TMA/MCO et KPIs/ROI partiellement couverts par du support N2 et reporting.",
+    "Absence de hard_blocker (langue française C1/C2: OK; diplôme/certif réglementaires: non requis). D’où un ATS Score moyen (60) avec potentiel d’optimisation limité à +10 si le fond Microsoft low-code est réellement absent."
+  ]
+}
