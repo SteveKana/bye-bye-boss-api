@@ -74,6 +74,12 @@ def create_reset_token(subject: str) -> str:
     return _create_token(subject, "reset", settings.RESET_TOKEN_TTL_MINUTES)
 
 
+def create_invitation_token(subject: str) -> str:
+    # Same "reset" type so the existing /reset-password page accepts it, but
+    # valid for days: it lands in a launch invitation, not a same-minute reset.
+    return _create_token(subject, "reset", settings.INVITATION_TOKEN_TTL_MINUTES)
+
+
 def create_verify_token(subject: str) -> str:
     return _create_token(subject, "verify", settings.VERIFY_TOKEN_TTL_MINUTES)
 

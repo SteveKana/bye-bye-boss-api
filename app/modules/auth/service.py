@@ -4,11 +4,13 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.events import event_bus
 from app.core.exceptions import BadRequestError, ConflictError, UnauthorizedError
 from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
+    create_invitation_token,
     create_refresh_token,
     create_reset_token,
     create_verify_token,
@@ -81,6 +83,33 @@ class AuthService:
             )
         )
         return self.issue_tokens(user)
+
+    async def create_invited_account(self, email: str) -> User | None:
+        """Pre-creates an account for a waitlist lead: e-mail only, no
+        password, not verified. None when the address already has an account
+        (compared case-insensitively). The owner picks a password -- or signs
+        in with Google -- from the invitation link."""
+        email = email.strip().lower()
+        if await self.users.get_by_email_ci(email):
+            return None
+        user = await self.users.create(User(email=email, is_verified=False))
+        await self.session.commit()
+        logger.info("user_invited_account_created", user_id=str(user.id), email=email)
+        await event_bus.emit(
+            UserRegistered(
+                user_id=user.id,
+                email=user.email,
+                first_name=user.first_name,
+                last_name=user.last_name,
+            )
+        )
+        return user
+
+    def invitation_link(self, user: User) -> str:
+        """Long-lived "choose your password" link (reset-password page)."""
+        token = create_invitation_token(str(user.id))
+        base = get_settings().APP_URL.rstrip("/")
+        return f"{base}/reset-password?token={token}"
 
     async def queue_verification(self, user: User, locale: str = "fr") -> None:
         await self._queue_verification_email(user, locale)
@@ -253,6 +282,9 @@ class AuthService:
         if not user or not user.is_active:
             raise UnauthorizedError("Invalid reset token.")
         user.password_hash = hash_password(new_password)
+        # The link only ever reaches the mailbox's owner: following it proves
+        # the address, exactly like the verification link does.
+        user.is_verified = True
         self.session.add(user)
         await self.session.commit()
         logger.info("password_reset_confirmed", user_id=str(user.id))
