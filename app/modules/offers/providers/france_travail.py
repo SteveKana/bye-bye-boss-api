@@ -62,6 +62,8 @@ DEPARTEMENTS: tuple[str, ...] = (
 )
 # The API allows 10 calls/second; stay well under it.
 _CALL_SPACING_SECONDS = 0.2
+_PAGE_ATTEMPTS = 6
+_RETRY_BACKOFF_SECONDS = 2.0
 # One search returns at most 150 offers per call and 1,150 in total (range
 # 0-1149): a window holding more is split (by département, then by time).
 _PAGE_SIZE = 150
@@ -88,6 +90,9 @@ class FranceTravailProvider(OfferProvider):
         # Accepting an injected client keeps this provider testable (see
         # tests/modules/offers) without touching the real network.
         self._client = client
+        # Slices of a bulk crawl that kept failing (see `_crawl_slice`); the
+        # import is idempotent, so a re-run fills exactly these gaps.
+        self.failed_slices: list[str] = []
 
     def is_configured(self) -> bool:
         settings = get_settings()
@@ -268,20 +273,33 @@ class FranceTravailProvider(OfferProvider):
         params: dict[str, str],
     ) -> tuple[list[dict], int | None]:
         """One search call -> (offers, total reported by Content-Range).
-        A 401 (token older than ~25 minutes) refreshes the token once; any
-        other failure raises so the crawl never silently drops a slice."""
-        for _attempt in range(4):
+        A 401 (token older than ~25 minutes) refreshes the token; a 429, a 5xx
+        or a network error is retried with a growing pause; once the attempts
+        are used up it raises (the crawl then records the slice as failed
+        instead of stopping, see `_crawl_slice`)."""
+        for attempt in range(_PAGE_ATTEMPTS):
             await asyncio.sleep(_CALL_SPACING_SECONDS)
-            response = await client.get(
-                _SEARCH_URL,
-                params=params,
-                headers={"Authorization": f"Bearer {auth['token']}"},
-            )
+            try:
+                response = await client.get(
+                    _SEARCH_URL,
+                    params=params,
+                    headers={"Authorization": f"Bearer {auth['token']}"},
+                )
+            except httpx.TransportError as exc:
+                logger.warning("france_travail_page_retry", error=str(exc))
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS * 2**attempt)
+                continue
             if response.status_code == 401:
                 auth["token"] = await self._get_token(client)
                 continue
             if response.status_code == 429:
                 await asyncio.sleep(float(response.headers.get("Retry-After", "1")))
+                continue
+            if response.status_code >= 500:
+                # Temporary server-side error (seen in production: a 500 on
+                # one département page) -- wait and ask again.
+                logger.warning("france_travail_page_retry", status=response.status_code)
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS * 2**attempt)
                 continue
             if response.status_code == 204:
                 return [], 0
@@ -332,7 +350,11 @@ class FranceTravailProvider(OfferProvider):
         params = {"minCreationDate": _fmt(since), "maxCreationDate": _fmt(until)}
         if departement:
             params["departement"] = departement
-        first, total = await self._page(client, auth, {**params, "range": "0-0"})
+        try:
+            first, total = await self._page(client, auth, {**params, "range": "0-0"})
+        except httpx.HTTPError as exc:
+            self._record_failure(params, exc)
+            return
         if not total:
             return
         if total > _MAX_PER_SEARCH:
@@ -360,8 +382,17 @@ class FranceTravailProvider(OfferProvider):
         last = min(total, _MAX_PER_SEARCH)
         for start in range(0, last, _PAGE_SIZE):
             end = min(start + _PAGE_SIZE, last) - 1
-            items, _ = await self._page(
-                client, auth, {**params, "range": f"{start}-{end}"}
-            )
+            try:
+                items, _ = await self._page(
+                    client, auth, {**params, "range": f"{start}-{end}"}
+                )
+            except httpx.HTTPError as exc:
+                self._record_failure({**params, "range": f"{start}-{end}"}, exc)
+                continue
             if items:
                 yield [self._normalize(item) for item in items]
+
+    def _record_failure(self, params: dict[str, str], exc: Exception) -> None:
+        label = ", ".join(f"{key}={value}" for key, value in params.items())
+        self.failed_slices.append(label)
+        logger.error("france_travail_slice_failed", slice=label, error=str(exc))
