@@ -19,6 +19,7 @@ batch_service.py.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -149,9 +150,45 @@ class MatchingService:
 
         settings = get_settings()
         now = utcnow()
-        pool = await self.offers.list_recent(
-            since=now - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
-        )
+        existing = {
+            match.job_offer_id: match
+            for match in await self.matches.list_all_for_profile(profile.id)
+        }
+        pool_since = now - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
+        pool: Sequence[JobOffer]
+        if profile.embedding and await self.offers.vector_search_available():
+            # Postgres + pgvector: let the database find the closest offers
+            # (a few hundred per source) instead of loading the whole pool
+            # in memory -- what lets the offers table grow to tens of
+            # thousands of rows. The filters below still apply to what comes
+            # back; the ones that depend on the run are applied here too so
+            # the nearest-N are not wasted on offers about to be dropped.
+            first_run_now = not existing
+            created_since = (
+                pool_since
+                if first_run_now
+                else max(
+                    pool_since, now - timedelta(days=settings.MATCHING_DAILY_POOL_DAYS)
+                )
+            )
+            pool = await self.offers.nearest(
+                profile.embedding,
+                created_since=created_since,
+                published_since=now
+                - timedelta(days=settings.MATCHING_MAX_OFFER_AGE_DAYS),
+                exclude_ids=[] if cv_changed else list(existing),
+                per_source=settings.MATCHING_VECTOR_CANDIDATES_PER_SOURCE,
+            )
+            # Offers already on file for this candidate are not "nearest"
+            # candidates, but the seniority check below must still be able to
+            # hide the ones that no longer fit (same as the in-memory path).
+            seen_ids = {offer.id for offer in pool}
+            extras = await self.offers.get_many(
+                [offer_id for offer_id in existing if offer_id not in seen_ids]
+            )
+            pool = [*pool, *extras]
+        else:
+            pool = await self.offers.list_recent(since=pool_since)
         # No geographic restriction: since 2026-10-05 (Steve) a candidate is
         # matched on their CV alone, and narrows by city/region themselves
         # with the filters on the Opportunités page. A mobility value saved
@@ -174,11 +211,6 @@ class MatchingService:
                 title=offer.title,
             )
         }
-        existing = {
-            match.job_offer_id: match
-            for match in await self.matches.list_all_for_profile(profile.id)
-        }
-
         # First run = nothing on file yet for this profile; it looks at the
         # whole pool. A daily run only looks at offers ingested recently --
         # everything older was already seen on an earlier run.
