@@ -95,6 +95,10 @@ class OverviewTiles(BaseModel):
     alerts_sent_today: int
     alerts_by_channel_today: dict[str, int]
     alerts_failed_today: int
+    # Accounts per configured alert channel (email / whatsapp / discord), plus
+    # "none" for accounts with no channel on. An account with several channels
+    # is counted in each of them.
+    channels_configured: dict[str, int]
 
 
 class OffersBySource(BaseModel):
@@ -206,6 +210,7 @@ class UserRow(BaseModel):
     profile_status: Literal["none", "draft", "complete"]
     last_seen: datetime | None
     alerts_enabled: bool
+    channels: list[str]
     applications: int
     is_admin: bool
 

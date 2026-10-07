@@ -67,6 +67,23 @@ async def _all(session: AsyncSession, stmt: sa.Select) -> list:
     return list((await session.execute(stmt)).all())
 
 
+CHANNEL_NAMES = ("email", "whatsapp", "discord")
+
+
+def _channels_of(pref) -> list[str]:  # type: ignore[no-untyped-def]
+    """Alert channels switched on in an account's notification preferences.
+    An account with no preference row gets no alert at all (see
+    NotificationService._send_for_profile), so it has no channel."""
+    if pref is None:
+        return []
+    enabled = {
+        "email": pref.email_enabled,
+        "whatsapp": pref.whatsapp_enabled,
+        "discord": pref.discord_enabled,
+    }
+    return [name for name in CHANNEL_NAMES if enabled[name]]
+
+
 def _real_users():
     return sa.and_(q.users.c.is_active.is_(True))
 
@@ -98,6 +115,26 @@ async def overview(session: AsyncSession, days: int) -> OverviewResponse:
     users = await _all(
         session, sa.select(q.users.c.id, q.users.c.created_at).where(_real_users())
     )
+    pref_rows = {
+        p.user_id: p
+        for p in await _all(
+            session,
+            sa.select(
+                q.preferences.c.user_id,
+                q.preferences.c.email_enabled,
+                q.preferences.c.discord_enabled,
+                q.preferences.c.whatsapp_enabled,
+            ),
+        )
+    }
+    channels_configured: dict[str, int] = dict.fromkeys(CHANNEL_NAMES, 0)
+    channels_configured["none"] = 0
+    for user_id, _created in users:
+        channels = _channels_of(pref_rows.get(user_id))
+        for name in channels:
+            channels_configured[name] += 1
+        if not channels:
+            channels_configured["none"] += 1
     signup_days = dict.fromkeys(last_days(30), 0)
     for _, created in users:
         day = paris_day(created)
@@ -207,7 +244,7 @@ async def overview(session: AsyncSession, days: int) -> OverviewResponse:
                 for stamp in incident.occurrences or []
                 if as_utc(datetime.fromisoformat(stamp)) >= today
             )
-    channel_names = ("email", "whatsapp", "discord")
+    channel_names = CHANNEL_NAMES
     alerts_today = [
         AlertChannel(
             channel=c,
@@ -256,6 +293,7 @@ async def overview(session: AsyncSession, days: int) -> OverviewResponse:
                 c: sent_by_channel.get(c, 0) for c in channel_names
             },
             alerts_failed_today=failed_total,
+            channels_configured=channels_configured,
         ),
         signups=[DayCount(date=d.isoformat(), count=n) for d, n in signup_days.items()],
         matching_funnel=funnel,
@@ -782,14 +820,8 @@ async def users_list(session: AsyncSession) -> list[UserRow]:
                     else "draft"
                 ),
                 last_seen=last_seen.get(u.id),
-                alerts_enabled=bool(
-                    pref
-                    and (
-                        pref.email_enabled
-                        or pref.discord_enabled
-                        or pref.whatsapp_enabled
-                    )
-                ),
+                alerts_enabled=bool(_channels_of(pref)),
+                channels=_channels_of(pref),
                 applications=applications.get(u.id, 0),
                 is_admin=bool(u.isadmin),
             )
