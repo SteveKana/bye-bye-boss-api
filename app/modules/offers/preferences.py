@@ -31,7 +31,11 @@ from dataclasses import dataclass
 
 import sqlalchemy as sa
 
-from app.core.contract_type import CONTRACT_LABEL_SUBSTRINGS
+from app.core.contract_type import (
+    CONTRACT_LABEL_SUBSTRINGS,
+    FULL_TIME_MARKERS,
+    is_bare_full_time,
+)
 from app.core.remote_work import looks_hybrid
 from app.modules.offers.models import JobOffer
 
@@ -105,10 +109,18 @@ class OfferPreferences:
                 for contract in self.contract_types
                 for sub in CONTRACT_LABEL_SUBSTRINGS.get(contract, ())
             ]
+            # A bare "full_time" label counts as a CDI (see is_bare_full_time).
+            bare_full_time = sa.and_(
+                _like_any(label, FULL_TIME_MARKERS),
+                sa.not_(_like_any(label, _ALL_SUBSTRINGS)),
+            )
+            wanted_ok = _like_any(label, wanted)
+            if "CDI" in self.contract_types:
+                wanted_ok = sa.or_(wanted_ok, bare_full_time)
             stmt = stmt.where(
                 sa.or_(
-                    _like_any(label, wanted),
-                    sa.not_(_like_any(label, _ALL_SUBSTRINGS)),
+                    wanted_ok,
+                    sa.not_(sa.or_(_like_any(label, _ALL_SUBSTRINGS), bare_full_time)),
                 )
             )
 
@@ -164,8 +176,12 @@ class OfferPreferences:
                 for contract in self.contract_types
                 for sub in CONTRACT_LABEL_SUBSTRINGS.get(contract, ())
             ]
-            recognized = any(sub in text for sub in _ALL_SUBSTRINGS)
-            if recognized and not any(sub in text for sub in wanted):
+            bare_full_time = is_bare_full_time(offer.contract_type)
+            recognized = bare_full_time or any(sub in text for sub in _ALL_SUBSTRINGS)
+            ok = any(sub in text for sub in wanted) or (
+                bare_full_time and "CDI" in self.contract_types
+            )
+            if recognized and not ok:
                 return False
 
         if self.min_salary:

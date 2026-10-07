@@ -105,6 +105,23 @@ CONTRACT_LABEL_SUBSTRINGS: dict[str, tuple[str, ...]] = {
 }
 CONTRACT_LABELS: tuple[str, ...] = tuple(CONTRACT_LABEL_SUBSTRINGS)
 
+# Adzuna sometimes gives only "full_time" (no permanent/contract). Steve
+# (2026-10-07): that is read as a CDI -- but only when the label names no other
+# contract ("contract, full_time" stays a Freelance mission).
+FULL_TIME_MARKERS: tuple[str, ...] = ("full_time", "full-time", "full time")
+
+
+def is_bare_full_time(raw: str | None) -> bool:
+    """True for a label that only says "full time" and names no contract type."""
+    if not raw:
+        return False
+    text = raw.lower()
+    if not any(marker in text for marker in FULL_TIME_MARKERS):
+        return False
+    return not any(
+        sub in text for subs in CONTRACT_LABEL_SUBSTRINGS.values() for sub in subs
+    )
+
 
 def contract_label_of(raw: str | None) -> str | None:
     """One of CONTRACT_LABELS for a raw source label, or None when the label is
@@ -116,4 +133,6 @@ def contract_label_of(raw: str | None) -> str | None:
     for label in ("CDI", "CDD", "Intérim", "Alternance", "Stage", "Freelance"):
         if any(sub in text for sub in CONTRACT_LABEL_SUBSTRINGS[label]):
             return label
+    if is_bare_full_time(raw):
+        return "CDI"
     return None
