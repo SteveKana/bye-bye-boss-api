@@ -32,6 +32,7 @@ class IngestionReport:
     created: int = 0
     updated: int = 0
     skipped_unconfigured: list[str] = field(default_factory=list)
+    failed_slices: list[str] = field(default_factory=list)
 
 
 def _embed_text(item: NormalizedOffer) -> str:
@@ -204,6 +205,7 @@ class OffersIngestionService:
             )
             if limit is not None and report.fetched >= limit:
                 break
+        report.failed_slices = list(getattr(provider, "failed_slices", []))
         return report
 
     async def _upsert_page(

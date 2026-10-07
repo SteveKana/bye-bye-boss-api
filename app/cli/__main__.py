@@ -314,6 +314,14 @@ def _cmd_import_offers(args: argparse.Namespace) -> int:
             f"offres lues: {report.fetched} | créées: {report.created} | "
             f"mises à jour: {report.updated}"
         )
+        if report.failed_slices:
+            print(
+                f"ATTENTION: {len(report.failed_slices)} tranche(s) n'ont pas pu "
+                "être lues (erreurs France Travail). Relance la même commande "
+                "pour les rattraper."
+            )
+            for label in report.failed_slices[:10]:
+                print(f"  - {label}")
 
     asyncio.run(_run())
     return 0
