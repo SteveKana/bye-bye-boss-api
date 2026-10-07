@@ -275,6 +275,10 @@ class Settings(BaseSettings):
     # date). Without it a brand-new profile's first run, which looks at the
     # whole MATCHING_MAX_OFFER_POOL_DAYS window, showed offers weeks old.
     MATCHING_MAX_OFFER_AGE_DAYS: int = 5
+    # Postgres + pgvector: how many nearest offers per source are pulled from
+    # the database for each candidate before the usual filters and ranking
+    # (instead of loading every offer in memory).
+    MATCHING_VECTOR_CANDIDATES_PER_SOURCE: int = 500
 
     # French labels for the skill names shown with an analysis (see
     # matching/skill_labels.py): the cheap model that translates each internal

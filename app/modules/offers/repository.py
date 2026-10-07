@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
+import sqlalchemy as sa
+from sqlalchemy import ARRAY
 from sqlmodel import desc, or_, select
 
 from app.core.repository import BaseRepository
@@ -58,3 +61,74 @@ class JobOfferRepository(BaseRepository[JobOffer]):
         if self._soft_delete:
             stmt = stmt.where(JobOffer.deleted_at.is_(None))  # type: ignore[attr-defined]
         return (await self.session.exec(stmt)).all()
+
+    async def vector_search_available(self) -> bool:
+        """True on Postgres once the pgvector column exists (see
+        vector_ddl.py); False on SQLite and on servers without the
+        extension, where callers keep the in-memory path."""
+        bind = self.session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return False
+        found = await self.session.execute(
+            sa.text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'job_offers' AND column_name = 'embedding_vec'"
+            )
+        )
+        return found.first() is not None
+
+    async def nearest(
+        self,
+        embedding: list[float],
+        *,
+        created_since: datetime,
+        published_since: datetime,
+        exclude_ids: Sequence[uuid.UUID] = (),
+        per_source: int,
+    ) -> list[JobOffer]:
+        """The `per_source` offers closest (cosine) to `embedding` for each
+        source, within the freshness windows. Per source because matching
+        compares offers against their own source's baseline (see
+        matching/shortlist.py). Postgres + pgvector only (see
+        `vector_search_available`). An exact scan: no index, so no recall
+        loss from filtered approximate search -- fine while the pool is the
+        last few weeks of offers."""
+        vector_literal = "[" + ",".join(repr(float(x)) for x in embedding) + "]"
+        sources = (
+            await self.session.execute(
+                sa.text("SELECT DISTINCT source FROM job_offers")
+            )
+        ).scalars()
+        found: list[JobOffer] = []
+        for source in list(sources):
+            stmt = (
+                self._base_select()
+                .where(JobOffer.source == source)  # type: ignore[arg-type]
+                .where(JobOffer.created_at >= created_since)  # type: ignore[arg-type]
+                .where(
+                    sa.func.coalesce(JobOffer.published_at, JobOffer.created_at)  # type: ignore[arg-type]
+                    >= published_since
+                )
+                .where(sa.text("job_offers.embedding_vec IS NOT NULL"))
+            )
+            if exclude_ids:
+                stmt = stmt.where(
+                    sa.text("NOT (job_offers.id = ANY(:exclude_ids))").bindparams(
+                        sa.bindparam(
+                            "exclude_ids", list(exclude_ids), type_=ARRAY(sa.Uuid())
+                        )
+                    )
+                )
+            stmt = stmt.order_by(
+                sa.text(
+                    "job_offers.embedding_vec <=> CAST(:query_vec AS vector)"
+                ).bindparams(query_vec=vector_literal)
+            ).limit(per_source)
+            found.extend((await self.session.exec(stmt)).all())
+        return found
+
+    async def get_many(self, ids: Sequence[uuid.UUID]) -> list[JobOffer]:
+        if not ids:
+            return []
+        stmt = self._base_select().where(JobOffer.id.in_(list(ids)))  # type: ignore[attr-defined]
+        return list((await self.session.exec(stmt)).all())

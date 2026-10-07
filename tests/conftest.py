@@ -10,7 +10,11 @@ from __future__ import annotations
 import os
 
 # Must be set before importing the app (settings are cached on first import).
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_app.db"
+# TEST_DATABASE_URL lets the matching/offers tests run against a real Postgres
+# with pgvector (see tests/modules/offers/test_vector_search.py).
+os.environ["DATABASE_URL"] = os.environ.get(
+    "TEST_DATABASE_URL", "sqlite+aiosqlite:///./test_app.db"
+)
 os.environ["APP_ENV"] = "test"
 os.environ["SCHEDULER_ENABLED"] = "false"
 os.environ["DATABASE_AUTO_CREATE"] = "false"
@@ -28,6 +32,7 @@ os.environ.pop("ADMIN_PASSWORD", None)
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from sqlmodel import SQLModel, select  # noqa: E402
 
 from app.core.database import AsyncSessionLocal, engine  # noqa: E402
@@ -40,6 +45,11 @@ async def _reset_schema():
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
+        if conn.dialect.name == "postgresql":
+            from app.modules.offers.vector_ddl import UPGRADE_STATEMENTS
+
+            for statement in UPGRADE_STATEMENTS:
+                await conn.execute(text(statement))
     yield
 
 
