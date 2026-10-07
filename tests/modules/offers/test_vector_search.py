@@ -119,3 +119,45 @@ async def test_trigger_keeps_vector_in_sync_on_update(session: AsyncSession) -> 
         )
     ).scalar_one()
     assert math.isclose(cosine, 1.0, abs_tol=1e-6)
+
+
+async def test_nearest_applies_search_preferences_before_taking_the_nearest(
+    session: AsyncSession,
+) -> None:
+    """The closest offers are picked among the ones that fit the candidate's
+    preferences -- not picked first and filtered afterwards."""
+    from app.modules.offers import OfferPreferences
+
+    repo = JobOfferRepository(session)
+    best_but_elsewhere = _offer("a", [1.0, 0.0, 0.0], region="Bretagne")
+    fits = _offer("a", [0.6, 0.8, 0.0], region="Île-de-France", contract_type="CDI")
+    wrong_contract = _offer(
+        "a", [0.9, 0.1, 0.0], region="Île-de-France", contract_type="Stage"
+    )
+    hybrid = _offer(
+        "a",
+        [0.5, 0.5, 0.0],
+        region="Île-de-France",
+        contract_type="CDI",
+        description="2 jours de télétravail par semaine, 3 jours sur site.",
+    )
+    for o in (best_but_elsewhere, fits, wrong_contract, hybrid):
+        session.add(o)
+    await session.commit()
+
+    kwargs = {
+        "created_since": NOW - timedelta(days=1),
+        "published_since": NOW - timedelta(days=7),
+        "per_source": 10,
+    }
+    prefs = OfferPreferences(
+        regions=("Île-de-France",),
+        include_unknown_region=False,
+        contract_types=("CDI",),
+    )
+    found = await repo.nearest([1.0, 0.0, 0.0], preferences=prefs, **kwargs)
+    assert [o.id for o in found] == [hybrid.id, fits.id]
+
+    hybrid_only = OfferPreferences(remote_modes=("Hybride",))
+    found = await repo.nearest([1.0, 0.0, 0.0], preferences=hybrid_only, **kwargs)
+    assert [o.id for o in found] == [hybrid.id]

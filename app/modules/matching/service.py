@@ -45,7 +45,7 @@ from app.modules.matching.models import (
 # from app.modules.matching.regret_service import RegretService
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.shortlist import shortlist_offers
-from app.modules.offers import JobOffer, JobOfferRepository
+from app.modules.offers import JobOffer, JobOfferRepository, OfferPreferences
 
 logger = get_logger("matching.service")
 
@@ -65,6 +65,22 @@ def _as_utc(moment: datetime) -> datetime:
     """SQLite hands datetimes back naive (Postgres, in production, keeps the
     timezone) -- treat a naive one as UTC, which is what is stored."""
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def preferences_of(profile: CandidateProfile) -> OfferPreferences | None:
+    """The candidate's saved search preferences as an offer filter, or None
+    when they never saved any (accounts that predate the feature keep seeing
+    every offer) or saved none that restricts anything."""
+    if profile.preferences_saved_at is None:
+        return None
+    prefs = OfferPreferences(
+        regions=tuple(profile.mobility_regions or ()),
+        include_unknown_region=profile.include_unknown_region,
+        contract_types=tuple(profile.contract_types or ()),
+        remote_modes=tuple(profile.remote_preferences or ()),
+        min_salary=profile.salary_target or None,
+    )
+    return None if prefs.is_empty else prefs
 
 
 def _offer_date(offer: JobOffer) -> datetime:
@@ -155,6 +171,7 @@ class MatchingService:
             for match in await self.matches.list_all_for_profile(profile.id)
         }
         pool_since = now - timedelta(days=settings.MATCHING_MAX_OFFER_POOL_DAYS)
+        preferences = preferences_of(profile)
         pool: Sequence[JobOffer]
         if profile.embedding and await self.offers.vector_search_available():
             # Postgres + pgvector: let the database find the closest offers
@@ -178,6 +195,7 @@ class MatchingService:
                 - timedelta(days=settings.MATCHING_MAX_OFFER_AGE_DAYS),
                 exclude_ids=[] if cv_changed else list(existing),
                 per_source=settings.MATCHING_VECTOR_CANDIDATES_PER_SOURCE,
+                preferences=preferences,
             )
             # Offers already on file for this candidate are not "nearest"
             # candidates, but the seniority check below must still be able to
@@ -189,11 +207,22 @@ class MatchingService:
             pool = [*pool, *extras]
         else:
             pool = await self.offers.list_recent(since=pool_since)
-        # No geographic restriction: since 2026-10-05 (Steve) a candidate is
-        # matched on their CV alone, and narrows by city/region themselves
-        # with the filters on the Opportunités page. A mobility value saved
-        # in an older profile is ignored.
-        eligible = list(pool)
+        # Search preferences (zone, contract, work mode, salary), once the
+        # candidate has saved them: only offers that fit are analysed. On the
+        # Postgres path `nearest` already applied them; this also covers the
+        # in-memory path and offers pulled in for a re-evaluation after a CV
+        # change. An offer already on file stays, as it was shown before.
+        # Without saved preferences a candidate is matched on their CV alone
+        # (Steve, 2026-10-05).
+        if preferences is None:
+            eligible = list(pool)
+        else:
+            eligible = [
+                offer
+                for offer in pool
+                if (offer.id in existing and not cv_changed)
+                or preferences.matches(offer)
+            ]
 
         # Seniority (Steve, 2026-10-05): an experienced candidate is never
         # offered a Stage/Alternance, nor a Junior post from 3 years of
@@ -201,6 +230,11 @@ class MatchingService:
         # recorded as `filtered_out` (hidden, never evaluated or billed), and
         # a match already on file for one is hidden the same way -- unless the
         # candidate already acted on it.
+        # A candidate who explicitly chose Stage / Alternance is offered them.
+        allow_entry_level = (
+            bool({"Stage", "Alternance"} & set(profile.contract_types or ()))
+            and profile.preferences_saved_at is not None
+        )
         excluded_ids = {
             offer.id
             for offer in eligible
@@ -209,6 +243,7 @@ class MatchingService:
                 experiences=profile.experiences,
                 contract_type=offer.contract_type,
                 title=offer.title,
+                allow_entry_level_contracts=allow_entry_level,
             )
         }
         # First run = nothing on file yet for this profile; it looks at the

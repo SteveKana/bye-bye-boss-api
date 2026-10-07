@@ -16,6 +16,7 @@ from app.core.module import Module
 from app.modules.offers import jobs as jobs  # noqa: F401
 from app.modules.offers import models as models  # noqa: F401
 from app.modules.offers.models import JobOffer
+from app.modules.offers.preferences import OfferPreferences
 from app.modules.offers.repository import JobOfferRepository
 from app.modules.offers.schemas import JobOfferRead
 from app.modules.offers.service import OffersIngestionService
@@ -32,4 +33,5 @@ __all__ = [
     "JobOfferRepository",
     "JobOfferRead",
     "OffersIngestionService",
+    "OfferPreferences",
 ]

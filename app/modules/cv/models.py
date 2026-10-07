@@ -109,10 +109,27 @@ class CandidateProfile(BaseModel, table=True):
     remote_preferences: list = Field(
         default_factory=list, sa_column=Column(_JsonListColumn)
     )
+    # Legacy single-zone fields (the pre-2026-10-05 preferences step). Kept
+    # in step with `mobility_regions` below when preferences are saved, but
+    # nothing reads them for matching any more.
     mobility: str | None = Field(default=None)
-    # Only meaningful when mobility == "Région uniquement" -- which of the
-    # 18 French régions the candidate picked (see schemas.MobilityRegion).
     mobility_region: str | None = Field(default=None)
+    # Zone géographique (Steve, 2026-10-07): the régions the candidate wants
+    # offers from; empty = France entière. Applied before the daily
+    # analysis picks the offers (see matching.service / offers.preferences).
+    mobility_regions: list = Field(
+        default_factory=list, sa_column=Column(_JsonListColumn)
+    )
+    # Keep offers whose source gave no région (many don't). Default on:
+    # hiding them would drop offers for a data gap, not for a mismatch.
+    include_unknown_region: bool = Field(default=True)
+    # Set the first time the candidate saves the preferences form. Search
+    # preferences only filter the daily offers once this is set, so accounts
+    # that predate the feature -- some still hold values from the old
+    # preferences step -- keep seeing every offer until they choose.
+    preferences_saved_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     salary_target: int | None = Field(default=None)
     # Taux Journalier Moyen -- daily rate for candidates open to freelance
     # missions. Independent of salary_target: a candidate can look for both

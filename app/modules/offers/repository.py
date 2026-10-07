@@ -10,6 +10,7 @@ from sqlmodel import desc, or_, select
 
 from app.core.repository import BaseRepository
 from app.modules.offers.models import JobOffer
+from app.modules.offers.preferences import OfferPreferences
 
 
 class JobOfferRepository(BaseRepository[JobOffer]):
@@ -85,6 +86,7 @@ class JobOfferRepository(BaseRepository[JobOffer]):
         published_since: datetime,
         exclude_ids: Sequence[uuid.UUID] = (),
         per_source: int,
+        preferences: OfferPreferences | None = None,
     ) -> list[JobOffer]:
         """The `per_source` offers closest (cosine) to `embedding` for each
         source, within the freshness windows. Per source because matching
@@ -92,7 +94,12 @@ class JobOfferRepository(BaseRepository[JobOffer]):
         matching/shortlist.py). Postgres + pgvector only (see
         `vector_search_available`). An exact scan: no index, so no recall
         loss from filtered approximate search -- fine while the pool is the
-        last few weeks of offers."""
+        last few weeks of offers.
+
+        `preferences` narrows the pool to what the candidate asked for
+        *before* taking the nearest ones (see offers/preferences.py); the one
+        thing SQL cannot decide there, Hybride vs Sur site, is checked in
+        Python on a longer list so enough rows survive."""
         vector_literal = "[" + ",".join(repr(float(x)) for x in embedding) + "]"
         sources = (
             await self.session.execute(
@@ -119,12 +126,18 @@ class JobOfferRepository(BaseRepository[JobOffer]):
                         )
                     )
                 )
+            python_remote = preferences is not None and preferences.needs_python_remote
+            if preferences is not None:
+                stmt = preferences.apply(stmt)
             stmt = stmt.order_by(
                 sa.text(
                     "job_offers.embedding_vec <=> CAST(:query_vec AS vector)"
                 ).bindparams(query_vec=vector_literal)
-            ).limit(per_source)
-            found.extend((await self.session.exec(stmt)).all())
+            ).limit(per_source * 4 if python_remote else per_source)
+            rows = list((await self.session.exec(stmt)).all())
+            if python_remote and preferences is not None:
+                rows = [row for row in rows if preferences.matches_remote(row)]
+            found.extend(rows[:per_source])
         return found
 
     async def get_many(self, ids: Sequence[uuid.UUID]) -> list[JobOffer]:
