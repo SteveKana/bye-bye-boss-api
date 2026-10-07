@@ -99,6 +99,48 @@ async def test_crawl_splits_by_departement_and_time_and_loses_nothing(
     assert any(c.get("departement") == "13" for c in calls)
 
 
+async def test_crawl_retries_server_errors_and_records_failed_slice(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(france_travail, "_CALL_SPACING_SECONDS", 0)
+    monkeypatch.setattr(france_travail, "_RETRY_BACKOFF_SECONDS", 0)
+    monkeypatch.setattr(france_travail, "DEPARTEMENTS", ("75", "66"))
+    since = NOW - timedelta(days=15)
+    data = {
+        "75": [(f"p{i}", NOW - timedelta(minutes=i)) for i in range(1200)],
+        "66": [(f"s{i}", NOW - timedelta(minutes=i)) for i in range(1200)],
+    }
+    inner, _ = _fake_api(data)
+    flaky = {"hits": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        if request.url.path.endswith("search"):
+            if params.get("departement") == "75" and params["range"] == "0-149":
+                # One transient 500, then fine.
+                flaky["hits"] += 1
+                if flaky["hits"] == 1:
+                    return httpx.Response(500)
+            if params.get("departement") == "66" and params["range"] != "0-0":
+                return httpx.Response(500)  # never recovers
+        return inner(request)
+
+    provider = FranceTravailProvider(
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    seen: list[str] = []
+    async for page in provider.crawl(since=since, until=NOW):
+        seen.extend(o.external_id for o in page)
+
+    # The transient error was retried: Paris is complete. The département
+    # that keeps failing is recorded instead of stopping the whole crawl.
+    assert {f"p{i}" for i in range(1200)} <= set(seen)
+    assert provider.failed_slices
+    assert any("departement=66" in label for label in provider.failed_slices)
+
+
 class _CrawlProvider(OfferProvider):
     source_name = "france_travail"
 
