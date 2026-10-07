@@ -149,14 +149,12 @@ class CvService:
     async def apply_verification(
         self, *, user_id: uuid.UUID, data: dict
     ) -> tuple[CandidateProfile, bool]:
-        """Saves the verified CV fields. Since 2026-10-05 (Steve) this is
-        also the END of onboarding -- the preferences step is gone -- so the
-        profile becomes "complete" here. Returns (profile,
-        is_first_completion): True only the very first time this account
-        ever completes onboarding (tracked by `onboarding_matched_at`, set
-        once and never cleared, so re-importing a CV can't be used to force
-        repeat LLM-costed matching runs). The route uses it to fire the
-        one-off immediate matching run."""
+        """Saves the verified CV fields. For an account that already finished
+        onboarding the profile is complete again right here; for a new
+        account the next (last) step is "Zone & contrat" -- see
+        apply_preferences, which completes onboarding. Returns (profile,
+        False) in both cases now: the first matching run is fired by the
+        preferences step, never here."""
         profile = await self.get_for_user(user_id)
         is_first_completion = profile.onboarding_matched_at is None
         updates = {k: v for k, v in data.items() if v is not None}
@@ -165,9 +163,13 @@ class CvService:
         # is a plain "last saved" timestamp rather than something cleared on
         # re-import.
         updates["verification_completed_at"] = utcnow()
-        updates["status"] = ProfileStatus.complete.value
-        if is_first_completion:
-            updates["onboarding_matched_at"] = utcnow()
+        if not is_first_completion:
+            # Already onboarded once (re-verification after a CV re-import):
+            # the profile stays/becomes complete right here. A brand-new
+            # account is not complete yet -- the "Zone & contrat" step comes
+            # next and ends onboarding (see apply_preferences), so the first
+            # matching run starts with the chosen zone.
+            updates["status"] = ProfileStatus.complete.value
         # Only one of availability_date / notice_period_months is ever
         # meaningful, matching whichever status was just set — clear the
         # other explicitly, since the generic filter above drops None values
@@ -185,7 +187,7 @@ class CvService:
             updates["notice_period_months"] = None
         profile = await self.profiles.update(profile, updates)
         await self.session.commit()
-        return profile, is_first_completion
+        return profile, False
 
     async def apply_preferences(
         self, *, user_id: uuid.UUID, data: PreferencesUpdate
@@ -203,13 +205,18 @@ class CvService:
         ever."""
         profile = await self.get_for_user(user_id)
         is_first_completion = profile.onboarding_matched_at is None
+        regions = list(dict.fromkeys(data.mobility_regions))
         updates = {
             "contract_types": data.contract_types,
             "remote_preferences": data.remote_preferences,
-            "mobility": data.mobility,
-            "mobility_region": data.mobility_region,
+            "mobility_regions": regions,
+            "include_unknown_region": data.include_unknown_region,
+            # Legacy single-zone fields, kept coherent for older readers.
+            "mobility": "Région uniquement" if regions else "France entière",
+            "mobility_region": regions[0] if len(regions) == 1 else None,
             "salary_target": data.salary_target,
             "daily_rate": data.daily_rate,
+            "preferences_saved_at": utcnow(),
             "status": ProfileStatus.complete.value,
         }
         if is_first_completion:

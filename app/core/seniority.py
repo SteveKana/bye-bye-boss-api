@@ -133,16 +133,21 @@ def is_excluded_for_candidate(
     experiences: Iterable[Mapping[str, Any]] | None,
     contract_type: str | None,
     title: str | None,
+    allow_entry_level_contracts: bool = False,
 ) -> bool:
     """True when the offer must never be proposed to this candidate:
     stage/alternance for anyone but a student, junior from 3 years on.
-    Unknown experience -> nothing is excluded."""
+    Unknown experience -> nothing is excluded. A candidate who explicitly
+    chose Stage/Alternance in their preferences (`allow_entry_level_contracts`)
+    is offered them whatever their experience."""
     years = candidate_years(total_experience)
     if years is None:
         return False
     if is_student_profile(total_experience, experiences):
         return False
-    if is_entry_level_contract(contract_type, title):
+    if not allow_entry_level_contracts and is_entry_level_contract(
+        contract_type, title
+    ):
         return True
     return years >= JUNIOR_EXCLUDED_FROM_YEARS and is_junior_offer(title)
 
