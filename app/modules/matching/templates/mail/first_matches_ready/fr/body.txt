@@ -10,4 +10,7 @@ Consultez votre tableau de bord :
 
 {{ link }}
 
+{% if match_count > 0 %}
+{% include "scores_help/fr.txt" %}
+{% endif %}
 L'équipe {{ brand }}

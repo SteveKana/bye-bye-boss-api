@@ -10,4 +10,7 @@ Check your dashboard:
 
 {{ link }}
 
+{% if match_count > 0 %}
+{% include "scores_help/en.txt" %}
+{% endif %}
 The {{ brand }} team
