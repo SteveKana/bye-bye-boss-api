@@ -30,7 +30,11 @@
   </a>
 </p>
 
-<p style="margin:0;font-size:13px;color:#9CA3AF">
+{% if match_count > 0 %}
+{% include "scores_help/en.html" %}
+{% endif %}
+
+<p style="margin:18px 0 0;font-size:13px;color:#9CA3AF">
   You're receiving this email because your profile on {{ brand }} was just analyzed.
 </p>
 {% endblock %}

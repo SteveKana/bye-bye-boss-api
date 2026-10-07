@@ -1,0 +1,26 @@
+{# Shared "scores" legend appended to every email that shows a score. Same
+   wording as the app's "Comprendre nos scores" modal / compatibility card
+   (see the front's components/app/ScoresHelp.vue). #}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 0;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px">
+  <tr>
+    <td style="padding:16px 18px;font-size:13px;line-height:1.55;color:#4B5563">
+      <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#1A1A3E">ℹ️ Comprendre nos scores</p>
+      <dl style="margin:0">
+        <dt style="margin:10px 0 0;font-weight:700;color:#1A1A3E">Career</dt>
+        <dd style="margin:0;color:#6B7280">À quel point l'offre correspond à votre profil et à votre trajectoire, indépendamment des filtres automatiques du recruteur.</dd>
+        <dt style="margin:10px 0 0;font-weight:700;color:#1A1A3E">ATS</dt>
+        <dd style="margin:0;color:#6B7280">Votre compatibilité avec les logiciels de tri automatique (ATS) que les recruteurs utilisent pour filtrer les CV.</dd>
+        <dt style="margin:10px 0 0;font-weight:700;color:#1A1A3E">ATS Potentiel</dt>
+        <dd style="margin:0;color:#6B7280">Le score ATS maximal que vous pourriez atteindre en optimisant votre CV pour cette offre.</dd>
+      </dl>
+      <p style="margin:14px 0 0;padding:12px 0 0;border-top:1px solid #DDD6FE">
+        <span style="display:inline-block;background:#FFD93D;color:#1A1A3E;font-weight:700;font-size:11.5px;padding:1px 9px;border-radius:999px">Très forte compatibilité</span>
+        <span style="font-size:12.5px;color:#6B7280">ATS Potentiel de 95 ou plus</span>
+      </p>
+      <p style="margin:6px 0 0">
+        <span style="display:inline-block;background:#FFB4C6;color:#1A1A3E;font-weight:700;font-size:11.5px;padding:1px 9px;border-radius:999px">Forte compatibilité</span>
+        <span style="font-size:12.5px;color:#6B7280">ATS Potentiel de 80 à 94</span>
+      </p>
+    </td>
+  </tr>
+</table>
