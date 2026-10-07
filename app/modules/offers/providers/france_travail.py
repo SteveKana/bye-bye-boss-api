@@ -21,6 +21,9 @@ are in place.
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime
+
 import httpx
 
 from app.core.config import get_settings
@@ -41,6 +44,31 @@ _TOKEN_URL = (
 )
 _SEARCH_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 _SCOPE = "api_offresdemploiv2 o2dsoffre"
+
+
+# Metropolitan départements (Corsica as 2A/2B) and overseas ones, as the API's
+# `departement` filter expects them.
+DEPARTEMENTS: tuple[str, ...] = (
+    *(f"{n:02d}" for n in range(1, 20)),
+    "2A",
+    "2B",
+    *(f"{n:02d}" for n in range(21, 96)),
+    "971",
+    "972",
+    "973",
+    "974",
+    "976",
+)
+# The API allows 10 calls/second; stay well under it.
+_CALL_SPACING_SECONDS = 0.2
+
+
+def _total_from_content_range(value: str | None) -> int | None:
+    """`Content-Range: offres 0-0/12345` -> 12345."""
+    if not value or "/" not in value:
+        return None
+    tail = value.rsplit("/", 1)[1].strip()
+    return int(tail) if tail.isdigit() else None
 
 
 class FranceTravailProvider(OfferProvider):
@@ -161,3 +189,62 @@ class FranceTravailProvider(OfferProvider):
             ),
             raw=item,
         )
+
+    async def census(self, *, since: datetime) -> dict[str, int | None]:
+        """How many offers France Travail holds that were created since
+        `since`: one entry per département plus "ALL" (no département
+        filter). Nothing is stored -- it only reads the total the API
+        reports in `Content-Range`, so it sizes a bulk import before any is
+        run. A value of None means the call failed for that département."""
+        if not self.is_configured():
+            return {}
+        owns_client = self._client is None
+        client = self._client or httpx.AsyncClient(timeout=20)
+        counts: dict[str, int | None] = {}
+        try:
+            token = await self._get_token(client)
+            for departement in ("ALL", *DEPARTEMENTS):
+                params = {
+                    "range": "0-0",
+                    "minCreationDate": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "maxCreationDate": datetime.now(since.tzinfo).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+                if departement != "ALL":
+                    params["departement"] = departement
+                counts[departement] = await self._count(client, token, params)
+                await asyncio.sleep(_CALL_SPACING_SECONDS)
+        finally:
+            if owns_client:
+                await client.aclose()
+        return counts
+
+    async def _count(
+        self, client: httpx.AsyncClient, token: str, params: dict[str, str]
+    ) -> int | None:
+        for _ in range(3):
+            try:
+                response = await client.get(
+                    _SEARCH_URL,
+                    params=params,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            except httpx.HTTPError as exc:
+                logger.warning("france_travail_census_failed", error=str(exc))
+                return None
+            if response.status_code == 204:
+                return 0
+            if response.status_code == 429:
+                await asyncio.sleep(float(response.headers.get("Retry-After", "1")))
+                continue
+            if response.status_code not in (200, 206):
+                logger.warning(
+                    "france_travail_census_http_error", status=response.status_code
+                )
+                return None
+            total = _total_from_content_range(response.headers.get("Content-Range"))
+            if total is not None:
+                return total
+            return len(response.json().get("resultats", []))
+        return None

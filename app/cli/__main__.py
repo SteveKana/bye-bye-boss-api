@@ -7,6 +7,8 @@ Commands:
     sync-offers                   fetch job offers from configured providers now
     run-matching                  shortlist offers + submit pending OpenAI batches
     poll-matching-batches         apply finished OpenAI matching batches now
+    offers-census [--days N]      count France Travail offers by département
+                                   (read-only, stores nothing)
     import-leads [--apply] [--limit N]
                                   waitlist leads -> accounts + one invitation
                                    mail each (dry run unless --apply)
@@ -251,6 +253,38 @@ def _cmd_poll_matching_batches(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_offers_census(args: argparse.Namespace) -> int:
+    """Read-only: how many France Travail offers were created in the last N
+    days, nationally and per département. Sizes a bulk import."""
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from app.modules.offers.providers.france_travail import FranceTravailProvider
+
+    provider = FranceTravailProvider()
+    if not provider.is_configured():
+        print("France Travail n'est pas configuré (identifiants manquants).")
+        return 1
+
+    async def _run() -> None:
+        since = datetime.now(UTC) - timedelta(days=args.days)
+        counts = await provider.census(since=since)
+        print(f"== Offres France Travail créées depuis {args.days} jours ==")
+        print(f"France entière: {counts.get('ALL')}")
+        known = [(d, c) for d, c in counts.items() if d != "ALL" and c is not None]
+        failed = [d for d, c in counts.items() if d != "ALL" and c is None]
+        print(f"somme des départements: {sum(c for _, c in known)}")
+        print(f"départements en échec: {failed or 'aucun'}")
+        print("10 plus gros départements:")
+        for dept, count in sorted(known, key=lambda x: x[1], reverse=True)[:10]:
+            print(f"   {dept}: {count}")
+        over = [d for d, c in known if c > 1150]
+        print(f"départements au-dessus de 1150 (à découper par date): {len(over)}")
+
+    asyncio.run(_run())
+    return 0
+
+
 def _cmd_import_leads(args: argparse.Namespace) -> int:
     """Waitlist leads -> accounts (e-mail only) + ONE invitation mail each.
     Dry run unless --apply; leads that already have an account, or were
@@ -310,6 +344,14 @@ def main(argv: list[str] | None = None) -> int:
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
     ).set_defaults(func=_cmd_backfill_contract_type)
+    p_census = sub.add_parser(
+        "offers-census",
+        help="count France Travail offers by département (read-only)",
+    )
+    p_census.add_argument(
+        "--days", type=int, default=15, help="created in the last N days"
+    )
+    p_census.set_defaults(func=_cmd_offers_census)
     p_leads = sub.add_parser(
         "import-leads",
         help="waitlist leads -> accounts + one invitation mail (dry run by default)",
