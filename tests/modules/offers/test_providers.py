@@ -731,3 +731,41 @@ async def test_adzuna_has_no_daily_rate_for_a_salaried_offer(monkeypatch) -> Non
 
     assert results[0].daily_rate_min is None
     assert results[0].daily_rate_max is None
+
+
+async def test_france_travail_census_reads_totals_from_content_range(
+    monkeypatch,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.modules.offers.providers import france_travail
+
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_ID", "client-id")
+    monkeypatch.setattr(get_settings(), "FRANCE_TRAVAIL_CLIENT_SECRET", "client-secret")
+    monkeypatch.setattr(france_travail, "_CALL_SPACING_SECONDS", 0)
+    monkeypatch.setattr(france_travail, "DEPARTEMENTS", ("75", "13", "99"))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "access_token" in str(request.url):
+            return httpx.Response(200, json={"access_token": "t"})
+        assert request.url.params["range"] == "0-0"
+        assert "minCreationDate" in request.url.params
+        dept = request.url.params.get("departement")
+        if dept == "75":
+            return httpx.Response(
+                206,
+                headers={"Content-Range": "offres 0-0/1234"},
+                json={"resultats": [{}]},
+            )
+        if dept == "13":
+            return httpx.Response(204)
+        if dept == "99":
+            return httpx.Response(500)
+        return httpx.Response(
+            206, headers={"Content-Range": "offres 0-0/98765"}, json={"resultats": [{}]}
+        )
+
+    provider = FranceTravailProvider(client=_client(handler))
+    counts = await provider.census(since=datetime.now(UTC) - timedelta(days=15))
+
+    assert counts == {"ALL": 98765, "75": 1234, "13": 0, "99": None}
