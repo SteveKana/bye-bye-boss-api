@@ -57,7 +57,7 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           printf '%s\n' "${{ secrets.DEPLOY_KEY_STAGING }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes deploy@46.62.246.17 "$GITHUB_SHA"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=40 deploy@46.62.246.17 "$GITHUB_SHA"
         env:
           GITHUB_SHA: ${{ github.sha }}
 
@@ -76,6 +76,6 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           printf '%s\n' "${{ secrets.DEPLOY_KEY_PRODUCTION }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes deploy@46.62.246.17 "$GITHUB_SHA"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=40 deploy@46.62.246.17 "$GITHUB_SHA"
         env:
           GITHUB_SHA: ${{ github.sha }}
