@@ -132,3 +132,38 @@ class JobOfferRepository(BaseRepository[JobOffer]):
             return []
         stmt = self._base_select().where(JobOffer.id.in_(list(ids)))  # type: ignore[attr-defined]
         return list((await self.session.exec(stmt)).all())
+
+    async def get_existing(
+        self, source: str, external_ids: Sequence[str]
+    ) -> dict[str, JobOffer]:
+        """Already-stored offers of `source` among `external_ids`, by external
+        id -- one query for a whole page instead of one per offer."""
+        if not external_ids:
+            return {}
+        stmt = (
+            self._base_select()
+            .where(JobOffer.source == source)  # type: ignore[arg-type]
+            .where(JobOffer.external_id.in_(list(external_ids)))  # type: ignore[attr-defined]
+        )
+        return {o.external_id: o for o in (await self.session.exec(stmt)).all()}
+
+    async def purge_older_than(
+        self, cutoff: datetime, *, keep: sa.Select, dry_run: bool = False
+    ) -> int:
+        """Deletes offers last seen/published before `cutoff` unless their id
+        is returned by the `keep` subquery (offers a candidate already has a
+        match on). Returns how many rows were (or, with `dry_run`, would be)
+        deleted."""
+        stale = sa.func.coalesce(JobOffer.published_at, JobOffer.created_at) < cutoff
+        conditions = (
+            stale,
+            JobOffer.created_at < cutoff,  # type: ignore[arg-type]
+            JobOffer.id.not_in(keep),  # type: ignore[attr-defined]
+        )
+        if dry_run:
+            count = await self.session.execute(
+                sa.select(sa.func.count()).select_from(JobOffer).where(*conditions)  # type: ignore[arg-type]
+            )
+            return int(count.scalar_one())
+        result = await self.session.execute(sa.delete(JobOffer).where(*conditions))  # type: ignore[arg-type]
+        return int(result.rowcount or 0)  # type: ignore[attr-defined]

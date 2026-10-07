@@ -22,7 +22,8 @@ are in place.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from collections.abc import AsyncIterator
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -61,6 +62,15 @@ DEPARTEMENTS: tuple[str, ...] = (
 )
 # The API allows 10 calls/second; stay well under it.
 _CALL_SPACING_SECONDS = 0.2
+# One search returns at most 150 offers per call and 1,150 in total (range
+# 0-1149): a window holding more is split (by département, then by time).
+_PAGE_SIZE = 150
+_MAX_PER_SEARCH = 1150
+_MIN_SPLIT_SECONDS = 60
+
+
+def _fmt(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _total_from_content_range(value: str | None) -> int | None:
@@ -248,3 +258,110 @@ class FranceTravailProvider(OfferProvider):
                 return total
             return len(response.json().get("resultats", []))
         return None
+
+    # ---- bulk crawl ---------------------------------------------------------
+
+    async def _page(
+        self,
+        client: httpx.AsyncClient,
+        auth: dict[str, str],
+        params: dict[str, str],
+    ) -> tuple[list[dict], int | None]:
+        """One search call -> (offers, total reported by Content-Range).
+        A 401 (token older than ~25 minutes) refreshes the token once; any
+        other failure raises so the crawl never silently drops a slice."""
+        for _attempt in range(4):
+            await asyncio.sleep(_CALL_SPACING_SECONDS)
+            response = await client.get(
+                _SEARCH_URL,
+                params=params,
+                headers={"Authorization": f"Bearer {auth['token']}"},
+            )
+            if response.status_code == 401:
+                auth["token"] = await self._get_token(client)
+                continue
+            if response.status_code == 429:
+                await asyncio.sleep(float(response.headers.get("Retry-After", "1")))
+                continue
+            if response.status_code == 204:
+                return [], 0
+            if response.status_code not in (200, 206):
+                response.raise_for_status()
+            total = _total_from_content_range(response.headers.get("Content-Range"))
+            return response.json().get("resultats", []), total
+        raise httpx.HTTPError("France Travail: too many retries")
+
+    async def crawl(
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        departement: str | None = None,
+    ) -> AsyncIterator[list[NormalizedOffer]]:
+        """Every offer created in [since, until], tous métiers, in pages of
+        up to 150. Starts nationally; a window holding more than the API's
+        1,150-per-search cap is split by département, then by time, until
+        each slice fits. Pages are yielded as they arrive so the caller can
+        store them incrementally."""
+        if not self.is_configured():
+            return
+        owns_client = self._client is None
+        client = self._client or httpx.AsyncClient(timeout=30)
+        try:
+            auth = {"token": await self._get_token(client)}
+            departements = [departement] if departement else [None]
+            for dept in departements:
+                async for page in self._crawl_slice(
+                    client, auth, since, until, dept, may_split_by_dept=not departement
+                ):
+                    yield page
+        finally:
+            if owns_client:
+                await client.aclose()
+
+    async def _crawl_slice(
+        self,
+        client: httpx.AsyncClient,
+        auth: dict[str, str],
+        since: datetime,
+        until: datetime,
+        departement: str | None,
+        *,
+        may_split_by_dept: bool,
+    ) -> AsyncIterator[list[NormalizedOffer]]:
+        params = {"minCreationDate": _fmt(since), "maxCreationDate": _fmt(until)}
+        if departement:
+            params["departement"] = departement
+        first, total = await self._page(client, auth, {**params, "range": "0-0"})
+        if not total:
+            return
+        if total > _MAX_PER_SEARCH:
+            if may_split_by_dept and departement is None:
+                for dept in DEPARTEMENTS:
+                    async for page in self._crawl_slice(
+                        client, auth, since, until, dept, may_split_by_dept=False
+                    ):
+                        yield page
+                return
+            if (until - since).total_seconds() > _MIN_SPLIT_SECONDS:
+                middle = since + (until - since) / 2
+                for lo, hi in ((since, middle), (middle + timedelta(seconds=1), until)):
+                    async for page in self._crawl_slice(
+                        client, auth, lo, hi, departement, may_split_by_dept=False
+                    ):
+                        yield page
+                return
+            logger.warning(
+                "france_travail_slice_over_cap",
+                total=total,
+                departement=departement,
+                since=_fmt(since),
+            )
+        last = min(total, _MAX_PER_SEARCH)
+        for start in range(0, last, _PAGE_SIZE):
+            end = min(start + _PAGE_SIZE, last) - 1
+            items, _ = await self._page(
+                client, auth, {**params, "range": f"{start}-{end}"}
+            )
+            if items:
+                yield [self._normalize(item) for item in items]
