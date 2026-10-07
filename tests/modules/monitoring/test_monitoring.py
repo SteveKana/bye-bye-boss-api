@@ -448,3 +448,54 @@ async def test_cv_optimization_indicator(client: AsyncClient, admin) -> None:
     steps = {s["key"]: s["value"] for s in behavior["funnel"]}
     assert steps["cv_optimized"] == 1
     assert other != uid
+
+
+async def test_notification_channels_are_counted_per_account(
+    client: AsyncClient, admin
+) -> None:
+    """Admin > Vue d'ensemble counts accounts per configured alert channel (an
+    account with several channels counts in each one); Admin > Comptes lists
+    the channels of every account. An account with every channel off, or with
+    no preference row, has none."""
+    from app.modules.notifications.models import NotificationPreference
+
+    _, headers = admin
+    both_id, _ = await _login(client, "both@example.com", is_verified=True)
+    wa_id, _ = await _login(client, "wa@example.com", is_verified=True)
+    off_id, _ = await _login(client, "off@example.com", is_verified=True)
+    norow_id, _ = await _login(client, "norow@example.com", is_verified=True)
+
+    async with AsyncSessionLocal() as session:
+        # Registration already created a default row (email on) for everyone.
+        rows = {
+            p.user_id: p
+            for p in (await session.exec(select(NotificationPreference))).all()
+        }
+        both = rows[both_id]
+        both.whatsapp_enabled = True
+        both.whatsapp_phone_number = "+33612345678"
+        wa = rows[wa_id]
+        wa.email_enabled = False
+        wa.whatsapp_enabled = True
+        wa.whatsapp_phone_number = "+33612345679"
+        rows[off_id].email_enabled = False
+        await session.delete(rows[norow_id])
+        await session.commit()
+
+    overview = (await client.get(f"{M}/overview", headers=headers)).json()
+    counts = overview["tiles"]["channels_configured"]
+    # The admin account (default row, email on) is not a product user but is
+    # an active account like any other here: email = admin + both.
+    assert counts["whatsapp"] == 2
+    assert counts["discord"] == 0
+    assert counts["email"] == 2
+    assert counts["none"] == 2  # off + norow
+
+    users = {
+        u["email"]: u for u in (await client.get(f"{M}/users", headers=headers)).json()
+    }
+    assert users["both@example.com"]["channels"] == ["email", "whatsapp"]
+    assert users["wa@example.com"]["channels"] == ["whatsapp"]
+    assert users["off@example.com"]["channels"] == []
+    assert users["off@example.com"]["alerts_enabled"] is False
+    assert users["norow@example.com"]["channels"] == []
