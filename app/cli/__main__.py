@@ -9,6 +9,10 @@ Commands:
     poll-matching-batches         apply finished OpenAI matching batches now
     offers-census [--days N]      count France Travail offers by département
                                    (read-only, stores nothing)
+    import-offers [--days N] [--departement D] [--limit N]
+                                  full France Travail import, tous métiers
+    purge-offers [--apply]        delete offers past the retention (dry run
+                                   unless --apply)
     import-leads [--apply] [--limit N]
                                   waitlist leads -> accounts + one invitation
                                    mail each (dry run unless --apply)
@@ -285,6 +289,56 @@ def _cmd_offers_census(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_import_offers(args: argparse.Namespace) -> int:
+    """Full France Travail import, every trade: all offers created in the
+    last N days. Idempotent and safe to interrupt and run again."""
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.database import AsyncSessionLocal
+    from app.modules.offers import OffersIngestionService
+
+    async def _run() -> None:
+        now = datetime.now(UTC)
+        async with AsyncSessionLocal() as session:
+            report = await OffersIngestionService(session).sync_france_travail_full(
+                since=now - timedelta(days=args.days),
+                until=now,
+                departement=args.departement,
+                limit=args.limit,
+            )
+        if report.skipped_unconfigured:
+            print("France Travail n'est pas configuré (identifiants manquants).")
+            return
+        print(
+            f"offres lues: {report.fetched} | créées: {report.created} | "
+            f"mises à jour: {report.updated}"
+        )
+
+    asyncio.run(_run())
+    return 0
+
+
+def _cmd_purge_offers(args: argparse.Namespace) -> int:
+    """Deletes offers past OFFERS_RETENTION_DAYS (except those a candidate
+    already has a match on). Dry run unless --apply."""
+    import asyncio
+
+    from app.core.config import get_settings
+    from app.core.database import AsyncSessionLocal
+    from app.modules.matching.purge import purge_old_offers
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            count = await purge_old_offers(session, dry_run=not args.apply)
+        days = get_settings().OFFERS_RETENTION_DAYS
+        verb = "supprimées" if args.apply else "à supprimer (simulation)"
+        print(f"offres de plus de {days} jours {verb}: {count}")
+
+    asyncio.run(_run())
+    return 0
+
+
 def _cmd_import_leads(args: argparse.Namespace) -> int:
     """Waitlist leads -> accounts (e-mail only) + ONE invitation mail each.
     Dry run unless --apply; leads that already have an account, or were
@@ -344,6 +398,20 @@ def main(argv: list[str] | None = None) -> int:
         "backfill-contract-type",
         help="guess contract_type for already-stored offers that have none",
     ).set_defaults(func=_cmd_backfill_contract_type)
+    p_import = sub.add_parser(
+        "import-offers", help="full France Travail import, every trade"
+    )
+    p_import.add_argument(
+        "--days", type=int, default=15, help="created in the last N days"
+    )
+    p_import.add_argument("--departement", default=None, help="only this département")
+    p_import.add_argument("--limit", type=int, default=None, help="at most N offers")
+    p_import.set_defaults(func=_cmd_import_offers)
+    p_purge = sub.add_parser(
+        "purge-offers", help="delete offers past the retention (dry run by default)"
+    )
+    p_purge.add_argument("--apply", action="store_true", help="really delete")
+    p_purge.set_defaults(func=_cmd_purge_offers)
     p_census = sub.add_parser(
         "offers-census",
         help="count France Travail offers by département (read-only)",

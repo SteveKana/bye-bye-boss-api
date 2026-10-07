@@ -28,6 +28,7 @@ from app.core.logging import get_logger
 from app.core.scheduler import scheduled
 from app.modules.cv import CandidateProfileRepository
 from app.modules.matching.batch_service import MatchingBatchService
+from app.modules.matching.purge import purge_old_offers
 from app.modules.matching.service import MatchingService
 from app.modules.matching.skill_labels_service import SkillLabelService
 
@@ -43,6 +44,16 @@ async def sync_matches() -> None:
     async with AsyncSessionLocal() as session:
         await MatchingService(session).sync_all()
     await submit_matching_batches()
+
+
+@scheduled(
+    cron="30 3 * * *",  # 03:30 Paris time, every day
+    timezone="Europe/Paris",
+    id="offers_purge",
+)
+async def purge_expired_offers() -> None:
+    async with AsyncSessionLocal() as session:
+        await purge_old_offers(session)
 
 
 @scheduled(interval_minutes=15, id="matching_submit_batches")
