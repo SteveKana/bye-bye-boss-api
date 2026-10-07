@@ -76,3 +76,52 @@ async def get_embedding(text: str) -> list[float] | None:
     except Exception as exc:  # noqa: BLE001 -- see docstring: never raises
         logger.warning("embedding_failed", error=str(exc))
         return None
+
+
+_BATCH_SIZE = 100
+
+
+def _embed_batch_sync(
+    *, api_key: str, model: str, timeout: int, texts: list[str]
+) -> list[list[float]]:
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            response = client.embeddings.create(model=model, input=texts)
+            ordered = sorted(response.data, key=lambda item: item.index)
+            return [item.embedding for item in ordered]
+        except (RateLimitError, APITimeoutError, APIError) as exc:
+            last_exc = exc
+            logger.warning("embedding_batch_retry", attempt=attempt, error=str(exc))
+    raise last_exc  # type: ignore[misc]
+
+
+async def get_embeddings(texts: list[str]) -> list[list[float] | None]:
+    """Best-effort batch version of `get_embedding` (bulk imports): same
+    order as `texts`, None for a blank text or a batch that kept failing.
+    One API call carries up to 100 texts instead of one call per offer."""
+    settings = get_settings()
+    results: list[list[float] | None] = [None] * len(texts)
+    if not settings.OPENAI_API_KEY:
+        return results
+    indexed = [
+        (i, (text or "").strip()[:_MAX_INPUT_CHARS]) for i, text in enumerate(texts)
+    ]
+    indexed = [(i, text) for i, text in indexed if text]
+    for start in range(0, len(indexed), _BATCH_SIZE):
+        chunk = indexed[start : start + _BATCH_SIZE]
+        try:
+            vectors = await asyncio.to_thread(
+                _embed_batch_sync,
+                api_key=settings.OPENAI_API_KEY,
+                model=settings.EMBEDDING_MODEL,
+                timeout=settings.EMBEDDING_TIMEOUT_SECONDS,
+                texts=[text for _, text in chunk],
+            )
+        except Exception as exc:  # noqa: BLE001 -- best-effort, see docstring
+            logger.warning("embedding_batch_failed", error=str(exc), size=len(chunk))
+            continue
+        for (i, _), vector in zip(chunk, vectors, strict=True):
+            results[i] = vector
+    return results

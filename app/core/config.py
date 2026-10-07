@@ -183,6 +183,14 @@ class Settings(BaseSettings):
     # respect Adzuna's free-tier rate limits (25 calls/min, 250/day).
     OFFERS_MAX_PER_KEYWORD: int = 50
     OFFERS_INGESTION_INTERVAL_MINUTES: int = 60
+    # Full France Travail crawl, tous métiers (Steve, 2026-10-07): off until
+    # the first bulk import (`python -m app.cli import-offers`) has been run;
+    # then the hourly job keeps up with the last few hours of new offers.
+    OFFERS_FULL_SYNC_ENABLED: bool = False
+    OFFERS_FULL_SYNC_WINDOW_HOURS: int = 3
+    # Offers older than this are deleted daily, except those a candidate
+    # already has a match on (Steve, 2026-10-07: 15 days).
+    OFFERS_RETENTION_DAYS: int = 15
     # How many offer embeddings are computed concurrently per ingestion run
     # (see EMBEDDING_MODEL above). Only new/changed/never-embedded offers are
     # embedded at all (see OffersIngestionService._upsert_batch), so this

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -161,3 +162,74 @@ class OffersIngestionService:
             return True
         await self.offers.update(existing, values)
         return False
+
+    # ---- full France Travail crawl (tous métiers) -----------------------------
+
+    async def sync_france_travail_full(
+        self,
+        *,
+        since: datetime,
+        until: datetime,
+        departement: str | None = None,
+        limit: int | None = None,
+    ) -> IngestionReport:
+        """Imports every France Travail offer created in [since, until]
+        (see FranceTravailProvider.crawl), page by page: one lookup, one
+        batched embedding call and one commit per page. Idempotent: an offer
+        already stored is refreshed, and re-embedded only if its text
+        changed, so an interrupted run is simply started again."""
+        report = IngestionReport()
+        provider = next(
+            (p for p in self._providers if p.source_name == "france_travail"), None
+        )
+        if provider is None or not provider.is_configured():
+            report.skipped_unconfigured.append("france_travail")
+            return report
+
+        async for page in provider.crawl(  # type: ignore[attr-defined]
+            since=since, until=until, departement=departement
+        ):
+            if limit is not None:
+                page = page[: max(limit - report.fetched, 0)]
+                if not page:
+                    break
+            report.fetched += len(page)
+            await self._upsert_page(provider.source_name, page, report)
+            await self.session.commit()
+            logger.info(
+                "offers_full_sync_progress",
+                fetched=report.fetched,
+                created=report.created,
+                updated=report.updated,
+            )
+            if limit is not None and report.fetched >= limit:
+                break
+        return report
+
+    async def _upsert_page(
+        self, source: str, items: list[NormalizedOffer], report: IngestionReport
+    ) -> None:
+        unique = list({item.external_id: item for item in items}.values())
+        existing = await self.offers.get_existing(
+            source, [item.external_id for item in unique]
+        )
+        to_embed = [
+            item
+            for item in unique
+            if _needs_embedding(existing.get(item.external_id), item)
+        ]
+        vectors = await embeddings.get_embeddings([_embed_text(i) for i in to_embed])
+        fresh = {
+            item.external_id: vector
+            for item, vector in zip(to_embed, vectors, strict=True)
+        }
+        for item in unique:
+            current = existing.get(item.external_id)
+            if item.external_id in fresh:
+                embedding = fresh[item.external_id]
+            else:
+                embedding = current.embedding if current is not None else None
+            if await self._upsert(source, item, current, embedding):
+                report.created += 1
+            else:
+                report.updated += 1
