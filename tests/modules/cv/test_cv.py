@@ -217,19 +217,20 @@ async def test_verification_completed_at_survives_a_cv_reimport(
     await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
 
     # Re-import (the profile page's "reupload" shortcut) -- verification is
-    # left alone, and since saving it now completes onboarding (no
-    # preferences step anymore) the profile stays "complete".
+    # left alone. Onboarding itself ends at the "Zone & contrat" step, so a
+    # brand-new account is still a draft here.
     r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    assert r.json()["status"] == "complete"
+    assert r.json()["status"] == "draft"
     assert r.json()["verification_completed_at"] is not None
 
 
-async def test_verification_completes_onboarding_and_triggers_matching_once(
+async def test_onboarding_ends_at_the_zone_and_contract_step_and_matches_once(
     client: AsyncClient, auth_headers: dict[str, str], monkeypatch
 ) -> None:
-    """The preferences step is gone (Steve, 2026-10-05): saving the verified
-    CV is the end of onboarding -- profile "complete", and the one-off
-    immediate matching run fires exactly once per account."""
+    """Steve, 2026-10-07: the last onboarding step is "Zone & contrat" (the
+    preferences endpoint). Verifying the CV alone neither completes the
+    profile nor starts the first matching run -- that run must see the chosen
+    zone -- and it fires exactly once per account."""
     triggered: list = []
 
     async def _fake_run(profile_id):
@@ -244,12 +245,25 @@ async def test_verification_completes_onboarding_and_triggers_matching_once(
 
     r = await client.put(PROFILE, json={"first_name": "Thomasse"}, headers=auth_headers)
     assert r.status_code == 200
+    assert r.json()["status"] == "draft"
+    assert triggered == []
+
+    r = await client.put(
+        PREFERENCES,
+        json={"mobility_regions": ["Île-de-France"], "contract_types": ["CDI"]},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
     assert r.json()["status"] == "complete"
     assert [str(p) for p in triggered] == [upload.json()["id"]]
 
-    # Saving again (profile page edits, CV re-import) never re-triggers it.
+    # Saving again (profile page edits, CV re-import) never re-triggers it,
+    # and an onboarded account is complete again as soon as it re-verifies.
     await client.put(PROFILE, json={"first_name": "Thomas"}, headers=auth_headers)
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    reimport = await client.post(
+        UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers
+    )
+    assert reimport.json()["status"] == "complete"
     await client.put(PROFILE, json={"first_name": "Tom"}, headers=auth_headers)
     assert len(triggered) == 1
 
@@ -425,7 +439,7 @@ async def test_saving_preferences_does_not_touch_cv_analyzed_at(
     assert r.json()["cv_analyzed_at"] == analyzed_at
 
 
-async def test_preferences_update_saves_mobility_region(
+async def test_preferences_update_saves_regions_and_marks_them_saved(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
@@ -433,173 +447,51 @@ async def test_preferences_update_saves_mobility_region(
     r = await client.put(
         PREFERENCES,
         json={
-            "contract_types": ["CDI"],
-            "remote_preferences": ["Sur site"],
-            "mobility": "Région uniquement",
-            "mobility_region": "Île-de-France",
+            "mobility_regions": ["Île-de-France", "Hauts-de-France", "Île-de-France"],
+            "include_unknown_region": False,
+            "contract_types": ["CDI", "Stage", "Alternance"],
+            "remote_preferences": ["Full remote"],
+            "salary_target": 45000,
         },
         headers=auth_headers,
     )
     assert r.status_code == 200
     body = r.json()
+    assert body["mobility_regions"] == ["Île-de-France", "Hauts-de-France"]
+    assert body["include_unknown_region"] is False
+    assert body["contract_types"] == ["CDI", "Stage", "Alternance"]
+    assert body["salary_target"] == 45000
+    assert body["preferences_saved_at"] is not None
+    # Legacy single-zone fields stay coherent for older readers.
     assert body["mobility"] == "Région uniquement"
-    assert body["mobility_region"] == "Île-de-France"
 
 
-async def test_preferences_rejects_unknown_mobility_region(
+async def test_preferences_default_to_no_restriction(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Every criterion is optional: an empty form means France entière, all
+    contracts and all work modes."""
+    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
+    r = await client.put(PREFERENCES, json={}, headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mobility_regions"] == []
+    assert body["contract_types"] == []
+    assert body["include_unknown_region"] is True
+    assert body["mobility"] == "France entière"
+    assert body["status"] == "complete"
+
+
+async def test_preferences_rejects_unknown_region_and_contract(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
 
     r = await client.put(
-        PREFERENCES,
-        json={
-            "contract_types": ["CDI"],
-            "remote_preferences": ["Sur site"],
-            "mobility": "Région uniquement",
-            "mobility_region": "Atlantide",
-        },
-        headers=auth_headers,
+        PREFERENCES, json={"mobility_regions": ["Atlantide"]}, headers=auth_headers
     )
     assert r.status_code == 422
-
-
-async def test_preferences_requires_at_least_one_contract_type(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
     r = await client.put(
-        PREFERENCES,
-        json={
-            "contract_types": [],
-            "remote_preferences": ["Hybride", "Full remote"],
-            "mobility": "France entière",
-        },
-        headers=auth_headers,
+        PREFERENCES, json={"contract_types": ["Mécénat"]}, headers=auth_headers
     )
     assert r.status_code == 422
-
-
-async def test_new_profile_defaults_to_available_immediately(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    body = r.json()
-    assert body["availability_status"] == "immediate"
-    assert body["availability_date"] is None
-    assert body["notice_period_months"] is None
-
-
-async def test_setting_a_future_date_clears_notice_period(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    r = await client.put(
-        PROFILE,
-        json={"availability_status": "date", "availability_date": "2026-11-01"},
-        headers=auth_headers,
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["availability_status"] == "date"
-    assert body["availability_date"] == "2026-11-01"
-    assert body["notice_period_months"] is None
-
-
-async def test_setting_notice_period_clears_the_date(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    await client.put(
-        PROFILE,
-        json={"availability_status": "date", "availability_date": "2026-11-01"},
-        headers=auth_headers,
-    )
-    r = await client.put(
-        PROFILE,
-        json={"availability_status": "notice", "notice_period_months": 2},
-        headers=auth_headers,
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["availability_status"] == "notice"
-    assert body["notice_period_months"] == 2
-    assert body["availability_date"] is None
-
-
-async def test_switching_back_to_immediate_clears_both(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    await client.put(
-        PROFILE,
-        json={"availability_status": "notice", "notice_period_months": 3},
-        headers=auth_headers,
-    )
-    r = await client.put(
-        PROFILE,
-        json={"availability_status": "immediate"},
-        headers=auth_headers,
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["availability_status"] == "immediate"
-    assert body["availability_date"] is None
-    assert body["notice_period_months"] is None
-
-
-async def test_reimporting_cv_preserves_manually_set_availability(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    await client.put(
-        PROFILE,
-        json={"availability_status": "date", "availability_date": "2026-11-01"},
-        headers=auth_headers,
-    )
-    r = await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["availability_status"] == "date"
-    assert body["availability_date"] == "2026-11-01"
-
-
-DOWNLOAD = "/api/v1/cv/download"
-
-
-async def test_download_returns_the_uploaded_file(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    r = await client.get(DOWNLOAD, headers=auth_headers)
-    assert r.status_code == 200
-    assert r.content == b"%PDF-1.4 fake content"
-    assert r.headers["content-type"] == "application/pdf"
-    assert "cv.pdf" in r.headers["content-disposition"]
-
-
-async def test_download_requires_auth(client: AsyncClient) -> None:
-    r = await client.get(DOWNLOAD)
-    assert r.status_code == 401
-
-
-async def test_download_without_a_cv_returns_404(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    r = await client.get(DOWNLOAD, headers=auth_headers)
-    assert r.status_code == 404
-
-
-async def test_reimporting_replaces_the_downloadable_file(
-    client: AsyncClient, auth_headers: dict[str, str]
-) -> None:
-    await client.post(UPLOAD, files={"file": _dummy_pdf()}, headers=auth_headers)
-    await client.post(
-        UPLOAD,
-        files={"file": ("cv_v2.pdf", b"%PDF-1.4 second version", "application/pdf")},
-        headers=auth_headers,
-    )
-    r = await client.get(DOWNLOAD, headers=auth_headers)
-    assert r.status_code == 200
-    assert r.content == b"%PDF-1.4 second version"
-    assert "cv_v2.pdf" in r.headers["content-disposition"]

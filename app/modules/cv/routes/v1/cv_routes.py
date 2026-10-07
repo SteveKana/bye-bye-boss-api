@@ -96,13 +96,9 @@ async def update_profile(
     profile, is_first_completion = await CvService(session).apply_verification(
         user_id=user.id, data=payload
     )
-    if is_first_completion:
-        # End of onboarding (the preferences step no longer exists): fire the
-        # one-off immediate matching run in the background, same reasoning
-        # as in update_preferences below.
-        background_tasks.add_task(
-            event_bus.emit, ProfileOnboardingCompleted(profile_id=profile.id)
-        )
+    # Verification no longer ends onboarding (the "Zone & contrat" step does,
+    # see update_preferences), so there is nothing to fire here.
+    del background_tasks, is_first_completion
     return CandidateProfileRead.model_validate(profile)
 
 

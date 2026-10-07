@@ -77,3 +77,43 @@ def guess_contract_type(*texts: str | None) -> str | None:
         if pattern.search(combined):
             return label
     return None
+
+
+# --- Normalizing a source's raw label (for candidate preferences) -------------
+#
+# The sources' raw `contract_type` strings are free text ("CDI", "permanent,
+# full_time", "Contrat à durée déterminée - 12 Mois"...). The front shows them
+# through a substring mapping (composables/useOfferDisplay.js `contractTag`);
+# the same mapping lives here so that filtering offers by a candidate's
+# contract preferences, in SQL, agrees with the tag the candidate sees.
+# Lowercase substrings, per label; accents are written both ways because SQL
+# LIKE does no accent folding.
+CONTRACT_LABEL_SUBSTRINGS: dict[str, tuple[str, ...]] = {
+    "CDI": ("cdi", "permanent", "durée indéterminée"),
+    "CDD": ("cdd", "durée déterminée"),
+    "Intérim": ("intérim", "interim"),
+    "Alternance": ("alternance", "apprentissage", "professionnalisation"),
+    "Stage": ("stage", "internship"),
+    "Freelance": (
+        "freelance",
+        "indépendant",
+        "independant",
+        "portage",
+        "libérale",
+        "contract",
+    ),
+}
+CONTRACT_LABELS: tuple[str, ...] = tuple(CONTRACT_LABEL_SUBSTRINGS)
+
+
+def contract_label_of(raw: str | None) -> str | None:
+    """One of CONTRACT_LABELS for a raw source label, or None when the label is
+    missing or not one the app recognizes. Same precedence as the front's
+    `contractTag`."""
+    if not raw:
+        return None
+    text = raw.lower()
+    for label in ("CDI", "CDD", "Intérim", "Alternance", "Stage", "Freelance"):
+        if any(sub in text for sub in CONTRACT_LABEL_SUBSTRINGS[label]):
+            return label
+    return None

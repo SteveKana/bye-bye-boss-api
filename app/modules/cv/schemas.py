@@ -79,6 +79,9 @@ class CandidateProfileRead(BaseSchema):
     remote_preferences: list[str]
     mobility: str | None
     mobility_region: str | None
+    mobility_regions: list[str]
+    include_unknown_region: bool
+    preferences_saved_at: datetime | None
     salary_target: int | None
     daily_rate: int | None
     cv_filename: str | None
@@ -106,7 +109,7 @@ class CandidateProfileUpdate(BaseSchema):
     certifications: list[CertificationItem] | None = None
 
 
-ContractType = Literal["CDI", "CDD", "Freelance", "Intérim"]
+ContractType = Literal["CDI", "CDD", "Freelance", "Intérim", "Stage", "Alternance"]
 RemotePreference = Literal["Sur site", "Hybride", "Full remote"]
 Mobility = Literal["France entière", "Région uniquement", "Ville uniquement"]
 # The 18 French régions (13 metropolitan + 5 overseas) -- the candidate
@@ -136,17 +139,17 @@ MobilityRegion = Literal[
 
 
 class PreferencesUpdate(BaseSchema):
-    contract_types: list[ContractType] = Field(min_length=1)
-    remote_preferences: list[RemotePreference] = Field(min_length=1)
-    mobility: Mobility
-    # Only meaningful when mobility == "Région uniquement", same reasoning as
-    # daily_rate below: not enforced server-side, the client shows/hides the
-    # field to match, and rejecting a stray combination would just be an
-    # extra way to fail a request for no real benefit.
-    mobility_region: MobilityRegion | None = Field(default=None)
+    """The search preferences (Steve, 2026-10-07). Every list may be empty,
+    which means "no restriction": all contracts, all work modes, France
+    entière."""
+
+    contract_types: list[ContractType] = Field(default_factory=list)
+    remote_preferences: list[RemotePreference] = Field(default_factory=list)
+    mobility_regions: list[MobilityRegion] = Field(default_factory=list)
+    include_unknown_region: bool = True
+    # Annual gross minimum. Offers that state no salary are never excluded.
     salary_target: int | None = Field(default=None, ge=0)
-    # Only meaningful when "Freelance" is among contract_types, but not
-    # enforced server-side -- the client hides the field otherwise, and
-    # rejecting a stray value would just be an extra way to fail a request
-    # for no real benefit.
+    # Taux Journalier Moyen, for freelance missions. Only pre-fills the TJM
+    # filter on the offer pages: a day rate is read from free text and is not
+    # reliable enough to exclude offers before the analysis.
     daily_rate: int | None = Field(default=None, ge=0)
