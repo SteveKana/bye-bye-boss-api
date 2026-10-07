@@ -56,6 +56,12 @@ def make_offers() -> list[JobOffer]:
             region="Auvergne-Rhône-Alpes",
             contract_type="Contrat d'apprentissage",
         ),
+        _offer("bare-full-time", region="Hauts-de-France", contract_type="full_time"),
+        _offer(
+            "contract-full-time",
+            region="Hauts-de-France",
+            contract_type="contract, full_time",
+        ),
         _offer("no-contract", region="Hauts-de-France", contract_type=None),
         _offer("odd-contract", region="Hauts-de-France", contract_type="MIS"),
         _offer(
@@ -96,6 +102,7 @@ CASES = {
     "two-regions": OfferPreferences(regions=("Île-de-France", "Bretagne")),
     "cdi": OfferPreferences(contract_types=("CDI",)),
     "stage-alt": OfferPreferences(contract_types=("Stage", "Alternance")),
+    "freelance": OfferPreferences(contract_types=("Freelance",)),
     "salary": OfferPreferences(min_salary=50000),
     "remote-only": OfferPreferences(remote_modes=("Full remote",)),
     "on-site-or-hybrid": OfferPreferences(remote_modes=("Sur site", "Hybride")),
@@ -153,6 +160,12 @@ async def test_expected_results(stored_offers) -> None:
     assert "idf-cdd" not in cdi and "stage-idf" not in cdi
     # Missing or unrecognised contract label: never hidden.
     assert {"no-contract", "odd-contract"} <= cdi
+
+    # A bare "full_time" label is a CDI (Steve, 2026-10-07); "contract,
+    # full_time" stays a Freelance mission.
+    assert "bare-full-time" in cdi and "contract-full-time" not in cdi
+    freelance = titles(CASES["freelance"])
+    assert "bare-full-time" not in freelance and "contract-full-time" in freelance
 
     assert titles(CASES["stage-alt"]) >= {"stage-idf", "alt-lyon"}
 
