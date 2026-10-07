@@ -31,7 +31,11 @@
   </a>
 </p>
 
-<p style="margin:0;font-size:13px;color:#9CA3AF">
+{% if match_count > 0 %}
+{% include "scores_help/fr.html" %}
+{% endif %}
+
+<p style="margin:18px 0 0;font-size:13px;color:#9CA3AF">
   Vous recevez cet email suite à l'analyse de votre profil sur {{ brand }}.
 </p>
 {% endblock %}
