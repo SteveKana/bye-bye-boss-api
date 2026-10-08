@@ -128,7 +128,7 @@ class CvService:
     async def get_for_user(self, user_id: uuid.UUID) -> CandidateProfile:
         profile = await self.profiles.get_by_user(user_id)
         if profile is None:
-            raise NotFoundError("Aucun profil trouvé. Importez d'abord un CV.")
+            raise NotFoundError("Aucun profil trouvé. Importe d'abord un CV.")
         return profile
 
     def get_cv_file(self, profile: CandidateProfile):

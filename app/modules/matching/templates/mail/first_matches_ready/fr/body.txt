@@ -1,12 +1,12 @@
 Bonjour,
 
-Votre CV a été analysé et comparé aux offres disponibles sur {{ brand }}.
+Ton CV a été analysé et comparé aux offres disponibles sur {{ brand }}.
 {% if match_count > 0 %}
-{{ match_count }} opportunité{{ 's' if match_count > 1 else '' }} correspondant{{ 'ent' if match_count > 1 else '' }} à votre profil {{ 'vous attendent' if match_count > 1 else 'vous attend' }} déjà, avec un score ATS, un score de carrière et le détail de la compatibilité pour chacune.
+{{ match_count }} opportunité{{ 's' if match_count > 1 else '' }} correspondant{{ 'ent' if match_count > 1 else '' }} à ton profil {{ 't’attendent' if match_count > 1 else 't’attend' }} déjà, avec un score ATS, un score de carrière et le détail de la compatibilité pour chacune.
 {% else %}
-Aucune offre ne correspond encore assez précisément à votre profil, mais nous continuons à en analyser de nouvelles chaque jour -- vous serez prévenu dès qu'une correspondance apparaît.
+Aucune offre ne correspond encore assez précisément à ton profil, mais nous continuons à en analyser de nouvelles chaque jour -- tu seras prévenu dès qu'une correspondance apparaît.
 {% endif %}
-Consultez votre tableau de bord :
+Consulte ton tableau de bord :
 
 {{ link }}
 

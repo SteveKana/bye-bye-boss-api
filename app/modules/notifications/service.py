@@ -266,7 +266,7 @@ class DailyBriefService:
         profile = await self.profiles.get_by_user(user_id)
         if profile is None or profile.status != ProfileStatus.complete.value:
             raise BadRequestError(
-                "Complétez votre profil candidat avant de tester l'envoi des "
+                "Complète ton profil candidat avant de tester l'envoi des "
                 "notifications."
             )
 
@@ -277,7 +277,7 @@ class DailyBriefService:
             or preference.whatsapp_enabled
         ):
             raise BadRequestError(
-                "Activez au moins un canal de notification avant de tester l'envoi."
+                "Active au moins un canal de notification avant de tester l'envoi."
             )
 
         user = await self.auth.get_user(user_id)
@@ -287,7 +287,7 @@ class DailyBriefService:
             preference.discord_enabled or preference.whatsapp_enabled
         ):
             raise BadRequestError(
-                "Confirmez votre adresse email (lien reçu à l'inscription) "
+                "Confirme ton adresse email (lien reçu à l'inscription) "
                 "pour recevoir les alertes par email."
             )
 
@@ -311,7 +311,7 @@ class DailyBriefService:
             )
         if not items:
             raise BadRequestError(
-                "Aucune offre correspondante pour l'instant -- réessayez une "
+                "Aucune offre correspondante pour l'instant -- réessaie une "
                 "fois que des correspondances auront été calculées."
             )
 

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 capture_limit = RateLimiter(times=5, seconds=60, scope="leads:capture")
 
 _MESSAGES = {
-    "fr": "Merci, votre inscription est bien enregistrée.",
+    "fr": "Merci, ton inscription est bien enregistrée.",
     "en": "Thanks, you're on the list.",
 }
 

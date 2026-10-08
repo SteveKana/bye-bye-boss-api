@@ -69,7 +69,7 @@ async def generate_cv_optimization(
         # The optimisation is built on the full analysis, which a
         # still-pending match doesn't have yet.
         raise BadRequestError(
-            "L'analyse de cette offre est en cours, réessayez dans quelques instants."
+            "L'analyse de cette offre est en cours, réessaie dans quelques instants."
         )
     profile = await CvService(session).get_for_user(user.id)
     offer = await JobOfferRepository(session).get(match.job_offer_id)

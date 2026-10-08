@@ -1,5 +1,5 @@
 {% if match_count > 0 -%}
-Votre analyse est terminée : {{ match_count }} opportunité{{ 's' if match_count > 1 else '' }} vous attend{{ 'ent' if match_count > 1 else '' }}
+Ton analyse est terminée : {{ match_count }} opportunité{{ 's' if match_count > 1 else '' }} t'attend{{ 'ent' if match_count > 1 else '' }}
 {%- else -%}
-Votre analyse est terminée
+Ton analyse est terminée
 {%- endif %}
