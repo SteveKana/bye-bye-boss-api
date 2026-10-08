@@ -1,7 +1,7 @@
 Bonjour,
 
-Votre compte {{ brand }} et toutes les données associées (CV, offres, analyses,
+Ton compte {{ brand }} et toutes les données associées (CV, offres, analyses,
 préférences) ont été définitivement supprimés.
 
-Vous pouvez vous réinscrire à tout moment avec la même adresse.
-Si vous n'êtes pas à l'origine de cette suppression, contactez-nous sans attendre.
+Tu peux te réinscrire à tout moment avec la même adresse.
+Si tu n'es pas à l'origine de cette suppression, contacte-nous sans attendre.

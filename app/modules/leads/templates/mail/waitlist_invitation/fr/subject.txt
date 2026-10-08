@@ -1,1 +1,1 @@
-{{ brand }} est ouvert : votre compte vous attend
+{{ brand }} est ouvert : ton compte t'attend

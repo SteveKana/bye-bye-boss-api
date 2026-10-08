@@ -1,20 +1,20 @@
 Bonjour,
 
-Vous vous étiez inscrit sur la liste d'attente {{ brand }} : bonne nouvelle,
+Tu t'étais inscrit sur la liste d'attente {{ brand }} : bonne nouvelle,
 {{ brand }} est ouvert !
 
-Votre compte est déjà créé avec cette adresse email. Il ne vous reste qu'à
-choisir votre mot de passe :
+Ton compte est déjà créé avec cette adresse email. Il ne te reste qu'à
+choisir ton mot de passe :
 
 {{ link }}
 
-Ce lien est valable {{ days }} jours. Passé ce délai, utilisez « Mot de passe
+Ce lien est valable {{ days }} jours. Passé ce délai, utilise « Mot de passe
 oublié » sur la page de connexion.
 
-Vous préférez Google ? Rendez-vous sur {{ login_url }} et cliquez sur
+Tu préfères Google ? Rends-toi sur {{ login_url }} et clique sur
 « Continuer avec Google » avec cette même adresse.
 
-Ensuite, déposez votre CV : nous vous proposons les offres qui vous
+Ensuite, dépose ton CV : nous te proposons les offres qui te
 correspondent vraiment.
 
 À tout de suite,

@@ -13,9 +13,7 @@ router = APIRouter(prefix="/contact", tags=["contact"])
 send_limit = RateLimiter(times=5, seconds=600, scope="contact:send")
 
 _MESSAGES = {
-    "fr": (
-        "Merci, votre message a bien été envoyé. Nous vous répondons dès que possible."
-    ),
+    "fr": ("Merci, ton message a bien été envoyé. Nous te répondons dès que possible."),
     "en": (
         "Thanks, your message has been sent. We'll get back to you as soon as possible."
     ),

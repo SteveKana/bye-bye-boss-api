@@ -31,7 +31,7 @@ def _build_payload(items: list[BriefItem]) -> dict:
     return {
         "embeds": [
             {
-                "title": "📄 Votre brief du jour -- Bye Bye Boss",
+                "title": "📄 Ton brief du jour -- Bye Bye Boss",
                 "color": _EMBED_COLOR,
                 "fields": [
                     {
