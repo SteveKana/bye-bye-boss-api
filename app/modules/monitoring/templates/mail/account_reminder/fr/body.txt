@@ -1,11 +1,11 @@
 Bonjour{% if first_name %} {{ first_name }}{% endif %},
 
 {% if stage == "no_cv" %}
-Votre compte {{ brand }} est prêt, mais nous n'avons pas encore votre CV.
-Importez-le pour recevoir vos premières opportunités :
+Ton compte {{ brand }} est prêt, mais nous n'avons pas encore ton CV.
+Importe-le pour recevoir tes premières opportunités :
 {% else %}
-Des opportunités correspondant à votre CV sont disponibles sur {{ brand }}.
-Consultez-les ici :
+Des opportunités correspondant à ton CV sont disponibles sur {{ brand }}.
+Consulte-les ici :
 {% endif %}
 
 {{ link }}

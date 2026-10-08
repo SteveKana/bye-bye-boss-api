@@ -4,7 +4,7 @@
 <p style="margin:0 0 16px;font-size:19px;font-weight:700;color:#1A1A3E">Bonjour{% if first_name %} {{ first_name }}{% endif %},</p>
 
 <p style="margin:0 0 20px">
-  Voici les offres qui correspondent le mieux à votre profil aujourd'hui :
+  Voici les offres qui correspondent le mieux à ton profil aujourd'hui :
 </p>
 
 {% for item in items %}
@@ -30,10 +30,10 @@
 {% include "scores_help/fr.html" %}
 
 <p style="margin:20px 0 0;font-size:12px;color:#9CA3AF">
-  Vous recevez cet email car les notifications par email sont activées dans vos préférences {{ brand }}. <a href="{{ settings_url }}" style="color:#5B3FE8;text-decoration:underline">Désactiver ces notifications</a>
+  Tu reçois cet email car les notifications par email sont activées dans tes préférences {{ brand }}. <a href="{{ settings_url }}" style="color:#5B3FE8;text-decoration:underline">Désactiver ces notifications</a>
 </p>
 {% endblock %}
 
 {% block footer %}
-{{ brand }} — brief quotidien de vos meilleures offres.
+{{ brand }} — brief quotidien de tes meilleures offres.
 {% endblock %}

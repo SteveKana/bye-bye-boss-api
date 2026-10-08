@@ -55,4 +55,4 @@ async def unsubscribe(data: UnsubscribeBody, session: DBSession) -> Detail:
     if not await _already(session, user_id):
         session.add(AnnouncementOptOut(user_id=user_id))
         await session.commit()
-    return Detail(detail="Vous ne recevrez plus d'annonces.")
+    return Detail(detail="Tu ne recevras plus d'annonces.")
