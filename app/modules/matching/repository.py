@@ -144,6 +144,41 @@ class CandidateMatchRepository(BaseRepository[CandidateMatch]):
             limit=limit,
         )
 
+    async def count_in_progress(self, candidate_profile_id: uuid.UUID) -> int:
+        """Matches of this candidate still travelling through the pipeline
+        (waiting for the pre-filter or for the full analysis) -- i.e. results
+        that are still expected. The daily brief waits for them to be done so
+        it can go out as ONE email instead of one per finished batch."""
+        stmt = self._base_select().where(
+            CandidateMatch.candidate_profile_id == candidate_profile_id,
+            col(CandidateMatch.status).in_(
+                [
+                    MatchStatus.shortlisted.value,
+                    MatchStatus.placeholder.value,
+                    MatchStatus.pending.value,
+                ]
+            ),
+        )
+        return len((await self.session.exec(stmt)).all())
+
+    async def earliest_scored_at(
+        self, candidate_profile_id: uuid.UUID
+    ) -> datetime | None:
+        """When this candidate's very first analysis finished (None if they
+        have none) -- tells the brief that the "your first opportunities are
+        ready" email is the one that goes out that day."""
+        stmt = (
+            self._base_select()
+            .where(
+                CandidateMatch.candidate_profile_id == candidate_profile_id,
+                CandidateMatch.status == MatchStatus.scored.value,
+            )
+            .order_by(col(CandidateMatch.computed_at))
+            .limit(1)
+        )
+        row = (await self.session.exec(stmt)).first()
+        return row.computed_at if row else None
+
     async def list_applications_for_profile(
         self, candidate_profile_id: uuid.UUID
     ) -> Sequence[CandidateMatch]:

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +41,25 @@ from app.modules.offers import JobOfferRepository
 logger = get_logger("notifications.worker")
 
 _DISCORD_WEBHOOK_PREFIX = "https://discord.com/api/webhooks/"
+
+# One brief per candidate per day (Steve, 2026-10-10). OpenAI's Batch API
+# returns results in several waves, and the brief used to leave with every
+# wave -- three emails in one morning. It now waits until nothing is left to
+# analyse for that candidate; this hour (Paris time) is the safety net: from
+# then on the brief goes out with whatever is ready, and jobs.py runs a
+# catch-up pass at that same hour.
+BRIEF_CUTOFF_HOUR_PARIS = 11
+_PARIS = ZoneInfo("Europe/Paris")
+
+
+def _as_utc(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _paris_day_start(now: datetime) -> datetime:
+    """Midnight (Paris) of the day `now` falls in, as an aware datetime."""
+    local = _as_utc(now).astimezone(_PARIS)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 class NotificationPreferenceService:
@@ -95,6 +116,7 @@ class BriefRunReport:
     users_skipped_no_channel: int = 0
     users_skipped_unverified_email: int = 0
     users_skipped_no_new_offers: int = 0
+    users_deferred: int = 0
     items_sent: int = 0
     channel_failures: dict = field(default_factory=dict)
 
@@ -134,13 +156,78 @@ class DailyBriefService:
         """Brief for specific candidates -- the ones whose new matches were
         just analysed (see listeners.py)."""
         report = BriefRunReport()
+        now = utcnow()
         for profile_id in profile_ids:
             profile = await self.profiles.get(profile_id)
             if profile is None or profile.status != ProfileStatus.complete.value:
                 continue
             report.users_considered += 1
+            if await self._should_wait(profile.id, profile.user_id, now):
+                report.users_deferred += 1
+                continue
             await self._send_for_profile(profile.id, profile.user_id, report)
         return report
+
+    async def send_due_briefs(self) -> BriefRunReport:
+        """The cut-off pass (see BRIEF_CUTOFF_HOUR_PARIS): every complete
+        candidate who has not had their brief today gets it now, with
+        whatever has been analysed so far."""
+        report = BriefRunReport()
+        now = utcnow()
+        profiles = await self.profiles.list(
+            filters={"status": ProfileStatus.complete.value}
+        )
+        for profile in profiles:
+            report.users_considered += 1
+            if await self._should_wait(
+                profile.id, profile.user_id, now, ignore_in_progress=True
+            ):
+                report.users_deferred += 1
+                continue
+            await self._send_for_profile(profile.id, profile.user_id, report)
+        logger.info(
+            "notifications_cutoff_brief_complete",
+            considered=report.users_considered,
+            sent=report.users_sent,
+            deferred=report.users_deferred,
+            items=report.items_sent,
+        )
+        return report
+
+    async def _should_wait(
+        self,
+        profile_id: uuid.UUID,
+        user_id: uuid.UUID,
+        now: datetime,
+        *,
+        ignore_in_progress: bool = False,
+    ) -> bool:
+        """True when this candidate must NOT get a brief right now:
+
+        * they already got one today (one per day, whatever arrives later
+          waits for tomorrow's brief -- the ledger keeps those offers);
+        * their very first analysis finished today: the "first opportunities
+          ready" email is today's email;
+        * some of their offers are still being analysed and it is before the
+          cut-off hour -- the brief will leave once they are all in.
+        """
+        day_start = _paris_day_start(now)
+        entries = await self.entries.list_for_user(user_id)
+        if any(
+            entry.sent_at is not None and _as_utc(entry.sent_at) >= day_start
+            for entry in entries
+        ):
+            return True
+        if not entries:
+            first = await self.matches.earliest_scored_at(profile_id)
+            if first is not None and _as_utc(first) >= day_start:
+                return True
+        if ignore_in_progress:
+            return False
+        past_cutoff = _as_utc(now).astimezone(_PARIS).hour >= BRIEF_CUTOFF_HOUR_PARIS
+        if past_cutoff:
+            return False
+        return await self.matches.count_in_progress(profile_id) > 0
 
     async def _send_for_profile(
         self,
