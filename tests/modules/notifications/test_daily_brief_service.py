@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -13,7 +14,7 @@ from app.core.models import utcnow
 from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
-from app.modules.matching.models import CandidateMatch
+from app.modules.matching.models import CandidateMatch, MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.notifications.models import (
     NotificationBriefEntry,
@@ -34,7 +35,9 @@ async def _user_id(email: str = "user@example.com") -> uuid.UUID:
         return user.id
 
 
-async def _profile_with_matches(*, n_matches: int = 1) -> CandidateProfile:
+async def _profile_with_matches(
+    *, n_matches: int = 1, analysed_days_ago: int = 2, n_pending: int = 0
+) -> CandidateProfile:
     user_id = await _user_id()
     async with AsyncSessionLocal() as session:
         profile = await CandidateProfileRepository(session).create(
@@ -61,7 +64,27 @@ async def _profile_with_matches(*, n_matches: int = 1) -> CandidateProfile:
                     career_score=90 - i,
                     ats_score=60,
                     ats_potential=80,
-                    computed_at=utcnow(),
+                    computed_at=utcnow() - timedelta(days=analysed_days_ago),
+                )
+            )
+        for j in range(n_pending):
+            offer = await JobOfferRepository(session).create(
+                JobOffer(
+                    source="test",
+                    external_id=f"brief-pending-{j}",
+                    title=f"En cours {j}",
+                    company_name="Entreprise",
+                    url=f"https://example.com/en-cours-{j}",
+                )
+            )
+            await CandidateMatchRepository(session).create(
+                CandidateMatch(
+                    candidate_profile_id=profile.id,
+                    job_offer_id=offer.id,
+                    career_score=0,
+                    ats_score=0,
+                    ats_potential=0,
+                    status=MatchStatus.pending.value,
                 )
             )
         await session.commit()
@@ -417,3 +440,140 @@ async def test_test_send_refused_when_only_channel_is_unconfirmed_email(
     async with AsyncSessionLocal() as session:
         with pytest.raises(BadRequestError):
             await DailyBriefService(session).send_test_brief(user_id)
+
+
+def _at_paris(monkeypatch, hour: int) -> None:
+    """Freezes the brief's clock at `hour`:15 Paris time (October, UTC+2)."""
+    fake = datetime.now(UTC).replace(hour=hour - 2, minute=15, second=0)
+    monkeypatch.setattr("app.modules.notifications.service.utcnow", lambda: fake)
+
+
+async def test_brief_waits_while_offers_are_still_being_analysed(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    """The wave that finished first must not leave alone: the brief waits
+    for the others (one email a day, not one per OpenAI batch)."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2, n_pending=1)
+    _at_paris(monkeypatch, 9)
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert report.users_sent == 0
+    assert report.users_deferred == 1
+
+    # Once nothing is left in progress, it goes out -- as ONE brief.
+    async with AsyncSessionLocal() as session:
+        for match in await CandidateMatchRepository(session).list_all_for_profile(
+            profile.id
+        ):
+            if match.status == MatchStatus.pending.value:
+                await CandidateMatchRepository(session).update(
+                    match,
+                    {
+                        "status": MatchStatus.scored.value,
+                        "career_score": 70,
+                        "ats_potential": 70,
+                        "computed_at": utcnow() - timedelta(days=2),
+                    },
+                )
+        await session.commit()
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert report.users_sent == 1
+    assert report.items_sent == 3
+
+
+async def test_brief_goes_out_after_the_cutoff_even_if_offers_are_pending(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2, n_pending=1)
+    _at_paris(monkeypatch, 12)
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert report.users_sent == 1
+    assert report.items_sent == 2
+
+
+async def test_only_one_brief_per_day(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    """A later wave the same day waits for tomorrow's brief."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=1)
+    _at_paris(monkeypatch, 12)
+
+    async with AsyncSessionLocal() as session:
+        first = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert first.users_sent == 1
+
+    await _profile_more_matches(profile, start=10, count=2)
+    async with AsyncSessionLocal() as session:
+        second = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert second.users_sent == 0
+    assert second.users_deferred == 1
+
+    # The cut-off pass respects it too.
+    async with AsyncSessionLocal() as session:
+        due = await DailyBriefService(session).send_due_briefs()
+    assert due.users_sent == 0
+
+
+async def test_cutoff_pass_sends_the_brief_that_was_waiting(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    await _register(client)
+    await verify_user("user@example.com")
+    await _profile_with_matches(n_matches=2, n_pending=1)
+    _at_paris(monkeypatch, 11)
+
+    async with AsyncSessionLocal() as session:
+        due = await DailyBriefService(session).send_due_briefs()
+    assert due.users_sent == 1
+    assert due.items_sent == 2
+
+
+async def test_no_brief_the_day_the_first_matches_email_goes_out(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    """A brand-new candidate already gets the "first opportunities ready"
+    email when their first analyses finish: no second email that day."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2, analysed_days_ago=0)
+    _at_paris(monkeypatch, 12)
+
+    async with AsyncSessionLocal() as session:
+        report = await DailyBriefService(session).send_briefs_for_profiles([profile.id])
+    assert report.users_sent == 0
+    assert report.users_deferred == 1
+
+
+async def _profile_more_matches(profile, *, start: int, count: int) -> None:
+    async with AsyncSessionLocal() as session:
+        for i in range(start, start + count):
+            offer = await JobOfferRepository(session).create(
+                JobOffer(
+                    source="test",
+                    external_id=f"brief-more-{i}",
+                    title=f"Offre {i}",
+                    company_name="Entreprise",
+                    url=f"https://example.com/plus-{i}",
+                )
+            )
+            await CandidateMatchRepository(session).create(
+                CandidateMatch(
+                    candidate_profile_id=profile.id,
+                    job_offer_id=offer.id,
+                    career_score=60,
+                    ats_score=60,
+                    ats_potential=70,
+                    computed_at=utcnow() - timedelta(days=2),
+                )
+            )
+        await session.commit()
