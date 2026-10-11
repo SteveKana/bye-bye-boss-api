@@ -577,3 +577,33 @@ async def _profile_more_matches(profile, *, start: int, count: int) -> None:
                 )
             )
         await session.commit()
+
+
+async def test_allow_list_limits_the_brief_to_the_listed_addresses(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    """Test server: only the allowed accounts are contacted."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2)
+
+    monkeypatch.setenv("NOTIFICATIONS_ALLOWED_EMAILS", "someone.else@example.com")
+    get_settings.cache_clear()
+    try:
+        async with AsyncSessionLocal() as session:
+            blocked = await DailyBriefService(session).send_briefs_for_profiles(
+                [profile.id]
+            )
+        assert blocked.users_sent == 0
+        assert blocked.users_skipped_not_allowed == 1
+
+        monkeypatch.setenv("NOTIFICATIONS_ALLOWED_EMAILS", "USER@example.com")
+        get_settings.cache_clear()
+        async with AsyncSessionLocal() as session:
+            allowed = await DailyBriefService(session).send_briefs_for_profiles(
+                [profile.id]
+            )
+        assert allowed.users_sent == 1
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
