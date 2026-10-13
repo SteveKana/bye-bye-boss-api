@@ -41,8 +41,8 @@ it is `item.ats_potential`, not `item.career_score` -- unlike career_score,
 ats_potential already prices in a real hard_blocker (stays low when one
 applies), so it can't tout a match the candidate would actually be
 disqualified from (Steve's call, see matching/prompt.py's ETAPE 7/9).
-Email and Discord still show career_score; this substitution is
-WhatsApp-only.
+The daily-brief email now shows ats_potential too; only Discord still shows
+career_score.
 
 A newer template version has a 6th variable, {{6}}: the link to switch the
 notifications off (links.py). It is only sent when

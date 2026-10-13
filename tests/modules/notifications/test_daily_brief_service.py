@@ -14,6 +14,7 @@ from app.core.models import utcnow
 from app.modules.auth.models import User
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.cv.repository import CandidateProfileRepository
+from app.modules.mailer.models import EmailMessage
 from app.modules.matching.models import CandidateMatch, MatchStatus
 from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.notifications.models import (
@@ -161,6 +162,35 @@ async def test_send_daily_briefs_sends_email_by_default_and_records_entries(
         )
     assert len(entries) == 2
     assert all(e.channels_sent == ["email"] for e in entries)
+
+
+@pytest.mark.asyncio
+async def test_brief_email_shows_ats_potential_not_career_score(
+    client: AsyncClient, verify_user
+) -> None:
+    """Steve's call (2026-10-13): the brief email's per-offer badge is the ATS
+    Potentiel (80 in this fixture), no longer the Career score (90)."""
+    await _register(client)
+    await verify_user("user@example.com")
+    await _profile_with_matches(n_matches=1)
+    async with AsyncSessionLocal() as session:
+        await _set_preference()
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        await DailyBriefService(session).send_daily_briefs()
+
+    async with AsyncSessionLocal() as session:
+        rows = (
+            await session.exec(
+                select(EmailMessage).where(EmailMessage.to_email == "user@example.com")
+            )
+        ).all()
+    brief = [m for m in rows if "Offre 0" in m.body_text]
+    assert len(brief) == 1
+    for body in (brief[0].body_text, brief[0].body_html):
+        assert "ATS Potential 80/100" in body
+        assert "Career 90/100" not in body
 
 
 async def test_send_daily_briefs_never_resends_an_already_sent_match(
@@ -577,3 +607,33 @@ async def _profile_more_matches(profile, *, start: int, count: int) -> None:
                 )
             )
         await session.commit()
+
+
+async def test_allow_list_limits_the_brief_to_the_listed_addresses(
+    client: AsyncClient, verify_user, monkeypatch
+) -> None:
+    """Test server: only the allowed accounts are contacted."""
+    await _register(client)
+    await verify_user("user@example.com")
+    profile = await _profile_with_matches(n_matches=2)
+
+    monkeypatch.setenv("NOTIFICATIONS_ALLOWED_EMAILS", "someone.else@example.com")
+    get_settings.cache_clear()
+    try:
+        async with AsyncSessionLocal() as session:
+            blocked = await DailyBriefService(session).send_briefs_for_profiles(
+                [profile.id]
+            )
+        assert blocked.users_sent == 0
+        assert blocked.users_skipped_not_allowed == 1
+
+        monkeypatch.setenv("NOTIFICATIONS_ALLOWED_EMAILS", "USER@example.com")
+        get_settings.cache_clear()
+        async with AsyncSessionLocal() as session:
+            allowed = await DailyBriefService(session).send_briefs_for_profiles(
+                [profile.id]
+            )
+        assert allowed.users_sent == 1
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
