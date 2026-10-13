@@ -17,9 +17,9 @@ class BriefItem:
     company_name: str
     url: str
     career_score: int
-    # Kept alongside career_score rather than replacing it: email/Discord
-    # still show career_score, but the WhatsApp channel deliberately reads
-    # this one instead (see whatsapp_channel.py) -- ats_potential already
-    # prices in a real hard_blocker (stays low), which career_score never
-    # does by design (see matching/prompt.py's ETAPE 7).
+    # The score the WhatsApp message and the daily-brief email show (the email
+    # switched from career_score on 2026-10-13, Steve's call). It
+    # already prices in a real hard_blocker (stays low), which career_score
+    # never does by design (see matching/prompt.py's ETAPE 7). career_score is
+    # kept on the item for the Discord embed, which still shows it.
     ats_potential: int

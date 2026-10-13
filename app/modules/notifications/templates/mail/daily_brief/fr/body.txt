@@ -3,7 +3,7 @@ Bonjour{% if first_name %} {{ first_name }}{% endif %},
 Voici les offres qui correspondent le mieux à ton profil aujourd'hui :
 
 {% for item in items -%}
-Career {{ item.career_score }}/100 · {{ item.title }} chez {{ item.company_name }}
+ATS Potentiel {{ item.ats_potential }}/100 · {{ item.title }} chez {{ item.company_name }}
 {{ item.url }}
 
 {% endfor -%}

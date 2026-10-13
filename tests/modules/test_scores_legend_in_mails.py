@@ -55,8 +55,11 @@ def test_daily_brief_labels_the_score_and_has_legend() -> None:
         count=1,
         settings_url="https://example.test/settings",
     )
-    assert "Career 91/100" in mail.text
-    assert mail.html is not None and "Career 91/100" in mail.html
+    # The badge is the ATS Potentiel, no longer the Career score (Steve, 2026-10-13).
+    assert "ATS Potentiel 95/100" in mail.text
+    assert mail.html is not None and "ATS Potentiel 95/100" in mail.html
+    assert "Career 91/100" not in mail.text
+    assert "Career 91/100" not in mail.html
     for expected in LEGEND["fr"]:
         assert expected in mail.text
         assert expected in mail.html
