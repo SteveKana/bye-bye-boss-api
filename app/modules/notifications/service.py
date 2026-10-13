@@ -52,6 +52,14 @@ BRIEF_CUTOFF_HOUR_PARIS = 11
 _PARIS = ZoneInfo("Europe/Paris")
 
 
+def _brief_allowed(email: str) -> bool:
+    """False when an allow-list is configured (test server) and this
+    address is not on it."""
+    raw = get_settings().NOTIFICATIONS_ALLOWED_EMAILS
+    allowed = {item.strip().lower() for item in raw.split(",") if item.strip()}
+    return not allowed or email.strip().lower() in allowed
+
+
 def _as_utc(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
@@ -117,6 +125,7 @@ class BriefRunReport:
     users_skipped_unverified_email: int = 0
     users_skipped_no_new_offers: int = 0
     users_deferred: int = 0
+    users_skipped_not_allowed: int = 0
     items_sent: int = 0
     channel_failures: dict = field(default_factory=dict)
 
@@ -247,6 +256,9 @@ class DailyBriefService:
 
         user = await self.auth.get_user(user_id)
         if user is None:
+            return
+        if not _brief_allowed(user.email):
+            report.users_skipped_not_allowed += 1
             return
         # Email alerts only go to a confirmed address (anyone can sign up
         # with someone else's email). When email is the ONLY channel, skip

@@ -1,8 +1,8 @@
 Comprendre nos scores
 - Career : À quel point l'offre correspond à ton profil et à ta trajectoire, indépendamment des filtres automatiques du recruteur.
 - ATS : Ta compatibilité avec les logiciels de tri automatique (ATS) que les recruteurs utilisent pour filtrer les CV.
-- ATS Potentiel : Le score ATS maximal que tu pourrais atteindre en optimisant ton CV pour cette offre.
+- ATS Potential : Le score ATS maximal que tu pourrais atteindre en optimisant ton CV pour cette offre.
 
-- Très forte compatibilité : ATS Potentiel de 95 ou plus
-- Forte compatibilité : ATS Potentiel de 80 à 94
+- Très forte compatibilité : ATS Potential de 95 ou plus
+- Forte compatibilité : ATS Potential de 80 à 94
 

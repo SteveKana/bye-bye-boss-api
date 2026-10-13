@@ -411,6 +411,11 @@ class Settings(BaseSettings):
     # above. Discord needs nothing app-wide either -- each candidate pastes
     # their own webhook URL (see channels/discord_channel.py).
     NOTIFICATIONS_BRIEF_MAX_ITEMS: int = 5
+    # Comma-separated e-mail addresses. Empty (production) = everyone gets
+    # their brief. Set on the test (dev) server so only these accounts are
+    # contacted: it shares real people's addresses with production and would
+    # otherwise send them a second brief every morning (Steve, 2026-10-11).
+    NOTIFICATIONS_ALLOWED_EMAILS: str = ""
 
     # -- WhatsApp (Meta Business Cloud API) -- the one channel that can't
     # go live from code alone: needs a verified Meta Business Account, a
