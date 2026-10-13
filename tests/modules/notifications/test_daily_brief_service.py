@@ -189,7 +189,7 @@ async def test_brief_email_shows_ats_potential_not_career_score(
     brief = [m for m in rows if "Offre 0" in m.body_text]
     assert len(brief) == 1
     for body in (brief[0].body_text, brief[0].body_html):
-        assert "ATS Potentiel 80/100" in body
+        assert "ATS Potential 80/100" in body
         assert "Career 90/100" not in body
 
 
