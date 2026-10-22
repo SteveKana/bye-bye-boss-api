@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     # override in .env (JSON) when they change; a model missing here is shown
     # without a cost. The Batch API halves every price (MONITORING_BATCH_DISCOUNT).
     MONITORING_AI_PRICES_USD_PER_M: dict[str, list[float]] = {
+        "gpt-6-luna": [0.10, 0.50],
+        # Older models, kept so past usage rows still show a cost.
         "gpt-5": [1.25, 10.0],
         "gpt-5-mini": [0.25, 2.0],
     }
@@ -145,7 +147,7 @@ class Settings(BaseSettings):
     # 2026-09-22 cost review. No key configured -> upload endpoint returns a
     # clear error instead of silently failing.
     OPENAI_API_KEY: str | None = None
-    CV_OPENAI_MODEL: str = "gpt-5-mini"
+    CV_OPENAI_MODEL: str = "gpt-6-luna"
     OPENAI_TIMEOUT_SECONDS: int = 60
     # Same OPENAI_API_KEY, a separate cheap embedding model -- used by
     # core/embeddings.py to rank offers by semantic similarity (see
@@ -207,18 +209,18 @@ class Settings(BaseSettings):
     # above), but its own model setting: matching is a heavier judgment call
     # (weighing hard/medium/soft blockers, producing two internally
     # consistent scores) than the cv module's fixed-schema extraction, so it
-    # keeps the flagship-tier model for now. Still the dominant cost driver
-    # (2026-09-22 cost review: runs once daily for every candidate, up to
-    # MATCHING_MAX_OFFERS_PER_CANDIDATE offers each -- see app/modules/
-    # matching/jobs.py for the schedule) -- swapping this one too is the
-    # next step, once a side-by-side quality check (see
-    # scripts/compare_matching_models.py) confirms a cheaper model still
-    # produces trustworthy scores: an early 3-case run (2026-09-22) showed
-    # real divergences on blocker detection and semantic-match recall, so
-    # it's on hold pending a larger sample. Runs as a background job rather
-    # than on-demand: a candidate's dashboard reads pre-computed results
-    # instead of waiting on an LLM call.
-    MATCHING_OPENAI_MODEL: str = "gpt-5"
+    # used the flagship-tier model (gpt-5) until 2026-10-22, when every model
+    # moved to gpt-6-luna (OpenAI's cheapest, and gpt-5 / gpt-5-mini shut
+    # down on 2026-12-11) -- run scripts/compare_matching_models.py to check
+    # the score quality on real pairs (an early 3-case run on 2026-09-22 with
+    # gpt-5-mini showed divergences on blocker detection and semantic-match
+    # recall; gpt-6-luna has not been measured on real pairs yet). Was the
+    # dominant cost driver (2026-09-22 cost review: runs once daily for every
+    # candidate, up to MATCHING_MAX_OFFERS_PER_CANDIDATE offers each -- see
+    # app/modules/matching/jobs.py for the schedule). Runs as a background
+    # job rather than on-demand: a candidate's dashboard reads pre-computed
+    # results instead of waiting on an LLM call.
+    MATCHING_OPENAI_MODEL: str = "gpt-6-luna"
     #
     # Its own timeout, separate from OPENAI_TIMEOUT_SECONDS: that one is tuned
     # for the cv module's fast "low" reasoning/verbosity extraction calls.
@@ -239,7 +241,7 @@ class Settings(BaseSettings):
     # review): the single biggest lever on LLM spend, since it bounds how
     # often *any* candidate gets rescanned at all, not just how many offers
     # each rescan touches (see MATCHING_MAX_OFFERS_PER_CANDIDATE below).
-    # How many offers are sent to the (gpt-5) full analysis per candidate per
+    # How many offers are sent to the full analysis per candidate per
     # run, after the intermediate pre-filter below has kept only the ones
     # worth it. Was 15, then 8 (2026-09-22 cost review), now 5 (Steve,
     # 2026-10-04: 5 offers/day x 5 days = the 25-offer history shown on
@@ -251,7 +253,7 @@ class Settings(BaseSettings):
     # the SAME ATS grid (see prompt.build_prefilter_prompt); only those with
     # an ATS score >= MATCHING_PREFILTER_MIN_ATS go on to the full analysis.
     MATCHING_PREFILTER_POOL_SIZE: int = 30
-    MATCHING_PREFILTER_MODEL: str = "gpt-5-mini"
+    MATCHING_PREFILTER_MODEL: str = "gpt-6-luna"
     MATCHING_PREFILTER_MIN_ATS: int = 75
     # A daily run only looks at offers ingested within this many days (an
     # offer already seen for a candidate -- whatever its outcome -- is never
@@ -292,7 +294,7 @@ class Settings(BaseSettings):
     # matching/skill_labels.py): the cheap model that translates each internal
     # concept once into the shared glossary, and how many matches one
     # background run catches up on.
-    MATCHING_LABELS_MODEL: str = "gpt-5-mini"
+    MATCHING_LABELS_MODEL: str = "gpt-6-luna"
     MATCHING_LABELS_TIMEOUT_SECONDS: int = 120
     MATCHING_LABELS_MATCHES_PER_RUN: int = 2000
 
@@ -378,7 +380,7 @@ class Settings(BaseSettings):
     # kept only so that code still runs as-is if this is ever reverted,
     # rather than leaving it silently broken.
     REDDIT_USER_AGENT: str = "byebyeboss-regret-index/1.0"
-    REGRET_OPENAI_MODEL: str = "gpt-5-mini"
+    REGRET_OPENAI_MODEL: str = "gpt-6-luna"
     REGRET_OPENAI_TIMEOUT_SECONDS: int = 60
     REGRET_MIN_MENTIONS: int = 3
 
@@ -391,13 +393,9 @@ class Settings(BaseSettings):
     # setting anyway (not reusing MATCHING_OPENAI_MODEL) so it can be tuned
     # independently, same convention as the cv module's own CV_OPENAI_MODEL.
     #
-    # gpt-5-mini rather than the flagship gpt-5 -- explicit call during the
-    # current test phase (2026-09-22): no need to pay for the top-tier model
-    # while the feature itself is still being validated. Revisit once real
-    # usage confirms the cheaper model's rewrites/deductions stay reliable
-    # enough (same quality-check step MATCHING_OPENAI_MODEL is still
-    # pending before it gets the same treatment).
-    CV_OPTIMIZATION_OPENAI_MODEL: str = "gpt-5-mini"
+    # gpt-6-luna since 2026-10-22 (was gpt-5-mini, which shuts down on
+    # 2026-12-11). Check the rewrites/deductions stay reliable on real CVs.
+    CV_OPTIMIZATION_OPENAI_MODEL: str = "gpt-6-luna"
     # Same "medium" reasoning/verbosity as the matching call (heavier
     # judgment task than a fixed extraction schema) -- same generous timeout
     # for the same reason (see MATCHING_OPENAI_TIMEOUT_SECONDS above).
