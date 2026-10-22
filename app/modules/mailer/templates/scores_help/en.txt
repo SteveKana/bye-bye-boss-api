@@ -3,6 +3,6 @@ Understand our scores
 - ATS: How well your CV matches the applicant tracking systems (ATS) recruiters use to filter CVs.
 - ATS Potential: The highest ATS score you could reach for this offer by optimizing your CV.
 
-- Very strong fit: ATS Potential of 95 or more
-- Strong fit: ATS Potential of 80 to 94
+- Very strong fit: ATS Potential of 97 or more
+- Strong fit: ATS Potential of 85 to 96
 
