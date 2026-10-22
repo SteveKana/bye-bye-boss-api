@@ -1,15 +1,17 @@
-"""One-off cost/quality comparison: gpt-5 vs. gpt-5-mini for matching.
+"""One-off cost/quality comparison: gpt-5 vs. gpt-6-luna for matching.
+
+Run it BEFORE the switch: it compares with analyses already computed by gpt-5.
 
 Run this ON THE SERVER (it needs the real DATABASE_URL and OPENAI_API_KEY
 from .env) -- it is READ-ONLY, it never writes to the database. For each of
 the N most recently scored candidate/offer pairs, it re-runs the *exact
 same* prompt (via matching/gateway.analyse_match, same JSON parsing and
-schema validation as production) through gpt-5-mini, and prints it next to
+schema validation as production) through gpt-6-luna, and prints it next to
 the real gpt-5 result already on file for that pair -- so you can judge
 whether the quality holds up before flipping MATCHING_OPENAI_MODEL in
-app/core/config.py from "gpt-5" to "gpt-5-mini".
+app/core/config.py from "gpt-5" to "gpt-6-luna".
 
-Cost: only N new API calls are made (gpt-5-mini only -- the gpt-5 side is
+Cost: only N new API calls are made (gpt-6-luna only -- the gpt-5 side is
 read from a match already computed in production, no new gpt-5 call). Check
 the OpenAI Usage dashboard right after running this to see exactly what
 those N calls cost.
@@ -34,7 +36,7 @@ from app.modules.matching.repository import CandidateMatchRepository
 from app.modules.matching.service import _format_offer_text
 from app.modules.offers import JobOfferRepository
 
-_COMPARE_MODEL = "gpt-5-mini"
+_COMPARE_MODEL = "gpt-6-luna"
 
 _SUMMARY_FIELDS = ("career_score", "ats_score", "ats_potential", "blocking_message")
 
@@ -49,7 +51,7 @@ def _summary(analysis: dict) -> dict:
 
 def _print_case(n: int, offer_title: str, company: str, gpt5: dict, mini: dict) -> None:
     print(f"\n{'=' * 70}\n[{n}] {offer_title} -- {company}\n{'=' * 70}")
-    print(f"{'':<26}{'gpt-5 (en production)':<28}{'gpt-5-mini (ce test)'}")
+    print(f"{'':<26}{'gpt-5 (en production)':<28}{'gpt-6-luna (ce test)'}")
     for field in (
         "career_score",
         "ats_score",
@@ -92,7 +94,7 @@ async def _run(count: int) -> None:
                     model=_COMPARE_MODEL,
                 )
             except MatchingFailedError as exc:
-                print(f"\n[skipped] {offer.title} -- gpt-5-mini call failed: {exc}")
+                print(f"\n[skipped] {offer.title} -- gpt-6-luna call failed: {exc}")
                 continue
 
             done += 1
@@ -126,7 +128,7 @@ async def _run(count: int) -> None:
         print(f"{done} paire(s) comparée(s). Détail complet (JSON) : {out_path}")
         print(
             "Va voir le dashboard Usage OpenAI (platform.openai.com -> Usage) "
-            "pour le coût réel de ces appels gpt-5-mini."
+            "pour le coût réel de ces appels gpt-6-luna."
         )
 
 
