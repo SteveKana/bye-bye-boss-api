@@ -87,3 +87,13 @@ class MarketSkillWeekly(BaseModel, table=True):
     skill_label: str = Field(nullable=False)
     category: str = Field(nullable=False)
     offers_with_skill: int = Field(default=0, nullable=False)
+
+
+class MarketDigestOptOut(BaseModel, table=True):
+    """Users who asked not to receive the market-watch digest (the link at the
+    bottom of every digest). Separate from the announcements opt-out: leaving
+    one list says nothing about the other."""
+
+    __tablename__ = "market_digest_optouts"
+
+    user_id: uuid.UUID = Field(index=True, unique=True, nullable=False)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from pathlib import Path
 
 from app.core.config import get_settings
 from app.modules.mailer import RenderedMail, render_mail
 from app.modules.market.digest import DigestData
+from app.modules.market.tokens import unsubscribe_link
 
 TEMPLATES = Path(__file__).parent / "templates"
 
@@ -23,7 +25,7 @@ def fr_short(day: date) -> str:
     return f"{day.day} {_MONTHS[day.month - 1]}"
 
 
-def render_digest(data: DigestData) -> RenderedMail:
+def render_digest(data: DigestData, user_id: uuid.UUID) -> RenderedMail:
     peak = max(
         (pct for e in data.evolution for _, pct in e.weeks),
         default=1,
@@ -60,4 +62,5 @@ def render_digest(data: DigestData) -> RenderedMail:
         actions=data.actions,
         forecasts=data.forecasts,
         link=f"{base}/opportunites",
+        unsubscribe_url=unsubscribe_link(user_id),
     )

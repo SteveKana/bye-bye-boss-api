@@ -11,9 +11,15 @@ from app.modules.cv import CandidateProfile, CandidateProfileRepository, Profile
 from app.modules.mailer import MailerGateway
 from app.modules.market.render import render_digest
 from app.modules.market.schemas import DigestPreview, DigestRequest, DigestSent
-from app.modules.market.service import DigestUnavailableError, MarketDigestService
+from app.modules.market.service import (
+    DigestUnavailableError,
+    MarketDigestService,
+    is_opted_out,
+)
 
 router = APIRouter(prefix="/market/admin", tags=["market"])
+
+OPTED_OUT = "Cette personne s'est désabonnée de la veille marché : aucun envoi."
 
 
 async def _complete_profile(session: DBSession, user_id) -> CandidateProfile:
@@ -28,13 +34,15 @@ async def preview(
     data: DigestRequest, session: DBSession, _: AdminUser
 ) -> DigestPreview:
     profile = await _complete_profile(session, data.user_id)
+    if await is_opted_out(session, data.user_id):
+        return DigestPreview(ready=False, reason=OPTED_OUT)
     try:
         result = await MarketDigestService(session).build(
             profile, ignore_threshold=data.ignore_threshold
         )
     except DigestUnavailableError as exc:
         return DigestPreview(ready=False, reason=str(exc))
-    mail = render_digest(result.data)
+    mail = render_digest(result.data, data.user_id)
     return DigestPreview(
         ready=True,
         subject=mail.subject,
@@ -52,13 +60,15 @@ async def send(data: DigestRequest, session: DBSession, _: AdminUser) -> DigestS
     user = await AuthGateway(session).get_user(data.user_id)
     if user is None:
         raise NotFoundError("Compte introuvable.")
+    if await is_opted_out(session, data.user_id):
+        raise BadRequestError(OPTED_OUT, code="digest_opted_out")
     try:
         result = await MarketDigestService(session).build(
             profile, ignore_threshold=data.ignore_threshold
         )
     except DigestUnavailableError as exc:
         raise BadRequestError(str(exc), code="digest_unavailable") from exc
-    mail = render_digest(result.data)
+    mail = render_digest(result.data, data.user_id)
     await MailerGateway(session).enqueue(
         to_email=user.email, subject=mail.subject, text=mail.text, html=mail.html
     )

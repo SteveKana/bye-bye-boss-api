@@ -38,3 +38,5 @@ Estimation basée sur les tendances observées, pas une donnée mesurée.
 
 Voir mes offres compatibles : {{ link }}
 100 % gratuit pour les candidats.
+
+Ne plus recevoir la veille marché : {{ unsubscribe_url }}
