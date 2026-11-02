@@ -16,6 +16,7 @@ from app.modules.market.service import (
     MarketDigestService,
     is_opted_out,
 )
+from app.modules.market.weekly import record_send
 
 router = APIRouter(prefix="/market/admin", tags=["market"])
 
@@ -72,5 +73,6 @@ async def send(data: DigestRequest, session: DBSession, _: AdminUser) -> DigestS
     await MailerGateway(session).enqueue(
         to_email=user.email, subject=mail.subject, text=mail.text, html=mail.html
     )
+    await record_send(session, data.user_id, result.data.week_start, "admin")
     await session.commit()
     return DigestSent(detail=f"Veille marché « {result.data.label} » envoyée.")

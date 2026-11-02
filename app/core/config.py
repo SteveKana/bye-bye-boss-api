@@ -314,6 +314,10 @@ class Settings(BaseSettings):
     # A specialty gets a digest only when this many offers were analysed over
     # the last 4 complete weeks (Steve, 2026-11-02: 100).
     MARKET_MIN_OFFERS: int = 100
+    # Weekly automatic send of the digest (Mondays 08:30 Paris time, see
+    # market/weekly.py). On a test server the NOTIFICATIONS_ALLOWED_EMAILS
+    # list (same one as the daily brief) limits who can receive it.
+    MARKET_WEEKLY_SEND_ENABLED: bool = True
 
     # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured

@@ -495,3 +495,159 @@ async def test_zero_offers_explains_the_state_of_the_collection(
     assert preview["ready"] is False
     assert "aucune offre" in preview["reason"] and "1 en base" in preview["reason"]
     assert "0 analysées" not in preview["reason"]
+
+
+# ------------------------------------------------------- weekly auto send --
+MONDAY = datetime(
+    2026, 10, 26, 7, 0, tzinfo=UTC
+)  # 08:00 in Paris; covers week of 19 Oct
+
+
+async def _digest_mails() -> list[EmailMessage]:
+    async with AsyncSessionLocal() as session:
+        mails = (await session.exec(select(EmailMessage))).all()
+    return [m for m in mails if "veille marché" in m.subject]
+
+
+def test_expected_week_is_the_monday_of_the_week_that_just_ended() -> None:
+    from app.modules.market.weekly import expected_week
+
+    assert expected_week(MONDAY) == date(2026, 10, 19)
+    assert expected_week(datetime(2026, 10, 30, 12, 0, tzinfo=UTC)) == date(
+        2026, 10, 19
+    )
+    assert expected_week(datetime(2026, 11, 2, 9, 0, tzinfo=UTC)) == date(2026, 10, 26)
+
+
+async def test_weekly_send_mails_each_eligible_profile_once(
+    client: AsyncClient,
+) -> None:
+    from app.modules.market.models import MarketDigestSend
+    from app.modules.market.weekly import send_weekly_digests
+
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(session, MONDAY)
+    assert report.sent == 1
+    mails = await _digest_mails()
+    assert [m.to_email for m in mails] == ["julie@example.com"]
+    async with AsyncSessionLocal() as session:
+        sends = (await session.exec(select(MarketDigestSend))).all()
+    assert [(s.user_id, s.week_start, s.source) for s in sends] == [
+        (target_id, date(2026, 10, 19), "auto")
+    ]
+
+    # The scheduler retries all Monday: a second run sends nothing.
+    async with AsyncSessionLocal() as session:
+        again = await send_weekly_digests(session, MONDAY)
+    assert again.sent == 0 and again.already_sent == 1
+    assert len(await _digest_mails()) == 1
+
+
+async def test_weekly_send_skips_opted_out_unverified_and_stale(
+    client: AsyncClient,
+) -> None:
+    from app.modules.market.models import MarketDigestOptOut
+    from app.modules.market.weekly import send_weekly_digests
+
+    out_id, _ = await _login(client, "out@example.com")
+    await _seed_profile_and_stats(out_id, offers_per_week=100)
+    async with AsyncSessionLocal() as session:
+        session.add(MarketDigestOptOut(user_id=out_id))
+        await session.commit()
+
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(session, MONDAY)
+    assert report.opted_out == 1 and report.sent == 0
+
+    # Unverified address.
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "new@example.com", "password": "supersecret", "first_name": "N"},
+    )
+    async with AsyncSessionLocal() as session:
+        user = (
+            await session.exec(select(User).where(User.email == "new@example.com"))
+        ).one()
+        session.add(
+            CandidateProfile(
+                user_id=user.id, status=ProfileStatus.complete.value, headline="PO"
+            )
+        )
+        await session.commit()
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(session, MONDAY)
+    assert report.unverified == 1 and report.sent == 0
+
+
+async def test_weekly_send_never_sends_outdated_data(
+    client: AsyncClient,
+) -> None:
+    from app.modules.market.weekly import send_weekly_digests
+
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(
+            session, datetime(2026, 11, 9, 7, 0, tzinfo=UTC)
+        )
+    assert report.sent == 0
+    assert report.stale_data + report.below_threshold == 1
+    assert await _digest_mails() == []
+
+
+async def test_weekly_send_respects_the_test_server_allow_list(
+    client: AsyncClient, monkeypatch
+) -> None:
+    from app.modules.market.weekly import send_weekly_digests
+
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    monkeypatch.setattr(
+        get_settings(), "NOTIFICATIONS_ALLOWED_EMAILS", "someone@else.com"
+    )
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(session, MONDAY)
+    assert report.not_allowed == 1 and report.sent == 0
+    assert await _digest_mails() == []
+
+
+async def test_weekly_send_skips_profiles_below_the_threshold(
+    client: AsyncClient,
+) -> None:
+    from app.modules.market.weekly import send_weekly_digests
+
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=10)
+    async with AsyncSessionLocal() as session:
+        report = await send_weekly_digests(session, MONDAY)
+    assert report.below_threshold == 1 and report.sent == 0
+
+
+async def test_an_admin_send_counts_as_the_weeks_digest(client: AsyncClient) -> None:
+    from app.modules.market.models import MarketDigestSend
+
+    _, admin = await _login(client, "admin@example.com", admin=True)
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    resp = await client.post(
+        f"{M}/digest/send", json={"user_id": str(target_id)}, headers=admin
+    )
+    assert resp.status_code == 200
+    async with AsyncSessionLocal() as session:
+        sends = (await session.exec(select(MarketDigestSend))).all()
+    assert [(s.user_id, s.source) for s in sends] == [(target_id, "admin")]
+
+
+async def test_the_weekly_job_does_nothing_when_switched_off(
+    client: AsyncClient, monkeypatch
+) -> None:
+    from app.modules.market import jobs
+
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    monkeypatch.setattr(get_settings(), "MARKET_WEEKLY_SEND_ENABLED", False)
+    await jobs.send_market_digests()
+    assert await _digest_mails() == []
