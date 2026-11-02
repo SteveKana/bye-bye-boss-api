@@ -1,0 +1,1 @@
+📊 Ta veille marché {{ label }} — semaine du {{ week_label }}

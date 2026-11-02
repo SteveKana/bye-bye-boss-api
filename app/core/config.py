@@ -298,6 +298,23 @@ class Settings(BaseSettings):
     MATCHING_LABELS_TIMEOUT_SECONDS: int = 120
     MATCHING_LABELS_MATCHES_PER_RUN: int = 2000
 
+    # ---- Market watch (veille marché, see app/modules/market) --------------
+    # Weekly counts of the skills the offers ask for, per job specialty. The
+    # collection runs on its own (cheap model, a few offers per call); the
+    # digest e-mail is only sent by an admin for now.
+    MARKET_ENABLED: bool = True
+    MARKET_MODEL: str = "gpt-6-luna"
+    MARKET_TIMEOUT_SECONDS: int = 120
+    # Offers read together in one model call, and per scheduled run (the very
+    # first runs catch up on every offer already in the database).
+    MARKET_OFFERS_PER_CALL: int = 10
+    MARKET_OFFERS_PER_RUN: int = 600
+    # Only the first characters of a description are sent to the model.
+    MARKET_DESCRIPTION_MAX_CHARS: int = 2500
+    # A specialty gets a digest only when this many offers were analysed over
+    # the last 4 complete weeks (Steve, 2026-11-02: 100).
+    MARKET_MIN_OFFERS: int = 100
+
     # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
     # employee-review API exists at a cost/access level this project can use
