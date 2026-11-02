@@ -404,3 +404,94 @@ async def test_unknown_user_is_not_found(client: AsyncClient, path: str) -> None
         f"{M}/digest/{path}", json={"user_id": str(uuid.uuid4())}, headers=admin
     )
     assert resp.status_code == 404
+
+
+# ----------------------------------------------------------- unsubscribe --
+U = "/api/v1/market/unsubscribe"
+
+
+async def test_digest_carries_a_working_unsubscribe_link(client: AsyncClient) -> None:
+    from app.modules.market.tokens import read_unsubscribe_token
+
+    _, admin = await _login(client, "admin@example.com", admin=True)
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    await client.post(
+        f"{M}/digest/send", json={"user_id": str(target_id)}, headers=admin
+    )
+    async with AsyncSessionLocal() as session:
+        mails = (await session.exec(select(EmailMessage))).all()
+    mail = next(m for m in mails if "veille marché" in m.subject)
+    assert "/veille-marche/desinscription?token=" in mail.body_html
+    assert "Ne plus recevoir la veille marché" in mail.body_text
+    token = mail.body_text.split("desinscription?token=")[1].split()[0]
+    assert read_unsubscribe_token(token) == target_id
+
+
+async def test_unsubscribing_blocks_later_digests(client: AsyncClient) -> None:
+    from app.modules.market.tokens import create_unsubscribe_token
+
+    _, admin = await _login(client, "admin@example.com", admin=True)
+    target_id, _ = await _login(client, "julie@example.com")
+    await _seed_profile_and_stats(target_id, offers_per_week=100)
+    token = create_unsubscribe_token(target_id)
+
+    info = (await client.get(f"{U}/info", params={"token": token})).json()
+    assert info == {"email": "j***@example.com", "already": False}
+    assert (await client.post(U, json={"token": token})).status_code == 200
+    assert (await client.post(U, json={"token": token})).status_code == 200  # twice ok
+    info = (await client.get(f"{U}/info", params={"token": token})).json()
+    assert info["already"] is True
+
+    body = {"user_id": str(target_id)}
+    preview = (
+        await client.post(f"{M}/digest/preview", json=body, headers=admin)
+    ).json()
+    assert preview["ready"] is False and "désabonnée" in preview["reason"]
+    assert (
+        await client.post(f"{M}/digest/send", json=body, headers=admin)
+    ).status_code == 400
+
+
+async def test_other_tokens_cannot_unsubscribe_from_the_digest(
+    client: AsyncClient,
+) -> None:
+    from app.modules.monitoring.tokens import create_unsubscribe_token as announce
+
+    target_id, _ = await _login(client, "julie@example.com")
+    wrong = announce(target_id)  # the announcements' link
+    assert (await client.post(U, json={"token": wrong})).status_code == 400
+    assert (await client.get(f"{U}/info", params={"token": "junk"})).status_code == 400
+
+
+async def test_zero_offers_explains_the_state_of_the_collection(
+    client: AsyncClient,
+) -> None:
+    _, admin = await _login(client, "admin@example.com", admin=True)
+    target_id, _ = await _login(client, "julie@example.com")
+    async with AsyncSessionLocal() as session:
+        profile = CandidateProfile(
+            user_id=target_id,
+            status=ProfileStatus.complete.value,
+            headline="Product Owner",
+        )
+        session.add(profile)
+        await session.flush()
+        session.add(
+            ProfileMarketTag(
+                profile_id=profile.id,
+                family="Produit & projet",
+                specialty="Product Owner",
+                model="test",
+            )
+        )
+        await _offer(session, "a", NOW)
+        await session.commit()
+
+    body = {"user_id": str(target_id)}
+    preview = (
+        await client.post(f"{M}/digest/preview", json=body, headers=admin)
+    ).json()
+    assert preview["ready"] is False
+    assert "aucune offre" in preview["reason"] and "1 en base" in preview["reason"]
+    assert "0 analysées" not in preview["reason"]

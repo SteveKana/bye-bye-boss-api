@@ -26,3 +26,12 @@ class DigestPreview(BaseSchema):
 
 class DigestSent(BaseSchema):
     detail: str
+
+
+class UnsubscribeInfo(BaseSchema):
+    email: str
+    already: bool
+
+
+class UnsubscribeBody(BaseSchema):
+    token: str
