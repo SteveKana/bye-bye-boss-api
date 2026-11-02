@@ -97,3 +97,19 @@ class MarketDigestOptOut(BaseModel, table=True):
     __tablename__ = "market_digest_optouts"
 
     user_id: uuid.UUID = Field(index=True, unique=True, nullable=False)
+
+
+class MarketDigestSend(BaseModel, table=True):
+    """One digest sent to one person for one week (`week_start` = the latest
+    week the digest covers). The unique key is what guarantees nobody gets
+    the same week twice, whatever restarts or reruns happen."""
+
+    __tablename__ = "market_digest_sends"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start", name="uq_market_digest_send"),
+    )
+
+    user_id: uuid.UUID = Field(index=True, nullable=False)
+    week_start: date = Field(index=True, nullable=False)
+    # "auto" (Monday job) or "admin" (manual send from the admin).
+    source: str = Field(default="auto", nullable=False)

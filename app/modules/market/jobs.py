@@ -4,6 +4,10 @@
     tags yet (the first runs after the feature ships catch up on every offer
     already in the database, MARKET_OFFERS_PER_RUN at a time), then refreshes
     the weekly counts when something new was filed;
+  * `send_market_digests`, every hour from 08:30 to 18:30 on Mondays (Paris):
+    sends the weekly digest. The first run of the day does the work, the
+    later ones only retry what failed -- nobody ever gets the same week twice
+    (see weekly.py);
   * `aggregate_market_weeks`, daily at 02:45 Paris time -- before the
     03:30 offer purge -- so a week's final counts are stored while all its
     offers still exist.
@@ -19,6 +23,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.scheduler import scheduled
 from app.modules.market.service import MarketCollectionService
+from app.modules.market.weekly import send_weekly_digests
 
 logger = get_logger("market.jobs")
 
@@ -61,3 +66,22 @@ async def aggregate_market_weeks() -> None:
         logger.exception("market_aggregate_failed")
         return
     logger.info("market_weeks_aggregated", groups=groups)
+
+
+@scheduled(
+    cron="30 8-18 * * 1",
+    timezone="Europe/Paris",
+    id="market_weekly_digest",
+)
+async def send_market_digests() -> None:
+    settings = get_settings()
+    if not (settings.MARKET_ENABLED and settings.MARKET_WEEKLY_SEND_ENABLED):
+        return
+    try:
+        async with AsyncSessionLocal() as session:
+            report = await send_weekly_digests(session)
+    except Exception:
+        logger.exception("market_weekly_digest_job_failed")
+        return
+    if any(vars(report).values()):
+        logger.info("market_weekly_digest_done", **vars(report))
