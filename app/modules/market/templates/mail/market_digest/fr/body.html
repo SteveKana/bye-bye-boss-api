@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 4px;font-size:19px;font-weight:700;color:#1A1A3E">📊 Ta veille marché : {{ label }}</p>
+<p style="margin:0 0 4px;font-size:13px;color:#6B7280">
+  Semaine du {{ week_label }} · <strong>{{ offers_analysed }} offres</strong> analysées{% if weeks_used > 1 %} sur {{ weeks_used }} semaines{% endif %} (France Travail + Adzuna)
+</p>
+{% if partial_week %}
+<p style="margin:0 0 4px;font-size:12px;color:#B45309">Semaine en cours : les chiffres sont encore provisoires.</p>
+{% endif %}
+<p style="margin:0 0 6px;font-size:14px;color:#4B5563">Bonjour{% if first_name %} {{ first_name }}{% endif %}, voici ce que demandent les offres de ton métier.</p>
+
+<p style="margin:22px 0 2px;font-size:16px;font-weight:700;color:#1A1A3E;border-top:1px solid #EEF0F3;padding-top:18px">🔥 Les compétences les plus demandées</p>
+<p style="margin:0 0 10px;font-size:12.5px;color:#6B7280">Part des offres de la semaine qui les citent{% if top_skills and top_skills[0].trend_pts is not none %}, et évolution vs la semaine d'avant{% endif %}.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px">
+{% for s in top_skills %}
+  <tr>
+    <td style="padding:5px 0;width:34%;font-weight:600;color:#1A1A3E">{{ s.name }}</td>
+    <td style="padding:5px 6px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEE9FF;border-radius:6px"><tr>
+        <td style="width:{{ [s.share_pct, 3]|max }}%;background:#5B3FE8;height:10px;border-radius:6px;font-size:0;line-height:0">&nbsp;</td>
+        <td style="font-size:0;line-height:0">&nbsp;</td>
+      </tr></table>
+    </td>
+    <td style="padding:5px 0;width:38px;text-align:right;font-weight:700;color:#1A1A3E">{{ s.share_pct }} %</td>
+    <td style="padding:5px 0 5px 8px;width:46px;text-align:right;font-weight:700;font-size:12px;color:{% if s.trend_pts is none %}#9CA3AF{% elif s.trend_pts > 0 %}#15803D{% elif s.trend_pts < 0 %}#B91C1C{% else %}#6B7280{% endif %}">{% if s.trend_pts is none %}—{% elif s.trend_pts > 0 %}▲ +{{ s.trend_pts }}{% elif s.trend_pts < 0 %}▼ {{ s.trend_pts }}{% else %}= 0{% endif %}</td>
+    <td style="padding:5px 0 5px 8px;width:84px;text-align:right;font-size:11.5px;font-weight:700;color:{% if s.in_cv %}#15803D{% else %}#B45309{% endif %}">{% if s.in_cv %}✓ dans ton CV{% else %}✗ absent{% endif %}</td>
+  </tr>
+{% endfor %}
+</table>
+
+<p style="margin:22px 0 2px;font-size:16px;font-weight:700;color:#1A1A3E;border-top:1px solid #EEF0F3;padding-top:18px">📈 Évolution semaine par semaine</p>
+{% if evolution %}
+<p style="margin:0 0 10px;font-size:12.5px;color:#6B7280">Part des offres qui citent la compétence, pour les 3 plus demandées.</p>
+{% for e in evolution %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;font-size:12.5px">
+  <tr>
+    <td style="font-weight:700;color:#1A1A3E;padding-bottom:4px">{{ e.name }}</td>
+    <td style="text-align:right;color:#6B7280;padding-bottom:4px">{{ e.first_pct }} % → <strong style="color:#1A1A3E">{{ e.last_pct }} %</strong></td>
+  </tr>
+  <tr><td colspan="2">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+    {% for w in e.weeks %}
+      <td valign="bottom" align="center" style="padding:0 2px">
+        <div style="font-size:10.5px;color:#6B7280">{{ w.pct }} %</div>
+        <div style="height:{{ w.height }}px;background:#5B3FE8;border-radius:4px 4px 0 0;font-size:0;line-height:0">&nbsp;</div>
+        <div style="font-size:10px;color:#9CA3AF;padding-top:2px">{{ w.label }}</div>
+      </td>
+    {% endfor %}
+    </tr></table>
+  </td></tr>
+</table>
+{% endfor %}
+{% else %}
+<p style="margin:0;font-size:13px;color:#6B7280">L'historique se construit semaine après semaine : les courbes apparaîtront dès la deuxième semaine d'analyse.</p>
+{% endif %}
+
+{% if actions %}
+<p style="margin:22px 0 8px;font-size:16px;font-weight:700;color:#1A1A3E;border-top:1px solid #EEF0F3;padding-top:18px">🎯 Ton plan d'action</p>
+{% for a in actions %}
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 10px"><tr>
+  <td valign="top" style="width:28px"><div style="width:24px;height:24px;border-radius:12px;background:#5B3FE8;color:#FFFFFF;font-weight:700;font-size:13px;line-height:24px;text-align:center">{{ loop.index }}</div></td>
+  <td style="font-size:13.5px;line-height:1.5;color:#4B5563">{{ a }}</td>
+</tr></table>
+{% endfor %}
+{% endif %}
+
+{% if forecasts %}
+<p style="margin:22px 0 8px;font-size:16px;font-weight:700;color:#1A1A3E;border-top:1px solid #EEF0F3;padding-top:18px">🔮 Pronostics Bye Bye Boss</p>
+{% for f in forecasts %}
+<p style="margin:0 0 8px;background:#FFF8D6;border:1px solid #F4DF7A;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.5;color:#4B5563">{{ f }}</p>
+{% endfor %}
+<p style="margin:0;font-size:11.5px;color:#6B7280">Estimation basée sur les tendances observées, pas une donnée mesurée.</p>
+{% endif %}
+
+<p style="margin:26px 0 8px">
+  <a href="{{ link }}" style="display:block;background:#5B3FE8;color:#FFFFFF;text-decoration:none;text-align:center;font-weight:700;font-size:15px;padding:14px;border-radius:10px">Voir mes offres compatibles →</a>
+</p>
+<p style="margin:0;text-align:center;font-size:12px;color:#6B7280">100 % gratuit pour les candidats 🎁</p>
+{% endblock %}
+
+{% block footer %}
+{{ brand }} — tu reçois cette synthèse car tu as un profil sur {{ brand }}.
+{% endblock %}

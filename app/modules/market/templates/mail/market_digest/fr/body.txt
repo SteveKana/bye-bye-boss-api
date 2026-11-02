@@ -1,0 +1,40 @@
+Bonjour{% if first_name %} {{ first_name }}{% endif %},
+
+Voici ta veille marché pour : {{ label }}
+Semaine du {{ week_label }} · {{ offers_analysed }} offres analysées{% if weeks_used > 1 %} sur {{ weeks_used }} semaines{% endif %} (France Travail + Adzuna).
+{% if partial_week %}
+(Semaine en cours : les chiffres sont encore provisoires.)
+{% endif %}
+
+LES COMPÉTENCES LES PLUS DEMANDÉES
+{% for s in top_skills %}
+- {{ s.name }} : {{ s.share_pct }} % des offres{% if s.trend_pts is not none %} ({{ "%+d"|format(s.trend_pts) }} pts vs semaine précédente){% endif %} — {% if s.in_cv %}dans ton profil{% else %}absent de ton profil{% endif %}
+
+{% endfor %}
+{% if evolution %}
+ÉVOLUTION
+{% for e in evolution %}
+- {{ e.name }} : {{ e.first_pct }} % → {{ e.last_pct }} % des offres
+{% endfor %}
+{% else %}
+ÉVOLUTION
+L'historique se construit semaine après semaine : les courbes apparaîtront dès la deuxième semaine d'analyse.
+{% endif %}
+{% if actions %}
+
+TON PLAN D'ACTION
+{% for a in actions %}
+{{ loop.index }}. {{ a }}
+{% endfor %}
+{% endif %}
+{% if forecasts %}
+
+PRONOSTICS BYE BYE BOSS
+{% for f in forecasts %}
+- {{ f }}
+{% endfor %}
+Estimation basée sur les tendances observées, pas une donnée mesurée.
+{% endif %}
+
+Voir mes offres compatibles : {{ link }}
+100 % gratuit pour les candidats.
