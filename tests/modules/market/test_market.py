@@ -231,10 +231,11 @@ def test_digest_shares_trends_and_cv_match() -> None:
     )
     assert data is not None
     by_name = {s.name: s for s in data.top_skills}
-    assert by_name["Jira"].share_pct == 62 and by_name["Jira"].in_cv is True
-    assert by_name["SAFe"].trend_pts == 6 and by_name["SAFe"].in_cv is False
+    assert by_name["Jira"].share_pct == 64 and by_name["Jira"].in_cv is True
+    assert by_name["SAFe"].share_pct == 26 and by_name["SAFe"].trend_pts == 6
+    assert by_name["SAFe"].in_cv is False
     assert by_name["SQL"].trend_pts == 7
-    assert data.offers_analysed == 200
+    assert data.offers_analysed == 200  # both weeks, shares are the latest's
     assert len(data.evolution) == 3 and data.evolution[0].weeks[0][1] == 60
     assert len(data.actions) == 2  # Jira is in the CV, SQL and SAFe are not
     assert any("SAFe" in a for a in data.actions)

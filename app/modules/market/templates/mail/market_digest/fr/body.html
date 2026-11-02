@@ -11,7 +11,7 @@
 <p style="margin:0 0 6px;font-size:14px;color:#4B5563">Bonjour{% if first_name %} {{ first_name }}{% endif %}, voici ce que demandent les offres de ton métier.</p>
 
 <p style="margin:22px 0 2px;font-size:16px;font-weight:700;color:#1A1A3E;border-top:1px solid #EEF0F3;padding-top:18px">🔥 Les compétences les plus demandées</p>
-<p style="margin:0 0 10px;font-size:12.5px;color:#6B7280">Part des offres qui les citent{% if top_skills and top_skills[0].trend_pts is not none %}, et évolution vs la semaine d'avant{% endif %}.</p>
+<p style="margin:0 0 10px;font-size:12.5px;color:#6B7280">Part des offres de la semaine qui les citent{% if top_skills and top_skills[0].trend_pts is not none %}, et évolution vs la semaine d'avant{% endif %}.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px">
 {% for s in top_skills %}
   <tr>

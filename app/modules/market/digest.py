@@ -111,14 +111,15 @@ def build_digest(
     previous = weeks[-2] if len(weeks) >= 2 else None
 
     window_total = sum(w.offers_total for w in weeks[-4:])
-    window_counts: dict[str, int] = {}
+    # Everything shown as a share is the LATEST week's, so the list, the
+    # action plan and the last point of each curve always agree. The window
+    # only feeds the "offers analysed" figure and the forecasts.
     labels: dict[str, tuple[str, str]] = {}
     for w in weeks[-4:]:
-        for key, (name, category, count) in w.skills.items():
-            window_counts[key] = window_counts.get(key, 0) + count
+        for key, (name, category, _count) in w.skills.items():
             labels.setdefault(key, (name, category))
-
-    ranked = sorted(window_counts, key=lambda k: (-window_counts[k], k))
+    latest_counts = {k: v[2] for k, v in latest.skills.items()}
+    ranked = sorted(latest_counts, key=lambda k: (-latest_counts[k], k))
 
     def trend(key: str) -> int | None:
         if previous is None:
@@ -137,7 +138,7 @@ def build_digest(
                 name=name,
                 category=category,
                 category_label=SKILL_CATEGORY_LABELS.get(category, category),
-                share_pct=pct(share(window_counts[key], window_total)),
+                share_pct=pct(share(latest_counts[key], latest.offers_total)),
                 trend_pts=trend(key),
                 in_cv=has_skill(key, cv_exact, cv_squashed),
             )
@@ -166,7 +167,7 @@ def build_digest(
     for key in ranked:
         if len(actions) >= ACTION_ITEMS:
             break
-        value = share(window_counts[key], window_total)
+        value = share(latest_counts[key], latest.offers_total)
         if value < MIN_SHARE_FOR_ACTION:
             break
         if has_skill(key, cv_exact, cv_squashed):
