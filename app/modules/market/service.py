@@ -24,6 +24,7 @@ from app.modules.market.digest import (
 )
 from app.modules.market.models import (
     FAMILY_LEVEL,
+    MarketDigestOptOut,
     MarketGroupWeekly,
     MarketSkillWeekly,
     OfferMarketTag,
@@ -197,6 +198,17 @@ class MarketCollectionService:
 
 
 # ------------------------------------------------------------------ digest --
+async def is_opted_out(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    row = (
+        await session.execute(
+            sa.select(MarketDigestOptOut.id).where(  # type: ignore[call-overload]
+                MarketDigestOptOut.user_id == user_id  # type: ignore[arg-type]
+            )
+        )
+    ).first()
+    return row is not None
+
+
 class DigestUnavailableError(Exception):
     """The digest can't be built; `args[0]` is the reason shown to the admin."""
 
@@ -272,6 +284,33 @@ class MarketDigestService:
         self.session.add(tag)
         await self.session.commit()
         return tag
+
+    async def _collection_progress(self) -> str:
+        """Why there is nothing to show yet, in words an admin can act on."""
+        offers = (
+            await self.session.execute(sa.select(sa.func.count()).select_from(JobOffer))
+        ).scalar_one()
+        tagged = (
+            await self.session.execute(
+                sa.select(sa.func.count()).select_from(OfferMarketTag)
+            )
+        ).scalar_one()
+        if not get_settings().MARKET_ENABLED:
+            return (
+                "La collecte est désactivée sur cet environnement "
+                "(MARKET_ENABLED=false) : aucune offre n'est analysée ici."
+            )
+        if tagged == 0:
+            return (
+                f"La collecte n'a encore analysé aucune offre ({offers} en base). "
+                "Elle tourne toutes les 30 minutes (si le planificateur est actif "
+                "sur ce serveur) : réessaie plus tard."
+            )
+        return (
+            f"La collecte est en cours : {tagged} offres analysées sur {offers}. "
+            "Aucune semaine complète n'est encore disponible pour ce métier : "
+            "réessaie quand la collecte aura terminé son rattrapage."
+        )
 
     async def _weeks(self, family: str, level: str) -> list[WeekCounts]:
         groups = (
@@ -353,6 +392,8 @@ class MarketDigestService:
         best_total = chosen[3]
         family, specialty, weeks = best
         below = best_total < settings.MARKET_MIN_OFFERS
+        if best_total == 0:
+            raise DigestUnavailableError(await self._collection_progress())
         if below and not ignore_threshold:
             label = specialty or family
             raise DigestUnavailableError(

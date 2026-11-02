@@ -17,10 +17,11 @@ from app.core.module import Module
 # Import side effects: register models (Alembic) and the scheduled jobs.
 from app.modules.market import jobs as jobs  # noqa: F401
 from app.modules.market import models as models  # noqa: F401
-from app.modules.market.routes.v1 import admin_routes
+from app.modules.market.routes.v1 import admin_routes, unsubscribe_routes
 
 _router = APIRouter()
 _router.include_router(admin_routes.router)
+_router.include_router(unsubscribe_routes.router)
 
 module = Module(
     name="market",
