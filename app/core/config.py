@@ -300,9 +300,12 @@ class Settings(BaseSettings):
 
     # ---- Market watch (veille marché, see app/modules/market) --------------
     # Weekly counts of the skills the offers ask for, per job specialty. The
-    # collection runs on its own (cheap model, a few offers per call); the
-    # digest e-mail is only sent by an admin for now.
-    MARKET_ENABLED: bool = True
+    # collection runs on its own (cheap model, a few offers per call).
+    # OFF by default: it calls OpenAI on a schedule, so it only runs where
+    # MARKET_ENABLED=true is set explicitly -- the production .env (Steve,
+    # 2026-11-03: nothing automatic on dev). An admin can still preview and
+    # send a digest by hand anywhere.
+    MARKET_ENABLED: bool = False
     MARKET_MODEL: str = "gpt-6-luna"
     MARKET_TIMEOUT_SECONDS: int = 120
     # Offers read together in one model call, and per scheduled run (the very
@@ -316,8 +319,9 @@ class Settings(BaseSettings):
     MARKET_MIN_OFFERS: int = 100
     # Weekly automatic send of the digest (Mondays 08:30 Paris time, see
     # market/weekly.py). On a test server the NOTIFICATIONS_ALLOWED_EMAILS
-    # list (same one as the daily brief) limits who can receive it.
-    MARKET_WEEKLY_SEND_ENABLED: bool = True
+    # list (same one as the daily brief) limits who can receive it. OFF by
+    # default, like MARKET_ENABLED: set true in the production .env only.
+    MARKET_WEEKLY_SEND_ENABLED: bool = False
 
     # ---- Regret Index (SimplyHired-sourced employee sentiment) ------------
     # Steve's call (2026-09-30), after confirming no legitimate structured
