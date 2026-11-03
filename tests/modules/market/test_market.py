@@ -465,8 +465,9 @@ async def test_other_tokens_cannot_unsubscribe_from_the_digest(
 
 
 async def test_zero_offers_explains_the_state_of_the_collection(
-    client: AsyncClient,
+    client: AsyncClient, monkeypatch
 ) -> None:
+    monkeypatch.setattr(get_settings(), "MARKET_ENABLED", True)
     _, admin = await _login(client, "admin@example.com", admin=True)
     target_id, _ = await _login(client, "julie@example.com")
     async with AsyncSessionLocal() as session:
@@ -651,3 +652,11 @@ async def test_the_weekly_job_does_nothing_when_switched_off(
     monkeypatch.setattr(get_settings(), "MARKET_WEEKLY_SEND_ENABLED", False)
     await jobs.send_market_digests()
     assert await _digest_mails() == []
+
+
+def test_nothing_automatic_unless_switched_on_explicitly() -> None:
+    from app.core.config import Settings
+
+    fields = Settings.model_fields
+    assert fields["MARKET_ENABLED"].default is False
+    assert fields["MARKET_WEEKLY_SEND_ENABLED"].default is False
