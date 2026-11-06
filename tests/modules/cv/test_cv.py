@@ -495,3 +495,10 @@ async def test_preferences_rejects_unknown_region_and_contract(
         PREFERENCES, json={"contract_types": ["Mécénat"]}, headers=auth_headers
     )
     assert r.status_code == 422
+
+
+def test_import_prompt_asks_to_copy_every_bullet_of_each_experience() -> None:
+    from app.modules.cv import gateway
+
+    assert "recopie TOUTES les" in gateway._PROMPT_TEMPLATE
+    assert "n'omets aucune puce" in gateway._PROMPT_TEMPLATE
