@@ -68,8 +68,13 @@ async def aggregate_market_weeks() -> None:
     logger.info("market_weeks_aggregated", groups=groups)
 
 
+# Written with "mon" on purpose: in this scheduler a bare number counts from
+# Monday = 0, so "1" would mean Tuesday.
+WEEKLY_CRON = "30 8-18 * * mon"
+
+
 @scheduled(
-    cron="30 8-18 * * 1",
+    cron=WEEKLY_CRON,
     timezone="Europe/Paris",
     id="market_weekly_digest",
 )

@@ -660,3 +660,24 @@ def test_nothing_automatic_unless_switched_on_explicitly() -> None:
     fields = Settings.model_fields
     assert fields["MARKET_ENABLED"].default is False
     assert fields["MARKET_WEEKLY_SEND_ENABLED"].default is False
+
+
+def test_the_weekly_digest_fires_on_monday_not_tuesday() -> None:
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    from app.modules.market import jobs
+
+    paris = ZoneInfo("Europe/Paris")
+    trigger = CronTrigger.from_crontab(jobs.WEEKLY_CRON, timezone=paris)
+    now = datetime(2026, 11, 2, 0, 0, tzinfo=paris)  # a Monday
+    fires = []
+    for _ in range(14):  # a whole Monday, then the following days
+        now = trigger.get_next_fire_time(None, now)
+        fires.append(now)
+        now += timedelta(seconds=1)
+    labels = [f.strftime("%a %d %H:%M") for f in fires]
+    assert labels[0] == "Mon 02 08:30"
+    assert all(label.startswith("Mon") for label in labels)  # never a Tuesday

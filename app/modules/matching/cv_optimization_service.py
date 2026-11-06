@@ -19,6 +19,8 @@ cv_optimization_models.CVOptimization's docstring.
 
 from __future__ import annotations
 
+from difflib import SequenceMatcher
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import utcnow
@@ -72,6 +74,23 @@ def _split_bullets(description: str) -> list[str]:
     return lines or [description.strip()]
 
 
+def _norm(text: str) -> str:
+    return " ".join(text.casefold().replace("’", "'").split()).strip(" -•.;:")
+
+
+def _is_covered(line: str, bullets: list) -> bool:
+    """True when the model's bullets already carry this original line, as is
+    or lightly reworded (its `text`, or the `original_text` of a rewrite)."""
+    target = _norm(line)
+    for bullet in bullets:
+        for candidate in (bullet.text, bullet.original_text):
+            if candidate and (
+                SequenceMatcher(None, target, _norm(candidate)).ratio() >= 0.8
+            ):
+                return True
+    return False
+
+
 def _reconcile_experiences(
     original_experiences: list[dict], model_experiences: list[CVOptimizationExperience]
 ) -> list[dict]:
@@ -109,6 +128,23 @@ def _reconcile_experiences(
                 {"text": line, "status": "unchanged", "original_text": None, "why": ""}
                 for line in _split_bullets(original.get("description", ""))
             ]
+
+        # No task of the real CV may vanish: a bullet of the original list
+        # that the model left out is put back at the end, unchanged. Only for
+        # a real bullet list (2+ lines); a one-paragraph description is
+        # legitimately rewritten into bullets.
+        original_lines = _split_bullets(original.get("description", ""))
+        if model_exp is not None and model_exp.bullets and len(original_lines) >= 2:
+            for line in original_lines:
+                if not _is_covered(line, model_exp.bullets):
+                    bullets.append(
+                        {
+                            "text": line,
+                            "status": "unchanged",
+                            "original_text": None,
+                            "why": "",
+                        }
+                    )
 
         reconciled.append(
             {
@@ -195,6 +231,29 @@ class CVOptimizationService:
             )
         await self.session.commit()
         return optimization
+
+    async def generate_from_text(
+        self, profile: CandidateProfile, offer_text: str
+    ) -> CVOptimization:
+        """Admin tool: adapts the CV to an offer pasted as plain text. Same
+        model call and same safeguards (experiences always paired with the
+        real ones, skills rebuilt deterministically) as get_or_generate, but
+        nothing is stored: the returned row only lives in memory (no match,
+        so no candidate_match_id, and no commit)."""
+        result = await cv_optimization_gateway.optimize_cv(
+            _build_cv_payload(profile), offer_text.strip(), None
+        )
+        return CVOptimization(  # type: ignore[call-arg]  # in-memory, no match
+            headline=result.headline.strip() or profile.headline or "",
+            summary=result.summary.strip() or profile.professional_summary or "",
+            summary_why=result.summary_why,
+            experiences=_reconcile_experiences(
+                profile.experiences or [], result.experiences
+            ),
+            skills=_reconcile_skills(profile.skills or [], result.skills),
+            advice=result.advice,
+            computed_at=utcnow(),
+        )
 
     async def confirm(self, optimization: CVOptimization) -> CVOptimization:
         optimization = await self.optimizations.update(
