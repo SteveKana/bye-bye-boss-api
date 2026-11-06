@@ -196,6 +196,29 @@ class CVOptimizationService:
         await self.session.commit()
         return optimization
 
+    async def generate_from_text(
+        self, profile: CandidateProfile, offer_text: str
+    ) -> CVOptimization:
+        """Admin tool: adapts the CV to an offer pasted as plain text. Same
+        model call and same safeguards (experiences always paired with the
+        real ones, skills rebuilt deterministically) as get_or_generate, but
+        nothing is stored: the returned row only lives in memory (no match,
+        so no candidate_match_id, and no commit)."""
+        result = await cv_optimization_gateway.optimize_cv(
+            _build_cv_payload(profile), offer_text.strip(), None
+        )
+        return CVOptimization(  # type: ignore[call-arg]  # in-memory, no match
+            headline=result.headline.strip() or profile.headline or "",
+            summary=result.summary.strip() or profile.professional_summary or "",
+            summary_why=result.summary_why,
+            experiences=_reconcile_experiences(
+                profile.experiences or [], result.experiences
+            ),
+            skills=_reconcile_skills(profile.skills or [], result.skills),
+            advice=result.advice,
+            computed_at=utcnow(),
+        )
+
     async def confirm(self, optimization: CVOptimization) -> CVOptimization:
         optimization = await self.optimizations.update(
             optimization, {"confirmed_at": utcnow()}
