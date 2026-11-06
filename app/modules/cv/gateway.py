@@ -33,6 +33,14 @@ précise (ex: "Lyon", "Paris"), jamais une région, un département ou un pays \
 (ex: "Île-de-France", "Auvergne-Rhône-Alpes", "France"). Si le CV ne mentionne \
 qu'une zone large sans ville précise, laisse ce champ vide "".
 
+Règle spécifique pour "description" de chaque expérience : recopie TOUTES les \
+puces, tâches et missions listées sous cette expérience dans le CV, une par \
+ligne (séparées par un retour à la ligne), avec la formulation du CV. Ne \
+résume pas, ne fusionne pas, n'omets aucune puce, même si le CV en compte \
+beaucoup. Si le CV a un court paragraphe d'introduction pour l'expérience, \
+mets-le en première ligne. Les technologies de la ligne « Environnement \
+technique » vont dans "tools", pas dans "description".
+
 Règles pour les quatre champs de synthèse ci-dessous ("professional_summary", \
 "identified_roles", "domains", "skill_categories") : contrairement aux autres \
 champs, ce ne sont pas des copies littérales du CV mais une synthèse que tu \
@@ -136,7 +144,9 @@ def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) ->
                 model=model,
                 input=prompt,
                 reasoning={"effort": "low"},
-                text={"verbosity": "low"},
+                # "medium": with "low" the model tends to summarize the
+                # experiences' bullet lists, which must be copied in full.
+                text={"verbosity": "medium"},
             )
             return response.output_text
         except (RateLimitError, APITimeoutError, APIError) as exc:

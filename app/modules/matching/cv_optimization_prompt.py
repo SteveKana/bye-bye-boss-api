@@ -63,6 +63,12 @@ déjà calculée ci-dessous contient parfois des identifiants techniques de ce t
 tels quels. Les noms propres d'outils, de méthodes ou de technologies restent
 inchangés (SQL, Scrum, Jira, API REST, Power BI...).
 
+AUCUNE puce du CV d'origine ne doit disparaître : chacune doit réapparaître, soit
+telle quelle ("unchanged"), soit reformulée ("modified", avec son "original_text").
+Ne pas fusionner plusieurs puces en une seule, ne pas en omettre parce qu'elle
+semble éloignée de l'offre. Dans chaque expérience, placer EN PREMIER les puces les
+plus pertinentes pour l'offre, puis les autres.
+
 Le nombre d'expériences en sortie doit être IDENTIQUE au nombre d'expériences en
 entrée, dans le MÊME ordre, avec le même titre/entreprise/période -- seules les
 puces à l'intérieur de chaque expérience peuvent changer.
