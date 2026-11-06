@@ -55,13 +55,18 @@ from app.modules.matching import models as models  # noqa: F401
 # from app.modules.matching import regret_jobs as regret_jobs  # noqa: F401
 from app.modules.matching.events import MatchesScored
 from app.modules.matching.repository import CandidateMatchRepository
-from app.modules.matching.routes.v1 import cv_optimization_routes, matching_routes
+from app.modules.matching.routes.v1 import (
+    admin_cv_routes,
+    cv_optimization_routes,
+    matching_routes,
+)
 from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
 from app.modules.matching.service import MatchingService
 
 _router = APIRouter()
 _router.include_router(matching_routes.router)
 _router.include_router(cv_optimization_routes.router)
+_router.include_router(admin_cv_routes.router)
 
 module = Module(
     name="matching",

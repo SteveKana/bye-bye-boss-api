@@ -132,9 +132,23 @@ ANALYSE DÉJÀ CALCULÉE POUR CE COUPLE CANDIDAT/OFFRE
 """
 
 
-def build_prompt(cv: dict, offer: str, analysis: dict) -> str:
+NO_ANALYSIS_TEXT = (
+    "Aucune analyse préalable pour cette offre (texte collé à la main). "
+    "Déduis toi-même, à partir de l'offre, ce qu'il faut mettre en valeur, avec "
+    "exactement les mêmes règles de non-invention que ci-dessus."
+)
+
+
+def build_prompt(cv: dict, offer: str, analysis: dict | None) -> str:
+    """`analysis` is None when the offer is a pasted text with no match
+    computed for it (admin tool): the prompt then says so instead of showing
+    an empty analysis."""
     return PROMPT_TEMPLATE.format(
         cv=json.dumps(cv, ensure_ascii=False, indent=2),
         offer=offer,
-        analysis=json.dumps(analysis, ensure_ascii=False, indent=2),
+        analysis=(
+            NO_ANALYSIS_TEXT
+            if analysis is None
+            else json.dumps(analysis, ensure_ascii=False, indent=2)
+        ),
     )

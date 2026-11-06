@@ -82,7 +82,7 @@ def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) ->
 
 
 async def optimize_cv(
-    cv: dict, offer_text: str, analysis: dict, *, model: str | None = None
+    cv: dict, offer_text: str, analysis: dict | None, *, model: str | None = None
 ) -> CVOptimizationResult:
     settings = get_settings()
     if not settings.OPENAI_API_KEY:
