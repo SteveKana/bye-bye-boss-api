@@ -1,4 +1,6 @@
-"""Admin tool: adapt the admin's own CV to an offer pasted as plain text.
+"""Admin tool: adapt the admin's own CV to an offer pasted as plain text
+(or read from a link: `offer-from-url` only fetches the text, so the admin can
+check it before running the adaptation).
 
 Nothing is stored. `generate` calls the model (the same engine as "Adapter mon
 CV pour cette offre", but with no match behind it) and returns the result;
@@ -26,6 +28,7 @@ from app.modules.matching.cv_pdf import (
     build_cv_pdf,
     cv_pdf_filename,
 )
+from app.modules.matching.offer_page_reader import OfferPageError, read_offer_from_url
 
 router = APIRouter(prefix="/matching/admin", tags=["matching"])
 
@@ -35,6 +38,17 @@ MAX_OFFER_CHARS = 20_000
 
 class CvFromTextRequest(BaseModel):
     offer_text: str = Field(max_length=MAX_OFFER_CHARS)
+
+
+class OfferFromUrlRequest(BaseModel):
+    url: str = Field(max_length=2000)
+
+
+class OfferFromUrlResult(BaseModel):
+    text: str
+    title: str | None
+    host: str
+    structured: bool
 
 
 class CvFromTextResult(BaseModel):
@@ -54,6 +68,23 @@ async def _own_complete_profile(session: DBSession, user_id):
             "Ton profil n'est pas complet : termine-le avant d'adapter ton CV."
         )
     return profile
+
+
+@router.post("/offer-from-url", response_model=OfferFromUrlResult)
+async def read_offer_from_link(
+    body: OfferFromUrlRequest, admin: AdminUser
+) -> OfferFromUrlResult:
+    """Fetch an offer page and return its text. No model call, nothing stored."""
+    try:
+        page = await read_offer_from_url(body.url)
+    except OfferPageError as exc:
+        raise BadRequestError(str(exc)) from None
+    return OfferFromUrlResult(
+        text=page.text,
+        title=page.title,
+        host=page.host,
+        structured=page.used_structured_data,
+    )
 
 
 @router.post("/cv-from-offer-text", response_model=CvFromTextResult)
