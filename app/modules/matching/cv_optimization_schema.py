@@ -31,6 +31,10 @@ class CVOptimizationBullet(BaseModel):
     # specific change helps for this specific offer -- never a generic
     # "improves your CV" filler. Left blank for "unchanged".
     why: str = ""
+    # "mission" for a sentence that describes the job's mission (project,
+    # product, scope) rather than one task; anything else is a task. See
+    # cv_bullets.place_mission_first, which checks this label before using it.
+    kind: str = ""
 
     @model_validator(mode="before")
     @classmethod
