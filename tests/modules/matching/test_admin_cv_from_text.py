@@ -127,6 +127,7 @@ async def test_pdf_is_rendered_from_the_result_without_calling_the_model(
     result = (
         await client.post(URL, json={"offer_text": OFFER}, headers=headers)
     ).json()
+    assert result["filename"] == "CV_Steve_Kana_Product_Owner_Data.pdf"
 
     async def boom(*args, **kwargs):
         raise AssertionError("the PDF must not call the model")
@@ -139,5 +140,9 @@ async def test_pdf_is_rendered_from_the_result_without_calling_the_model(
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert resp.content.startswith(b"%PDF")
+        assert (
+            'filename="CV_Steve_Kana_Product_Owner_Data.pdf"'
+            in resp.headers["content-disposition"]
+        )
     forbidden = await client.post(f"{URL}/pdf", json=result)
     assert forbidden.status_code == 401

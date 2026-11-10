@@ -157,6 +157,19 @@ def test_cv_pdf_filename_slugifies_accents_and_spaces() -> None:
     assert filename == "CV_Emilie_Belanger_Cote.pdf"
 
 
+def test_cv_pdf_filename_adds_the_adapted_title() -> None:
+    profile = _profile(first_name="Steve", last_name="Kana")
+
+    assert (
+        cv_pdf_filename(profile, "Product Owner Data / IA (H/F)")
+        == "CV_Steve_Kana_Product_Owner_Data_IA_H_F.pdf"
+    )
+    long_title = "Responsable des systèmes d'information " * 5
+    assert len(cv_pdf_filename(profile, long_title)) <= len("CV_Steve_Kana_.pdf") + 40
+    assert cv_pdf_filename(profile, "   ") == "CV_Steve_Kana.pdf"
+    assert cv_pdf_filename(profile, None) == "CV_Steve_Kana.pdf"
+
+
 def test_cv_pdf_filename_falls_back_without_name() -> None:
     profile = _profile()
 
