@@ -20,6 +20,7 @@ from app.core.exceptions import BadRequestError
 from app.core.models import utcnow
 from app.modules.auth import AdminUser
 from app.modules.cv import CvService, ProfileStatus
+from app.modules.matching import cv_optimization_gateway
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_service import CVOptimizationService
 from app.modules.matching.cv_pdf import (
@@ -51,6 +52,16 @@ class OfferFromUrlResult(BaseModel):
     structured: bool
 
 
+class CertificationItem(BaseModel):
+    title: str = Field(max_length=200)
+    issuer_period: str = Field(default="", max_length=200)
+
+
+class LanguageItem(BaseModel):
+    name: str = Field(max_length=100)
+    level: str = Field(default="", max_length=100)
+
+
 class CvFromTextResult(BaseModel):
     headline: str
     summary: str
@@ -59,9 +70,25 @@ class CvFromTextResult(BaseModel):
     skills: list[dict]
     advice: str
     computed_at: datetime
+    # Certifications and languages printed on the PDF. `generate` fills them
+    # from the profile so the admin can edit them (the advice often says to
+    # "mention" one that the CV lacks); the PDF route uses what it is sent,
+    # and falls back to the profile's own when they are absent (None). Either
+    # way only this download changes: the profile is never touched.
+    certifications: list[CertificationItem] | None = Field(default=None, max_length=50)
+    languages: list[LanguageItem] | None = Field(default=None, max_length=50)
     # Name to give the downloaded PDF (candidate + adapted title). Filled by
     # `generate`; the PDF route rebuilds it itself rather than trusting this.
     filename: str = ""
+
+
+class AdviceRequest(BaseModel):
+    offer_text: str = Field(max_length=MAX_OFFER_CHARS)
+    cv: CvFromTextResult
+
+
+class AdviceResult(BaseModel):
+    advice: str
 
 
 async def _own_complete_profile(session: DBSession, user_id):
@@ -71,6 +98,23 @@ async def _own_complete_profile(session: DBSession, user_id):
             "Ton profil n'est pas complet : termine-le avant d'adapter ton CV."
         )
     return profile
+
+
+def _with_edited_lists(profile, body: CvFromTextResult):
+    """A throw-away copy of the profile carrying the certifications/languages
+    the admin edited. It is never added to the session, so nothing is saved."""
+    if body.certifications is None and body.languages is None:
+        return profile
+    data = profile.model_dump()
+    if body.certifications is not None:
+        data["certifications"] = [
+            c.model_dump() for c in body.certifications if c.title.strip()
+        ]
+    if body.languages is not None:
+        data["languages"] = [
+            lang.model_dump() for lang in body.languages if lang.name.strip()
+        ]
+    return type(profile)(**data)
 
 
 @router.post("/offer-from-url", response_model=OfferFromUrlResult)
@@ -111,8 +155,71 @@ async def generate_cv_from_offer_text(
         skills=optimization.skills,
         advice=optimization.advice,
         computed_at=optimization.computed_at,
+        certifications=[
+            CertificationItem(
+                title=str(item.get("title") or "")[:200],
+                issuer_period=str(item.get("issuer_period") or "")[:200],
+            )
+            for item in profile.certifications
+            if item.get("title")
+        ],
+        languages=[
+            LanguageItem(
+                name=str(item.get("name") or "")[:100],
+                level=str(item.get("level") or "")[:100],
+            )
+            for item in profile.languages
+            if item.get("name")
+        ],
         filename=cv_pdf_filename(profile, optimization.headline),
     )
+
+
+def _cv_for_advice(cv: CvFromTextResult) -> dict:
+    """The CV as the admin edited it, in the compact shape the advice prompt
+    reads: only what a recruiter would read."""
+    return {
+        "headline": cv.headline,
+        "summary": cv.summary,
+        "experiences": [
+            {
+                "title": exp.get("title"),
+                "company": exp.get("company"),
+                "bullets": [
+                    text
+                    for b in exp.get("bullets", [])
+                    if (text := str(b.get("text") or "").strip())
+                ],
+            }
+            for exp in cv.experiences
+        ],
+        "skills": [
+            skill for s in cv.skills if (skill := str(s.get("skill") or "").strip())
+        ],
+        "certifications": [
+            {"title": c.title, "issuer_period": c.issuer_period}
+            for c in (cv.certifications or [])
+            if c.title.strip()
+        ],
+        "languages": [
+            {"name": lang.name, "level": lang.level}
+            for lang in (cv.languages or [])
+            if lang.name.strip()
+        ],
+    }
+
+
+@router.post("/cv-advice", response_model=AdviceResult)
+async def refresh_cv_advice(body: AdviceRequest, admin: AdminUser) -> AdviceResult:
+    """New "Conseil" for a CV the admin edited. One short model call, nothing
+    stored: called when the admin finishes editing."""
+    text = body.offer_text.strip()
+    if len(text) < MIN_OFFER_CHARS:
+        raise BadRequestError(
+            "Le texte de l'offre est trop court : colle l'annonce complète."
+        )
+    advice = await cv_optimization_gateway.refresh_advice(_cv_for_advice(body.cv), text)
+    return AdviceResult(advice=advice)
 
 
 @router.post("/cv-from-offer-text/pdf")
@@ -123,6 +230,7 @@ async def download_cv_from_offer_text(
     template: CvTemplate = DEFAULT_CV_TEMPLATE,
 ) -> Response:
     profile = await _own_complete_profile(session, admin.id)
+    profile = _with_edited_lists(profile, body)
     optimization = CVOptimization(  # type: ignore[call-arg]  # in-memory only
         headline=body.headline,
         summary=body.summary,
