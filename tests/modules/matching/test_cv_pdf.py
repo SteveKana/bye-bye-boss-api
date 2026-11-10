@@ -12,6 +12,7 @@ from app.modules.matching.cv_pdf import (
     _level_text,
     _mission_description,
     build_cv_pdf,
+    candidate_contact,
     candidate_phone,
     cv_pdf_filename,
     pdf_safe,
@@ -348,3 +349,29 @@ def test_build_cv_pdf_prints_the_mission_description_before_the_bullets(
     )
 
     assert build_cv_pdf(_profile(), optimization, template=template).startswith(b"%PDF")
+
+
+def test_candidate_contact_is_what_the_pdf_header_carries() -> None:
+    profile = _profile(
+        first_name="Steve",
+        last_name="Kana",
+        email="steve@example.com",
+        location="Saint-Ouen-sur-Seine",
+        raw_text="STEVE  KANA\n06  16  53  82  61\n",
+    )
+
+    assert candidate_contact(profile) == {
+        "name": "Steve Kana",
+        "email": "steve@example.com",
+        "phone": "06 16 53 82 61",
+        "location": "Saint-Ouen-sur-Seine",
+    }
+
+
+def test_candidate_contact_gives_empty_strings_for_what_is_unknown() -> None:
+    assert candidate_contact(_profile()) == {
+        "name": "Candidat",
+        "email": "",
+        "phone": "",
+        "location": "",
+    }

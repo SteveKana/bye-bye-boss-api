@@ -43,6 +43,9 @@ async def _profile(user_id, status: str = ProfileStatus.complete.value) -> None:
                 status=status,
                 first_name="Steve",
                 last_name="Kana",
+                email="steve@example.com",
+                location="Saint-Ouen-sur-Seine",
+                raw_text="STEVE  KANA\n06  16  53  82  61  ·  steve@example.com\n",
                 headline="Product Owner",
                 skills=["Jira"],
                 certifications=[{"title": "SAFe 5", "issuer_period": "Scaled Agile"}],
@@ -102,6 +105,13 @@ async def test_generates_from_pasted_text_and_stores_nothing(
     # The real experience is kept (title/company/period come from the profile).
     assert body["experiences"][0]["company"] == "Galec"
     assert body["skills"] == [{"skill": "Jira", "added": False, "category": ""}]
+    # The contact details the PDF will carry, for the preview.
+    assert body["contact"] == {
+        "name": "Steve Kana",
+        "email": "steve@example.com",
+        "phone": "06 16 53 82 61",
+        "location": "Saint-Ouen-sur-Seine",
+    }
     # The model got the pasted text and no analysis.
     assert calls[0][1] == OFFER.strip() and calls[0][2] is None
     async with AsyncSessionLocal() as session:
