@@ -288,9 +288,21 @@ def candidate_phone(profile: CandidateProfile) -> str | None:
     return re.sub(r"\s+", " ", match.group(0)).strip() if match else None
 
 
+def candidate_contact(profile: CandidateProfile) -> dict[str, str]:
+    """The contact details printed at the top of the PDF -- also shown on the
+    preview, so what the candidate sees is what the PDF carries. All from the
+    profile; an unknown detail is an empty string."""
+    return {
+        "name": _candidate_name(profile),
+        "email": profile.email or "",
+        "phone": candidate_phone(profile) or "",
+        "location": profile.location or "",
+    }
+
+
 def _contact_parts(profile: CandidateProfile) -> list[str]:
-    parts = [profile.email, candidate_phone(profile), profile.location]
-    return [p for p in parts if p]
+    contact = candidate_contact(profile)
+    return [p for p in (contact["email"], contact["phone"], contact["location"]) if p]
 
 
 def _mission_description(sentences: list[str]) -> str:

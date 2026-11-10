@@ -27,6 +27,7 @@ from app.modules.matching.cv_pdf import (
     DEFAULT_CV_TEMPLATE,
     CvTemplate,
     build_cv_pdf,
+    candidate_contact,
     cv_pdf_filename,
 )
 from app.modules.matching.offer_page_reader import OfferPageError, read_offer_from_url
@@ -62,6 +63,16 @@ class LanguageItem(BaseModel):
     level: str = Field(default="", max_length=100)
 
 
+class ContactResult(BaseModel):
+    """Contact details as the PDF prints them (shown on the preview, read-only:
+    they come from the profile and are never taken from what the page sends)."""
+
+    name: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=200)
+    phone: str = Field(default="", max_length=50)
+    location: str = Field(default="", max_length=200)
+
+
 class CvFromTextResult(BaseModel):
     headline: str
     summary: str
@@ -77,6 +88,9 @@ class CvFromTextResult(BaseModel):
     # way only this download changes: the profile is never touched.
     certifications: list[CertificationItem] | None = Field(default=None, max_length=50)
     languages: list[LanguageItem] | None = Field(default=None, max_length=50)
+    # Filled by `generate` from the profile, for display only: the PDF route
+    # always prints the profile's own details.
+    contact: ContactResult | None = None
     # Name to give the downloaded PDF (candidate + adapted title). Filled by
     # `generate`; the PDF route rebuilds it itself rather than trusting this.
     filename: str = ""
@@ -171,6 +185,7 @@ async def generate_cv_from_offer_text(
             for item in profile.languages
             if item.get("name")
         ],
+        contact=ContactResult(**candidate_contact(profile)),
         filename=cv_pdf_filename(profile, optimization.headline),
     )
 
