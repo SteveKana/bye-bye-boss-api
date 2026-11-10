@@ -19,6 +19,7 @@ from app.modules.matching.cv_optimization_schema import (
 )
 from app.modules.matching.cv_optimization_service import (
     CVOptimizationService,
+    _build_cv_payload,
     _reconcile_experiences,
     _reconcile_skills,
     clean_skill_label,
@@ -406,3 +407,83 @@ def test_restore_script_only_replaces_clearly_fuller_descriptions() -> None:
     assert merge_descriptions(old, new[:1]) is None
     assert merge_descriptions(old, [new[0], {**new[1], "company": "Autre"}]) is None
     assert merge_descriptions(old, old) is None
+
+
+def test_reconcile_experiences_cleans_the_bullets_the_model_returned() -> None:
+    glued = (
+        "Refonte technique de l'application historique|Pilotage de la migration "
+        "de l'application de préconisation vers une solution IA | Migration de "
+        "SAP Business Object vers Knime"
+    )
+    original = [
+        {
+            "title": "PO",
+            "company": "Galec",
+            "period": "2024",
+            "description": glued,
+            "tools": [],
+        }
+    ]
+    model = [
+        CVOptimizationExperience(
+            bullets=[
+                {"text": "Pilotage de la qualité des données", "status": "modified"},
+                {
+                    "text": "Pilotage de la migration de l'application de "
+                    "préconisation vers une solution IA",
+                    "status": "modified",
+                },
+                {"text": "Migration de SAP Business Object vers Knime"},
+                {"text": "Refonte technique de l'application historique"},
+                {"text": glued},
+            ]
+        )
+    ]
+
+    bullets = _reconcile_experiences(original, model)[0]["bullets"]
+
+    assert [b["text"] for b in bullets] == [
+        "Pilotage de la migration de l'application de préconisation vers une "
+        "solution IA",
+        "Refonte technique de l'application historique",
+        "Migration de SAP Business Object vers Knime",
+        "Pilotage de la qualité des données",
+    ]
+
+
+def test_build_cv_payload_gives_the_model_one_fact_per_line() -> None:
+    profile = CandidateProfile(  # type: ignore[call-arg]
+        user_id=uuid.uuid4(),
+        experiences=[{"description": "Recette | Mise en production\n- Recette"}],
+    )
+
+    payload = _build_cv_payload(profile)
+
+    assert payload["experiences"][0]["description"] == "Recette\nMise en production"
+
+
+def test_reconcile_skills_keeps_the_model_headings_and_relevance_order() -> None:
+    result = _reconcile_skills(
+        ["Jira", "SQL", "Scrum"],
+        [
+            CVOptimizationSkill(skill="SQL", category="Data & BI"),
+            CVOptimizationSkill(skill="Scrum", category="Méthodes Agile"),
+            CVOptimizationSkill(skill="Jira", category="Méthodes Agile"),
+            CVOptimizationSkill(skill="Power BI", added=True, category="Data & BI"),
+        ],
+    )
+
+    assert result == [
+        {"skill": "SQL", "added": False, "category": "Data & BI"},
+        {"skill": "Scrum", "added": False, "category": "Méthodes Agile"},
+        {"skill": "Jira", "added": False, "category": "Méthodes Agile"},
+        {"skill": "Power BI", "added": True, "category": "Data & BI"},
+    ]
+
+
+def test_reconcile_skills_keeps_the_profile_order_when_the_model_skipped_them() -> None:
+    result = _reconcile_skills(
+        ["Jira", "SQL", "Scrum"], [CVOptimizationSkill(skill="Scrum")]
+    )
+
+    assert [item["skill"] for item in result] == ["Jira", "SQL", "Scrum"]
