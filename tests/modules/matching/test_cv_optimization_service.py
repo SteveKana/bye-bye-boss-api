@@ -67,8 +67,15 @@ def test_reconcile_experiences_uses_model_bullets_when_present() -> None:
     # model's echo.
     assert exp["company"] == "Doctolib"
     assert exp["period"] == "2022-2026"
-    assert len(exp["bullets"]) == 2
+    # The model dropped "Priorisation": it is put back, unchanged, at the end.
+    assert len(exp["bullets"]) == 3
     assert exp["bullets"][1]["status"] == "added"
+    assert exp["bullets"][2] == {
+        "text": "Priorisation",
+        "status": "unchanged",
+        "original_text": None,
+        "why": "",
+    }
 
 
 def test_reconcile_experiences_keeps_same_count_and_order_as_original() -> None:
@@ -313,6 +320,93 @@ async def test_stale_snake_case_row_is_regenerated_in_place(
         "Python",
         "Planification de la roadmap",
     }
+
+
+def test_no_task_of_the_original_cv_is_lost() -> None:
+    original = [
+        {
+            "title": "PO",
+            "company": "Galec",
+            "period": "2024",
+            "description": (
+                "Pilotage de la migration\nCréation d'ETL via Knime\n"
+                "Rédaction des user stories"
+            ),
+        }
+    ]
+    model = [
+        CVOptimizationExperience(
+            bullets=[
+                # reworded, original kept in original_text
+                CVOptimizationBullet(
+                    text="Pilotage de la migration vers une solution IA",
+                    status="modified",
+                    original_text="Pilotage de la migration",
+                    why="Vocabulaire de l'offre.",
+                ),
+                # as is
+                CVOptimizationBullet(
+                    text="Rédaction des user stories", status="unchanged"
+                ),
+                # "Création d'ETL via Knime" is left out by the model
+            ]
+        )
+    ]
+    bullets = _reconcile_experiences(original, model)[0]["bullets"]
+    assert [b["text"] for b in bullets] == [
+        "Pilotage de la migration vers une solution IA",
+        "Rédaction des user stories",
+        "Création d'ETL via Knime",
+    ]
+    assert bullets[2]["status"] == "unchanged"
+
+
+def test_a_one_paragraph_description_is_not_duplicated_at_the_end() -> None:
+    original = [
+        {
+            "title": "PO",
+            "company": "Galec",
+            "period": "2024",
+            "description": "Pilotage de la migration de l'application métier.",
+        }
+    ]
+    model = [
+        CVOptimizationExperience(
+            bullets=[
+                CVOptimizationBullet(
+                    text="Migration d'une application", status="added"
+                ),
+                CVOptimizationBullet(text="Pilotage du planning", status="added"),
+            ]
+        )
+    ]
+    bullets = _reconcile_experiences(original, model)[0]["bullets"]
+    assert len(bullets) == 2
+
+
+def test_restore_script_only_replaces_clearly_fuller_descriptions() -> None:
+    from scripts.cv_restore_bullets import merge_descriptions
+
+    old = [
+        {"company": "Galec", "description": "Résumé court.", "title": "PO"},
+        {"company": "Sanofi", "description": "Déjà complet\nsur plusieurs lignes"},
+    ]
+    new = [
+        {
+            "company": "Groupement Galec",
+            "description": "Résumé court.\n" + "puce\n" * 10,
+        },
+        {"company": "Sanofi", "description": "Déjà complet\nsur plusieurs lignes"},
+    ]
+    merged = merge_descriptions(old, new)
+    assert merged is not None
+    assert merged[0]["description"].startswith("Résumé court.\npuce")
+    assert merged[0]["title"] == "PO"  # everything else is kept
+    assert merged[1] == old[1]  # not fuller enough: untouched
+    # different structure (another number of experiences / company): nothing.
+    assert merge_descriptions(old, new[:1]) is None
+    assert merge_descriptions(old, [new[0], {**new[1], "company": "Autre"}]) is None
+    assert merge_descriptions(old, old) is None
 
 
 def test_reconcile_experiences_cleans_the_bullets_the_model_returned() -> None:

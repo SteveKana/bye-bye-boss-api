@@ -63,6 +63,15 @@ déjà calculée ci-dessous contient parfois des identifiants techniques de ce t
 tels quels. Les noms propres d'outils, de méthodes ou de technologies restent
 inchangés (SQL, Scrum, Jira, API REST, Power BI...).
 
+
+AUCUNE puce du CV d'origine ne doit disparaître : chacune doit réapparaître, soit
+telle quelle ("unchanged"), soit reformulée ("modified", avec son "original_text").
+Ne pas fusionner plusieurs puces en une seule, ne pas en omettre parce qu'elle
+semble éloignée de l'offre. Dans chaque expérience, la PREMIÈRE puce est la phrase de
+contexte du poste (la première ligne de sa description : le projet, le produit, la
+mission), reformulée si utile ; viennent ensuite les puces les plus pertinentes pour
+l'offre, puis les autres.
+
 Compétences (champ "skills") : reprendre TOUTES les compétences du CV, sans en
 retirer aucune, puis les éventuelles compétences "added". Chaque compétence porte un
 champ "category" : un intitulé court de rubrique (3 à 5 rubriques au total, par
@@ -90,14 +99,9 @@ CE QUI PEUT CHANGER
   pertinents pour l'offre, à partir de faits réels du CV uniquement.
 - Une puce peut rester "unchanged" si elle est déjà pertinente telle quelle.
 
-Mise en forme des puces (règles strictes, le CV part tel quel chez un recruteur) :
-- Une puce = UN seul fait. Jamais le caractère « | » dans une puce.
-- Aucun fait n'apparaît deux fois dans une même expérience : si deux lignes du CV
-  disent la même chose, les fusionner en une seule puce.
-- La PREMIÈRE puce de chaque expérience est la phrase de contexte du poste (la
-  première ligne de sa description : le projet, le produit, la mission), reformulée
-  si utile. Les puces suivantes sont ordonnées de la plus à la moins pertinente pour
-  l'offre.
+Mise en forme des puces (le CV part tel quel chez un recruteur) : une puce = UN seul
+fait, jamais le caractère « | » dans une puce, et le même fait n'apparaît jamais deux
+fois dans une même expérience.
 
 Pour chaque puce "modified" ou "added", et pour le résumé (summary_why), justifier
 brièvement et concrètement en quoi le changement aide pour CETTE offre précise --
