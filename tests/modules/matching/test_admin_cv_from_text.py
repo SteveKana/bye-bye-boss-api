@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
@@ -215,3 +216,139 @@ async def test_pdf_uses_the_edited_lists_and_never_touches_the_profile(
         ).one()
         assert [c["title"] for c in profile.certifications] == ["SAFe 5"]
         assert [lang["name"] for lang in profile.languages] == ["Français"]
+
+
+# -- advice refreshed after the admin edited the CV ---------------------------
+
+ADVICE_URL = "/api/v1/matching/admin/cv-advice"
+
+
+def _edited_cv() -> dict:
+    return {
+        "headline": "Product Owner Data",
+        "summary": "Résumé adapté",
+        "summary_why": "",
+        "experiences": [
+            {
+                "title": "Product Owner",
+                "company": "Galec",
+                "period": "2022-2026",
+                "bullets": [
+                    {"text": "Gestion du backlog", "status": "unchanged"},
+                    {"text": "  ", "status": "added"},
+                ],
+            }
+        ],
+        "skills": [
+            {"skill": "Jira", "added": False},
+            {"skill": "Prince2", "added": True},
+        ],
+        "advice": "ancien conseil",
+        "computed_at": "2026-11-10T00:00:00Z",
+        "certifications": [
+            {"title": "Prince2 Foundation", "issuer_period": "AXELOS 2024"},
+            {"title": " ", "issuer_period": ""},
+        ],
+        "languages": [{"name": "Anglais", "level": "B2"}],
+    }
+
+
+async def test_advice_route_is_admin_only(client: AsyncClient) -> None:
+    body = {"offer_text": OFFER, "cv": _edited_cv()}
+    assert (await client.post(ADVICE_URL, json=body)).status_code == 401
+    _, headers = await _login(client, "user@example.com", admin=False)
+    assert (
+        await client.post(ADVICE_URL, json=body, headers=headers)
+    ).status_code == 403
+
+
+async def test_advice_is_rewritten_from_the_edited_cv(
+    client: AsyncClient, monkeypatch
+) -> None:
+    calls: list = []
+
+    async def fake(cv, offer_text, **kwargs):
+        calls.append((cv, offer_text))
+        return "Nouveau conseil."
+
+    monkeypatch.setattr(cv_optimization_gateway, "refresh_advice", fake)
+    _, headers = await _login(client, "admin@example.com", admin=True)
+
+    resp = await client.post(
+        ADVICE_URL, json={"offer_text": OFFER, "cv": _edited_cv()}, headers=headers
+    )
+
+    assert resp.status_code == 200 and resp.json() == {"advice": "Nouveau conseil."}
+    cv, offer = calls[0]
+    assert offer == OFFER.strip()
+    # The model reads the CV as edited: blank bullet and blank certification
+    # are left out, what the admin added is there.
+    assert cv["experiences"][0]["bullets"] == ["Gestion du backlog"]
+    assert cv["skills"] == ["Jira", "Prince2"]
+    assert cv["certifications"] == [
+        {"title": "Prince2 Foundation", "issuer_period": "AXELOS 2024"}
+    ]
+    assert cv["languages"] == [{"name": "Anglais", "level": "B2"}]
+
+
+async def test_advice_refuses_a_too_short_offer(client: AsyncClient) -> None:
+    _, headers = await _login(client, "admin@example.com", admin=True)
+    resp = await client.post(
+        ADVICE_URL,
+        json={"offer_text": "trop court", "cv": _edited_cv()},
+        headers=headers,
+    )
+    assert resp.status_code == 400
+
+
+async def test_gateway_returns_the_advice_and_puts_the_edited_cv_in_the_prompt(
+    monkeypatch,
+) -> None:
+    prompts: list[str] = []
+
+    def fake_call(*, api_key, model, timeout, prompt):
+        prompts.append(prompt)
+        return '```json\n{"advice": "Pensez à préciser X."}\n```'
+
+    monkeypatch.setattr(cv_optimization_gateway, "_call_openai_sync", fake_call)
+    monkeypatch.setattr(
+        cv_optimization_gateway,
+        "get_settings",
+        lambda: type(
+            "S",
+            (),
+            {
+                "OPENAI_API_KEY": "k",
+                "CV_OPTIMIZATION_OPENAI_MODEL": "m",
+                "CV_OPTIMIZATION_OPENAI_TIMEOUT_SECONDS": 5,
+            },
+        )(),
+    )
+
+    advice = await cv_optimization_gateway.refresh_advice(
+        {"certifications": [{"title": "Prince2 Foundation"}]}, "Offre PO"
+    )
+
+    assert advice == "Pensez à préciser X."
+    assert "Prince2 Foundation" in prompts[0] and "Offre PO" in prompts[0]
+
+
+@pytest.mark.parametrize("answer", ["pas du json", '{"advice": "   "}', '{"autre": 1}'])
+async def test_gateway_rejects_an_unreadable_or_empty_answer(
+    monkeypatch, answer
+) -> None:
+    settings = type(
+        "S",
+        (),
+        {
+            "OPENAI_API_KEY": "k",
+            "CV_OPTIMIZATION_OPENAI_MODEL": "m",
+            "CV_OPTIMIZATION_OPENAI_TIMEOUT_SECONDS": 5,
+        },
+    )()
+    monkeypatch.setattr(cv_optimization_gateway, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        cv_optimization_gateway, "_call_openai_sync", lambda **kw: answer
+    )
+    with pytest.raises(cv_optimization_gateway.CVOptimizationFailedError):
+        await cv_optimization_gateway.refresh_advice({}, "Offre")
