@@ -427,11 +427,16 @@ def test_reconcile_experiences_cleans_the_bullets_the_model_returned() -> None:
     model = [
         CVOptimizationExperience(
             bullets=[
-                {"text": "Pilotage de la qualité des données", "status": "modified"},
+                {
+                    "text": "Pilotage de la qualité des données",
+                    "status": "modified",
+                    "kind": "task",
+                },
                 {
                     "text": "Pilotage de la migration de l'application de "
                     "préconisation vers une solution IA",
                     "status": "modified",
+                    "kind": "mission",
                 },
                 {"text": "Migration de SAP Business Object vers Knime"},
                 {"text": "Refonte technique de l'application historique"},
@@ -442,12 +447,14 @@ def test_reconcile_experiences_cleans_the_bullets_the_model_returned() -> None:
 
     bullets = _reconcile_experiences(original, model)[0]["bullets"]
 
+    # The glued copy is gone; the model's "mission" is first and flagged, the
+    # other lines (tasks, or no label) stay plain bullets.
     assert [b["text"] for b in bullets] == [
         "Pilotage de la migration de l'application de préconisation vers une "
         "solution IA",
-        "Refonte technique de l'application historique",
-        "Migration de SAP Business Object vers Knime",
         "Pilotage de la qualité des données",
+        "Migration de SAP Business Object vers Knime",
+        "Refonte technique de l'application historique",
     ]
 
 
@@ -487,3 +494,54 @@ def test_reconcile_skills_keeps_the_profile_order_when_the_model_skipped_them() 
     )
 
     assert [item["skill"] for item in result] == ["Jira", "SQL", "Scrum"]
+
+
+def test_reconcile_experiences_flags_the_mission_the_model_labelled() -> None:
+    original = [
+        {
+            "title": "PO",
+            "company": "Weekr",
+            "period": "2023",
+            "description": (
+                "Création d'une plateforme de services en ligne\n"
+                "Rédaction des spécifications\nAnimation des points d'étape"
+            ),
+        }
+    ]
+    model = [
+        CVOptimizationExperience(
+            bullets=[
+                CVOptimizationBullet(text="Animation des points d'étape", kind="task"),
+                CVOptimizationBullet(
+                    text="Création d'une plateforme de services en ligne.",
+                    kind="mission",
+                ),
+                CVOptimizationBullet(text="Rédaction des spécifications", kind="task"),
+            ]
+        )
+    ]
+
+    bullets = _reconcile_experiences(original, model)[0]["bullets"]
+
+    assert bullets[0]["text"] == "Création d'une plateforme de services en ligne."
+    assert bullets[0]["context"] is True
+    assert all("context" not in b for b in bullets[1:])
+    assert all("kind" not in b for b in bullets)
+
+
+def test_a_model_that_labels_nothing_gives_plain_bullets() -> None:
+    original = [
+        {"title": "PO", "company": "X", "period": "", "description": "A b c\nD e f"}
+    ]
+    model = [
+        CVOptimizationExperience(
+            bullets=[
+                CVOptimizationBullet(text="A b c"),
+                CVOptimizationBullet(text="D e f"),
+            ]
+        )
+    ]
+
+    bullets = _reconcile_experiences(original, model)[0]["bullets"]
+
+    assert not any(b.get("context") for b in bullets)

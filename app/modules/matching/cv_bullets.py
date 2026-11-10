@@ -10,10 +10,10 @@ back (and on what goes in):
   something to print;
 * the same fact is never printed twice (a reformulated bullet and the original
   one it came from, or a glued line and its own pieces);
-* the first line of a candidate's description is the context of the job (the
-  project, the product, the mission): it stays at the top of the experience,
-  flagged `context`, so the PDF prints it as a description paragraph under the
-  job title instead of a bullet.
+* the sentences that describe the mission of the job (not a task) go on top,
+  flagged `context`, so the PDF prints them as a description paragraph under
+  the job title instead of bullets -- the model tells which they are, the code
+  only checks its answer.
 
 No model call, no database: pure text functions, easy to test.
 """
@@ -28,9 +28,14 @@ DUPLICATE_SIMILARITY = 0.85
 # A piece cut out of a glued line is dropped when this share of its words is
 # already in another bullet.
 PIECE_CONTAINMENT = 0.8
-# Words (not counting very short ones) in common with a context line for a
-# bullet to be considered as coming from it.
-CONTEXT_SIMILARITY = 0.5
+# What the model labels a bullet that describes the mission (see
+# place_mission_first), the share of words a bullet must have in common with
+# one of the candidate's first lines to be accepted as such, how many such lines
+# are looked at and how many bullets may be descriptions.
+MISSION_KIND = "mission"
+MISSION_SIMILARITY = 0.35
+MISSION_SOURCE_LINES = 2
+MAX_MISSION_BULLETS = 3
 MIN_PIECE_WORDS = 3
 
 _BULLET_MARKS = " -•–—·*\t"
@@ -76,11 +81,9 @@ def description_lines(description: str | None) -> list[str]:
     return kept
 
 
-def first_line(description: str | None) -> str:
-    for raw in (description or "").splitlines():
-        if raw.strip(_BULLET_MARKS):
-            return raw.strip(_BULLET_MARKS)
-    return ""
+def first_lines(description: str | None, count: int) -> list[str]:
+    lines = [raw.strip(_BULLET_MARKS) for raw in (description or "").splitlines()]
+    return [line for line in lines if line][:count]
 
 
 def clean_bullets(bullets: list[dict]) -> list[dict]:
@@ -101,47 +104,48 @@ def clean_bullets(bullets: list[dict]) -> list[dict]:
     return out
 
 
-def pin_context_first(
+def place_mission_first(
     bullets: list[dict], original_description: str | None
 ) -> list[dict]:
-    """The bullets, those coming from the first line of the original
-    description first (in that line's own order), the others after them in
-    their current order. Nothing is added or removed."""
-    context = split_pieces(first_line(original_description))
-    if not context or len(bullets) < 2:
-        return bullets
+    """The sentences describing the MISSION of the job (the project, the
+    product, the scope) moved on top and flagged `context`, so the PDF prints
+    them as a short paragraph under the job title and keeps the bullets for the
+    concrete tasks.
 
-    def best_piece(bullet: dict) -> int | None:
-        scored = [
-            (
-                max(
-                    similarity(bullet.get("text"), piece),
-                    similarity(bullet.get("original_text"), piece),
-                ),
-                -index,
+    Telling a description from a task is a judgment on the meaning of the
+    sentence, so it is the model's (it labels each bullet `kind`: "mission" or
+    "task"). The code only guards that judgment: a "mission" is accepted when it
+    comes from the first lines of the candidate's own description (that is where
+    a CV puts it), at most a few of them, and only when tasks follow. Anything
+    else stays a plain bullet. `kind` itself never goes further."""
+    source = [
+        piece
+        for line in first_lines(original_description, MISSION_SOURCE_LINES)
+        for piece in split_pieces(line)
+    ]
+
+    def comes_from_source(bullet: dict) -> bool:
+        return any(
+            max(
+                similarity(bullet.get("text"), piece),
+                similarity(bullet.get("original_text"), piece),
             )
-            for index, piece in enumerate(context)
-        ]
-        score, neg_index = max(scored)
-        return -neg_index if score >= CONTEXT_SIMILARITY else None
+            >= MISSION_SIMILARITY
+            for piece in source
+        )
 
-    pinned = [(best_piece(b), n, b) for n, b in enumerate(bullets)]
-    head = sorted(
-        ((piece, n, b) for piece, n, b in pinned if piece is not None),
-        key=lambda item: (item[0], item[1]),
-    )
-    tail = [b for piece, _, b in pinned if piece is None]
-    head_bullets = [b for _, _, b in head]
-    if not tail:
-        # Nothing follows: a lone sentence stays a bullet.
-        head_bullets = list(head_bullets)
-        return head_bullets
-    if len(head_bullets) > 1:
-        # The richest sentence of the context (the project itself) leads; the
-        # shorter facts cut from the same line follow in their own order.
-        lead = max(head_bullets, key=lambda b: len(_words(b.get("text"))))
-        head_bullets = [lead] + [b for b in head_bullets if b is not lead]
-    # Flagged so the CV prints them as the mission's description (a short
-    # paragraph under the job title), like on the candidate's own CV, and not
-    # as bullets.
-    return [{**b, "context": True} for b in head_bullets] + tail
+    accepted: list[int] = []
+    for index, bullet in enumerate(bullets):
+        said_mission = str(bullet.get("kind") or "").strip().lower() == MISSION_KIND
+        if (
+            said_mission
+            and len(accepted) < MAX_MISSION_BULLETS
+            and comes_from_source(bullet)
+        ):
+            accepted.append(index)
+    if len(accepted) == len(bullets):
+        accepted = []  # nothing but a description: a bullet list it stays
+
+    plain = [{k: v for k, v in b.items() if k != "kind"} for b in bullets]
+    head = [{**plain[i], "context": True} for i in accepted]
+    return head + [b for i, b in enumerate(plain) if i not in accepted]

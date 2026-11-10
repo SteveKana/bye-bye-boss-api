@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.modules.matching.cv_bullets import (
     clean_bullets,
     description_lines,
-    pin_context_first,
+    place_mission_first,
     similarity,
 )
 
@@ -88,48 +88,85 @@ def test_clean_bullets_drops_a_reformulation_repeated_verbatim() -> None:
     assert len(clean_bullets(bullets)) == 1
 
 
-def test_pin_context_first_puts_the_context_of_the_job_on_top() -> None:
+def _kind(text: str, kind: str = "", **extra):
+    return {**_bullet(text), "kind": kind, **extra}
+
+
+def test_mission_sentences_go_first_flagged_and_kind_is_removed() -> None:
     bullets = [
-        _bullet("Pilotage de la qualité des données (golden source)", "modified"),
-        _bullet("Rédaction des user stories"),
-        _bullet(MIGRATION, "modified", GLUED),
-        _bullet("Migration de SAP Business Object vers Knime."),
+        _kind("Pilotage de la qualité des données (golden source)", "task"),
+        _kind("Rédaction des user stories", "task"),
+        _kind(MIGRATION, "mission", original_text=GLUED),
+        _kind("Migration de SAP Business Object vers Knime.", "mission"),
     ]
 
-    pinned = pin_context_first(bullets, GLUED)
-    texts = [b["text"] for b in pinned]
-    # The pinned bullets are flagged: the PDF prints them as a description.
-    assert [bool(b.get("context")) for b in pinned] == [True, True, False, False]
+    placed = place_mission_first(bullets, GLUED + "\nRédaction des user stories")
 
-    assert texts[0] == MIGRATION
-    assert texts[1] == "Migration de SAP Business Object vers Knime."
-    assert texts[2:] == [
+    assert [b["text"] for b in placed] == [
+        MIGRATION,
+        "Migration de SAP Business Object vers Knime.",
         "Pilotage de la qualité des données (golden source)",
         "Rédaction des user stories",
     ]
+    assert [bool(b.get("context")) for b in placed] == [True, True, False, False]
+    assert all("kind" not in b for b in placed)
 
 
-def test_pin_context_first_leaves_the_list_alone_without_a_match() -> None:
-    bullets = [_bullet("Power BI"), _bullet("Excel")]
-
-    assert pin_context_first(bullets, "Création d'une plateforme") == bullets
-    assert pin_context_first(bullets, "") == bullets
-    assert pin_context_first(bullets[:1], "Power BI") == bullets[:1]
-
-
-def test_a_lone_context_bullet_stays_a_bullet() -> None:
-    bullets = [_bullet("Création d'une plateforme de services en ligne")]
-
-    assert pin_context_first(bullets, "Création d'une plateforme de services") == (
-        bullets
-    )
-    only_context = [
-        _bullet("Création d'une plateforme de services en ligne"),
-        _bullet("Création d'une plateforme de services"),
+def test_a_task_the_model_did_not_call_a_mission_is_never_a_description() -> None:
+    """The first line of the description is not assumed to be the mission:
+    only what the model labelled "mission" is."""
+    bullets = [
+        _kind("Rédaction des spécifications fonctionnelles", "task"),
+        _kind("Animation des ateliers", "task"),
+        _kind("Création d'ETL via Knime"),
     ]
-    assert not any(
-        b.get("context")
-        for b in pin_context_first(
-            only_context, "Création d'une plateforme de services"
-        )
+
+    placed = place_mission_first(bullets, "Rédaction des spécifications fonctionnelles")
+
+    assert [b["text"] for b in placed] == [b["text"] for b in bullets]
+    assert not any(b.get("context") for b in placed)
+
+
+def test_a_mission_label_is_ignored_when_it_does_not_come_from_the_first_lines() -> (
+    None
+):
+    bullets = [
+        _kind("Création d'ETL via Knime", "mission"),
+        _kind("Rédaction des spécifications fonctionnelles", "task"),
+    ]
+    original = (
+        "Pilotage de la migration vers une solution IA\n"
+        "Rédaction des spécifications fonctionnelles\n"
+        "Animation d'ateliers\nCréation d'ETL via Knime"
     )
+
+    placed = place_mission_first(bullets, original)
+
+    assert not any(b.get("context") for b in placed)
+
+
+def test_a_mission_alone_stays_a_bullet() -> None:
+    bullets = [
+        _kind("Création d'une plateforme de services en ligne", "mission"),
+        _kind("Création d'une plateforme de services", "mission"),
+    ]
+
+    placed = place_mission_first(bullets, "Création d'une plateforme de services")
+
+    assert not any(b.get("context") for b in placed)
+    assert all("kind" not in b for b in placed)
+
+
+def test_at_most_three_missions_are_accepted() -> None:
+    lines = "Refonte du site web\nMigration du site web\nPilotage du site web\n"
+    bullets = [
+        _kind("Refonte du site web", "mission"),
+        _kind("Migration du site web", "mission"),
+        _kind("Pilotage du site web", "mission"),
+        _kind("Suivi du site web", "mission"),
+        _kind("Rédaction des spécifications", "task"),
+    ]
+
+    placed = place_mission_first(bullets, lines + "Suivi du site web")
+
+    assert sum(1 for b in placed if b.get("context")) <= 3
