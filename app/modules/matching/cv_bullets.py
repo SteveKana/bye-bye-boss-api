@@ -11,8 +11,9 @@ back (and on what goes in):
 * the same fact is never printed twice (a reformulated bullet and the original
   one it came from, or a glued line and its own pieces);
 * the first line of a candidate's description is the context of the job (the
-  project, the product, the mission): it stays at the top of the experience
-  instead of sinking in the middle of the list.
+  project, the product, the mission): it stays at the top of the experience,
+  flagged `context`, so the PDF prints it as a description paragraph under the
+  job title instead of a bullet.
 
 No model call, no database: pure text functions, easy to test.
 """
@@ -131,9 +132,16 @@ def pin_context_first(
     )
     tail = [b for piece, _, b in pinned if piece is None]
     head_bullets = [b for _, _, b in head]
+    if not tail:
+        # Nothing follows: a lone sentence stays a bullet.
+        head_bullets = list(head_bullets)
+        return head_bullets
     if len(head_bullets) > 1:
         # The richest sentence of the context (the project itself) leads; the
         # shorter facts cut from the same line follow in their own order.
         lead = max(head_bullets, key=lambda b: len(_words(b.get("text"))))
         head_bullets = [lead] + [b for b in head_bullets if b is not lead]
-    return head_bullets + tail
+    # Flagged so the CV prints them as the mission's description (a short
+    # paragraph under the job title), like on the candidate's own CV, and not
+    # as bullets.
+    return [{**b, "context": True} for b in head_bullets] + tail

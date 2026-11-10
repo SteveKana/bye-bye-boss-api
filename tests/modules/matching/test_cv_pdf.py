@@ -10,6 +10,7 @@ from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_pdf import (
     _experience_tools,
     _level_text,
+    _mission_description,
     build_cv_pdf,
     candidate_phone,
     cv_pdf_filename,
@@ -313,3 +314,37 @@ def test_build_cv_pdf_with_tools_groups_phone_and_duplicate_certification(
     pdf_bytes = build_cv_pdf(profile, optimization, template=template)
 
     assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_candidate_phone_survives_the_doubled_spaces_of_a_pdf_extraction() -> None:
+    text = "STEVE  KANA Product  Owner\n06  16  53  82  61   ·   steve@example.com  ·"
+
+    assert candidate_phone(_profile(raw_text=text)) == "06 16 53 82 61"
+
+
+def test_mission_description_is_one_paragraph_of_full_sentences() -> None:
+    assert _mission_description(["Pilotage de la migration", " Refonte. ", ""]) == (
+        "Pilotage de la migration. Refonte."
+    )
+    assert _mission_description([]) == ""
+
+
+@pytest.mark.parametrize("template", ["sobre", "visuelle"])
+def test_build_cv_pdf_prints_the_mission_description_before_the_bullets(
+    template: str,
+) -> None:
+    optimization = _optimization(
+        experiences=[
+            {
+                "title": "PO",
+                "company": "Weekr",
+                "period": "2023",
+                "bullets": [
+                    {"text": "Création d'une plateforme", "context": True},
+                    {"text": "Rédaction des spécifications"},
+                ],
+            }
+        ]
+    )
+
+    assert build_cv_pdf(_profile(), optimization, template=template).startswith(b"%PDF")

@@ -96,7 +96,10 @@ def test_pin_context_first_puts_the_context_of_the_job_on_top() -> None:
         _bullet("Migration de SAP Business Object vers Knime."),
     ]
 
-    texts = [b["text"] for b in pin_context_first(bullets, GLUED)]
+    pinned = pin_context_first(bullets, GLUED)
+    texts = [b["text"] for b in pinned]
+    # The pinned bullets are flagged: the PDF prints them as a description.
+    assert [bool(b.get("context")) for b in pinned] == [True, True, False, False]
 
     assert texts[0] == MIGRATION
     assert texts[1] == "Migration de SAP Business Object vers Knime."
@@ -112,3 +115,21 @@ def test_pin_context_first_leaves_the_list_alone_without_a_match() -> None:
     assert pin_context_first(bullets, "Création d'une plateforme") == bullets
     assert pin_context_first(bullets, "") == bullets
     assert pin_context_first(bullets[:1], "Power BI") == bullets[:1]
+
+
+def test_a_lone_context_bullet_stays_a_bullet() -> None:
+    bullets = [_bullet("Création d'une plateforme de services en ligne")]
+
+    assert pin_context_first(bullets, "Création d'une plateforme de services") == (
+        bullets
+    )
+    only_context = [
+        _bullet("Création d'une plateforme de services en ligne"),
+        _bullet("Création d'une plateforme de services"),
+    ]
+    assert not any(
+        b.get("context")
+        for b in pin_context_first(
+            only_context, "Création d'une plateforme de services"
+        )
+    )
