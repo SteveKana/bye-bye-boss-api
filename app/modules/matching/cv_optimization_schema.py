@@ -62,6 +62,10 @@ class CVOptimizationSkill(BaseModel):
     # skill is clearly implied by something the CV already says, never
     # because the offer merely asks for it.
     added: bool = False
+    # Short heading the skill is printed under on the PDF ("Data & BI",
+    # "Méthodes Agile"...). Optional: a skill without one is grouped by the
+    # keyword fallback in cv_skill_groups.py.
+    category: str = ""
 
     @model_validator(mode="before")
     @classmethod

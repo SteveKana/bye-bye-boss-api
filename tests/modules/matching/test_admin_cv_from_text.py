@@ -101,7 +101,7 @@ async def test_generates_from_pasted_text_and_stores_nothing(
     assert body["headline"] == "Product Owner Data"
     # The real experience is kept (title/company/period come from the profile).
     assert body["experiences"][0]["company"] == "Galec"
-    assert body["skills"] == [{"skill": "Jira", "added": False}]
+    assert body["skills"] == [{"skill": "Jira", "added": False, "category": ""}]
     # The model got the pasted text and no analysis.
     assert calls[0][1] == OFFER.strip() and calls[0][2] is None
     async with AsyncSessionLocal() as session:

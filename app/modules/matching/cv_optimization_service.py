@@ -24,6 +24,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import utcnow
 from app.modules.cv import CandidateProfile
 from app.modules.matching import cv_optimization_gateway
+from app.modules.matching.cv_bullets import (
+    clean_bullets,
+    description_lines,
+    pin_context_first,
+)
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_repository import CVOptimizationRepository
 from app.modules.matching.cv_optimization_schema import (
@@ -52,7 +57,9 @@ def _build_cv_payload(profile: CandidateProfile) -> dict:
                 "title": exp.get("title", ""),
                 "company": exp.get("company", ""),
                 "period": exp.get("period", ""),
-                "description": exp.get("description", ""),
+                # One fact per line: a " | " glued line is cut here, so the
+                # model never sees (and never copies) the separator.
+                "description": "\n".join(description_lines(exp.get("description"))),
                 "tools": exp.get("tools", []),
             }
             for exp in (profile.experiences or [])
@@ -67,8 +74,7 @@ def _split_bullets(description: str) -> list[str]:
     real bulleted breakdown for this experience."""
     if not description:
         return []
-    lines = [line.strip(" -•\t") for line in description.splitlines()]
-    lines = [line for line in lines if line]
+    lines = description_lines(description)
     return lines or [description.strip()]
 
 
@@ -110,6 +116,11 @@ def _reconcile_experiences(
                 for line in _split_bullets(original.get("description", ""))
             ]
 
+        # Whatever the model returned: no " | " glued line, no fact printed
+        # twice, and the job's context (first line of the description) stays
+        # on top.
+        bullets = pin_context_first(clean_bullets(bullets), original.get("description"))
+
         reconciled.append(
             {
                 "title": title,
@@ -140,7 +151,11 @@ def _reconcile_skills(
     "raisonnablement déductible" rule) that aren't already a match for an
     existing one. This also silently absorbs the model marking an existing
     skill `added=True` by mistake -- it just never reaches `seen_added`
-    duplicated, since it's already in `existing_lower`."""
+    duplicated, since it's already in `existing_lower`.
+
+    What the model is trusted for is presentation only: the heading of each
+    skill and, when it echoed (most of) the list, the order -- most relevant
+    to the offer first -- neither of which can add or drop a skill."""
     existing_lower = {skill.strip().lower() for skill in original_skills if skill}
     result = [{"skill": skill, "added": False} for skill in original_skills]
     seen_added: set[str] = set()
@@ -153,6 +168,30 @@ def _reconcile_skills(
             continue
         result.append({"skill": name, "added": True})
         seen_added.add(key)
+
+    position: dict[str, int] = {}
+    heading: dict[str, str] = {}
+    for index, item in enumerate(model_skills):
+        key = clean_skill_label(item.skill).strip().lower()
+        position.setdefault(key, index)
+        if item.category.strip():
+            heading.setdefault(key, item.category.strip()[:40])
+    for entry in result:
+        entry["category"] = heading.get(entry["skill"].strip().lower(), "")
+
+    echoed = sum(1 for skill in original_skills if skill.strip().lower() in position)
+    if original_skills and echoed >= len(original_skills) / 2:
+        late = len(model_skills)
+        result = [
+            entry
+            for _, entry in sorted(
+                enumerate(result),
+                key=lambda pair: (
+                    position.get(pair[1]["skill"].strip().lower(), late),
+                    pair[0],
+                ),
+            )
+        ]
     return result
 
 

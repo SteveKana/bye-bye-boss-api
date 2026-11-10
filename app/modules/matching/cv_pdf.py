@@ -58,7 +58,7 @@ from reportlab.platypus import (
 
 from app.modules.cv import CandidateProfile
 from app.modules.matching.cv_optimization_models import CVOptimization
-from app.modules.matching.cv_optimization_service import clean_skill_label
+from app.modules.matching.cv_skill_groups import group_skills
 
 # The two templates a candidate can choose from when downloading. CvTemplate
 # is the single source of truth for the allowed values -- the route imports
@@ -121,6 +121,7 @@ _SECTION_STYLE = ParagraphStyle(
     textColor=_NAVY,
     spaceBefore=12,
     spaceAfter=6,
+    keepWithNext=1,
 )
 _SECTION_CHIP_STYLE = ParagraphStyle(
     "CvSectionChip",
@@ -147,6 +148,7 @@ _EXP_TITLE_STYLE = ParagraphStyle(
     textColor=_NAVY,
     spaceBefore=8,
     spaceAfter=1,
+    keepWithNext=1,
 )
 _EXP_META_STYLE = ParagraphStyle(
     "CvExpMeta",
@@ -156,6 +158,21 @@ _EXP_META_STYLE = ParagraphStyle(
     leading=12,
     textColor=_LIGHT_GRAY,
     spaceAfter=4,
+    keepWithNext=1,
+)
+_TOOLS_STYLE = ParagraphStyle(
+    "CvTools",
+    parent=_STYLES["Normal"],
+    fontName="Helvetica",
+    fontSize=9,
+    textColor=_GRAY,
+    leading=12,
+    spaceBefore=3,
+)
+_SKILL_GROUP_STYLE = ParagraphStyle(
+    "CvSkillGroup",
+    parent=_BODY_STYLE,
+    spaceAfter=3,
 )
 _BULLET_STYLE = ParagraphStyle(
     "CvBullet",
@@ -236,8 +253,59 @@ def _section_title(label: str, template: str) -> list:
                 ]
             )
         )
-        return [Spacer(1, 10), chip, Spacer(1, 6)]
+        # A title must never be left alone at the bottom of a page.
+        before, after = Spacer(1, 10), Spacer(1, 6)
+        for flowable in (before, chip, after):
+            flowable.keepWithNext = 1
+        return [before, chip, after]
     return [Paragraph(label.upper(), _SECTION_STYLE)]
+
+
+# A French / international phone number, as written on a CV header: 06 16 53 82 61,
+# 06.16.53.82.61, 0616538261, +33 6 16 53 82 61.
+_PHONE = re.compile(r"(?<![\d+])(?:\+33|0033|0)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}(?!\d)")
+# The header of a CV is its first lines: further down, a number is a reference.
+_PHONE_SEARCH_CHARS = 800
+
+
+def candidate_phone(profile: CandidateProfile) -> str | None:
+    """The phone number written at the top of the CV the candidate uploaded
+    (the profile has no phone field of its own), or None."""
+    match = _PHONE.search((profile.raw_text or "")[:_PHONE_SEARCH_CHARS])
+    return re.sub(r"\s+", " ", match.group(0)).strip() if match else None
+
+
+def _contact_parts(profile: CandidateProfile) -> list[str]:
+    parts = [profile.email, candidate_phone(profile), profile.location]
+    return [p for p in parts if p]
+
+
+def _level_text(level: str) -> str:
+    """ "Langue maternelle" -> "langue maternelle"; "B2 (TOEIC)" stays."""
+    level = level.strip()
+    if len(level) > 1 and level[0].isupper() and level[1].islower():
+        return level[0].lower() + level[1:]
+    return level
+
+
+def _normalized(text: str | None) -> str:
+    plain = unicodedata.normalize("NFKD", (text or "").lower())
+    plain = "".join(c for c in plain if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", plain).strip()
+
+
+def _experience_tools(profile: CandidateProfile, index: int, exp: dict) -> list[str]:
+    """The "Environnement technique" of an experience: the tools the profile
+    holds for the experience at the same position, provided it is the same
+    company (the CV never reorders or drops experiences, but a mismatch must
+    never print another job's tools)."""
+    experiences = profile.experiences or []
+    if index >= len(experiences):
+        return []
+    original = experiences[index]
+    if _normalized(original.get("company")) != _normalized(exp.get("company")):
+        return []
+    return [str(t).strip() for t in original.get("tools") or [] if str(t).strip()]
 
 
 def _candidate_name(profile: CandidateProfile) -> str:
@@ -277,7 +345,7 @@ def _draw_visuelle_first_page(
         canvas.setFont("Helvetica-Bold", 12.5)
         canvas.drawString(left_x, name_y - 8 * mm, pdf_safe(headline))
 
-    contact_parts = [p for p in (profile.email, profile.location) if p]
+    contact_parts = _contact_parts(profile)
     if contact_parts:
         canvas.setFillColor(_BAND_CONTACT)
         canvas.setFont("Helvetica", 9)
@@ -333,7 +401,7 @@ def build_cv_pdf(
         headline = optimization.headline or profile.headline or ""
         if headline:
             story.append(Paragraph(_text(headline), _HEADLINE_STYLE))
-        contact_parts = [p for p in (profile.email, profile.location) if p]
+        contact_parts = _contact_parts(profile)
         if contact_parts:
             story.append(Paragraph(_text(" · ".join(contact_parts)), _CONTACT_STYLE))
         story.append(HRFlowable(width="100%", thickness=1, color=_BRAND, spaceAfter=10))
@@ -345,7 +413,7 @@ def build_cv_pdf(
 
     if optimization.experiences:
         story.extend(_section_title("Expérience", template))
-        for exp in optimization.experiences:
+        for index, exp in enumerate(optimization.experiences):
             title = exp.get("title") or ""
             if title:
                 story.append(Paragraph(_text(title), _EXP_TITLE_STYLE))
@@ -370,18 +438,35 @@ def build_cv_pdf(
                         spaceBefore=2,
                     )
                 )
+            tools = _experience_tools(profile, index, exp)
+            if tools:
+                story.append(
+                    Paragraph(
+                        f"<b>Environnement technique :</b> {_text(', '.join(tools))}",
+                        _TOOLS_STYLE,
+                    )
+                )
 
-    if optimization.skills:
-        skill_names = [
-            clean_skill_label(s["skill"]) for s in optimization.skills if s.get("skill")
-        ]
-        if skill_names:
-            story.extend(_section_title("Compétences", template))
-            story.append(Paragraph(_text(" · ".join(skill_names)), _BODY_STYLE))
+    skill_groups = group_skills(optimization.skills or [])
+    if skill_groups:
+        story.extend(_section_title("Compétences", template))
+        for heading, names in skill_groups:
+            line = _text(" · ".join(names))
+            if heading:
+                line = f"<b>{_text(heading)}</b> : {line}"
+            story.append(Paragraph(line, _SKILL_GROUP_STYLE))
 
-    if profile.formations:
+    certification_keys = [
+        _normalized(c.get("title")) for c in profile.certifications or []
+    ]
+    formations = [
+        item
+        for item in profile.formations or []
+        if _normalized(item.get("title")) not in certification_keys
+    ]
+    if formations:
         story.extend(_section_title("Formations", template))
-        for item in profile.formations:
+        for item in formations:
             title = _text(item.get("title"))
             period = _text(item.get("school_period"))
             line = f"<b>{title}</b> — {period}" if period else f"<b>{title}</b>"
@@ -390,7 +475,7 @@ def build_cv_pdf(
     if profile.languages:
         story.extend(_section_title("Langues", template))
         parts = [
-            f"{item.get('name')} ({item.get('level')})"
+            f"{item.get('name')} : {_level_text(str(item.get('level')))}"
             if item.get("level")
             else item.get("name")
             for item in profile.languages

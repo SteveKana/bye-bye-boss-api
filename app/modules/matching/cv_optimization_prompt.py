@@ -63,6 +63,14 @@ déjà calculée ci-dessous contient parfois des identifiants techniques de ce t
 tels quels. Les noms propres d'outils, de méthodes ou de technologies restent
 inchangés (SQL, Scrum, Jira, API REST, Power BI...).
 
+Compétences (champ "skills") : reprendre TOUTES les compétences du CV, sans en
+retirer aucune, puis les éventuelles compétences "added". Chaque compétence porte un
+champ "category" : un intitulé court de rubrique (3 à 5 rubriques au total, par
+exemple « Data & BI », « Méthodes Agile », « Outils et langages », « Pilotage de
+projet »), le même intitulé pour les compétences de la même famille. Classer les
+compétences de la plus à la moins pertinente pour l'offre : la rubrique la plus utile
+pour cette offre vient donc en premier.
+
 Le nombre d'expériences en sortie doit être IDENTIQUE au nombre d'expériences en
 entrée, dans le MÊME ordre, avec le même titre/entreprise/période -- seules les
 puces à l'intérieur de chaque expérience peuvent changer.
@@ -81,6 +89,15 @@ CE QUI PEUT CHANGER
 - Le résumé professionnel peut être réécrit en mettant l'accent sur les éléments
   pertinents pour l'offre, à partir de faits réels du CV uniquement.
 - Une puce peut rester "unchanged" si elle est déjà pertinente telle quelle.
+
+Mise en forme des puces (règles strictes, le CV part tel quel chez un recruteur) :
+- Une puce = UN seul fait. Jamais le caractère « | » dans une puce.
+- Aucun fait n'apparaît deux fois dans une même expérience : si deux lignes du CV
+  disent la même chose, les fusionner en une seule puce.
+- La PREMIÈRE puce de chaque expérience est la phrase de contexte du poste (la
+  première ligne de sa description : le projet, le produit, la mission), reformulée
+  si utile. Les puces suivantes sont ordonnées de la plus à la moins pertinente pour
+  l'offre.
 
 Pour chaque puce "modified" ou "added", et pour le résumé (summary_why), justifier
 brièvement et concrètement en quoi le changement aide pour CETTE offre précise --
@@ -113,7 +130,7 @@ Markdown.
     ]}}
   ],
   "skills": [
-    {{"skill": "", "added": false}}
+    {{"skill": "", "added": false, "category": ""}}
   ],
   "advice": ""
 }}

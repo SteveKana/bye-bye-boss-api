@@ -7,7 +7,14 @@ import pytest
 from app.core.models import utcnow
 from app.modules.cv.models import CandidateProfile, ProfileStatus
 from app.modules.matching.cv_optimization_models import CVOptimization
-from app.modules.matching.cv_pdf import build_cv_pdf, cv_pdf_filename, pdf_safe
+from app.modules.matching.cv_pdf import (
+    _experience_tools,
+    _level_text,
+    build_cv_pdf,
+    candidate_phone,
+    cv_pdf_filename,
+    pdf_safe,
+)
 
 
 def _profile(**overrides) -> CandidateProfile:
@@ -227,3 +234,82 @@ def test_build_cv_pdf_accepts_lookalike_characters(template: str) -> None:
     )
 
     assert build_cv_pdf(profile, optimization, template=template).startswith(b"%PDF")
+
+
+def test_candidate_phone_is_read_from_the_header_of_the_cv() -> None:
+    header = "STEVE KANA\nProduct Owner\n06 16 53 82 61 · steve@example.com\n"
+    assert candidate_phone(_profile(raw_text=header)) == "06 16 53 82 61"
+    assert candidate_phone(_profile(raw_text="Tel : 06.16.53.82.61")) == (
+        "06.16.53.82.61"
+    )
+    assert candidate_phone(_profile(raw_text="+33 6 16 53 82 61")) == (
+        "+33 6 16 53 82 61"
+    )
+
+
+def test_candidate_phone_ignores_numbers_that_are_not_phones() -> None:
+    assert candidate_phone(_profile(raw_text="")) is None
+    assert candidate_phone(_profile(raw_text="Dossier 2020 2021 2022 2023")) is None
+    # A number far down the CV is a reference, not the contact.
+    assert candidate_phone(_profile(raw_text="x" * 900 + " 06 16 53 82 61")) is None
+
+
+def test_level_text_lowers_a_capital_but_keeps_acronyms() -> None:
+    assert _level_text("Langue maternelle") == "langue maternelle"
+    assert _level_text("B2 (TOEIC)") == "B2 (TOEIC)"
+    assert _level_text("courant") == "courant"
+
+
+def test_experience_tools_come_from_the_same_company_only() -> None:
+    profile = _profile(
+        experiences=[
+            {"company": "Galec", "tools": ["Knime", " SQL ", ""]},
+            {"company": "Weekr", "tools": ["Laravel"]},
+        ]
+    )
+
+    assert _experience_tools(profile, 0, {"company": "GALEC"}) == ["Knime", "SQL"]
+    assert _experience_tools(profile, 1, {"company": "Galec"}) == []
+    assert _experience_tools(profile, 5, {"company": "Galec"}) == []
+
+
+@pytest.mark.parametrize("template", ["sobre", "visuelle"])
+def test_build_cv_pdf_with_tools_groups_phone_and_duplicate_certification(
+    template: str,
+) -> None:
+    profile = _profile(
+        first_name="Steve",
+        last_name="Kana",
+        email="steve@example.com",
+        raw_text="STEVE KANA\n06 16 53 82 61\n",
+        experiences=[{"company": "Galec", "tools": ["Knime", "SQL"]}],
+        formations=[
+            {"title": "Certified SAFe 5 Product Owner", "school_period": "2022"},
+            {"title": "Master Informatique", "school_period": "2018"},
+        ],
+        certifications=[
+            {"title": "Certified SAFe 5 Product Owner", "issuer_period": "2022"}
+        ],
+        languages=[
+            {"name": "Français", "level": "Langue maternelle"},
+            {"name": "Anglais", "level": "B2 (TOEIC)"},
+        ],
+    )
+    optimization = _optimization(
+        experiences=[
+            {
+                "title": "PO",
+                "company": "Galec",
+                "period": "2024",
+                "bullets": [{"text": "Qualité des données", "status": "unchanged"}],
+            }
+        ],
+        skills=[
+            {"skill": "SQL", "added": False, "category": "Data & BI"},
+            {"skill": "Scrum", "added": False, "category": "Méthodes Agile"},
+        ],
+    )
+
+    pdf_bytes = build_cv_pdf(profile, optimization, template=template)
+
+    assert pdf_bytes.startswith(b"%PDF")
