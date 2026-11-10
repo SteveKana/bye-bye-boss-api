@@ -422,13 +422,21 @@ def build_cv_pdf(
     return buffer.getvalue()
 
 
-def cv_pdf_filename(profile: CandidateProfile) -> str:
+def _ascii_slug(text: str, max_len: int | None = None) -> str:
+    slug = unicodedata.normalize("NFKD", text)
+    slug = slug.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", slug).strip("_")
+    if max_len:
+        slug = slug[:max_len].strip("_")
+    return slug
+
+
+def cv_pdf_filename(profile: CandidateProfile, role: str | None = None) -> str:
     """ASCII-safe filename for the Content-Disposition header -- built
     ourselves (not echoing a user-supplied name) so it never needs the
-    RFC 5987 dance a non-ASCII filename would require. Same regardless of
-    template -- only one file is ever downloaded at a time, so there's no
-    collision to disambiguate."""
-    slug = unicodedata.normalize("NFKD", _candidate_name(profile))
-    slug = slug.encode("ascii", "ignore").decode("ascii")
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", slug).strip("_") or "candidat"
-    return f"CV_{slug}.pdf"
+    RFC 5987 dance a non-ASCII filename would require. `role` (the title the
+    CV was adapted to, e.g. "Product Owner Data") is appended when given, so
+    several CVs adapted for different offers don't all share one name."""
+    name = _ascii_slug(_candidate_name(profile)) or "candidat"
+    suffix = _ascii_slug(role or "", 40)
+    return f"CV_{name}_{suffix}.pdf" if suffix else f"CV_{name}.pdf"

@@ -59,6 +59,9 @@ class CvFromTextResult(BaseModel):
     skills: list[dict]
     advice: str
     computed_at: datetime
+    # Name to give the downloaded PDF (candidate + adapted title). Filled by
+    # `generate`; the PDF route rebuilds it itself rather than trusting this.
+    filename: str = ""
 
 
 async def _own_complete_profile(session: DBSession, user_id):
@@ -108,6 +111,7 @@ async def generate_cv_from_offer_text(
         skills=optimization.skills,
         advice=optimization.advice,
         computed_at=optimization.computed_at,
+        filename=cv_pdf_filename(profile, optimization.headline),
     )
 
 
@@ -132,6 +136,8 @@ async def download_cv_from_offer_text(
         content=build_cv_pdf(profile, optimization, template=template),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{cv_pdf_filename(profile)}"'
+            "Content-Disposition": (
+                f'attachment; filename="{cv_pdf_filename(profile, body.headline)}"'
+            )
         },
     )
