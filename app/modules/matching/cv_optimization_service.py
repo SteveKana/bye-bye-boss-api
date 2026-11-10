@@ -29,7 +29,7 @@ from app.modules.matching import cv_optimization_gateway
 from app.modules.matching.cv_bullets import (
     clean_bullets,
     description_lines,
-    pin_context_first,
+    place_mission_first,
 )
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_repository import CVOptimizationRepository
@@ -123,6 +123,7 @@ def _reconcile_experiences(
                     "status": bullet.status.value,
                     "original_text": bullet.original_text,
                     "why": bullet.why,
+                    "kind": bullet.kind,
                 }
                 for bullet in model_exp.bullets
             ]
@@ -153,9 +154,11 @@ def _reconcile_experiences(
                     )
 
         # Whatever the model returned: no " | " glued line, no fact printed
-        # twice, and the job's context (first line of the description) stays
-        # on top.
-        bullets = pin_context_first(clean_bullets(bullets), original.get("description"))
+        # twice, and the sentences describing the mission (as opposed to the
+        # tasks) on top, flagged so the PDF prints them as a paragraph.
+        bullets = place_mission_first(
+            clean_bullets(bullets), original.get("description")
+        )
 
         reconciled.append(
             {

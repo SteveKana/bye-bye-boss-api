@@ -160,6 +160,15 @@ _EXP_META_STYLE = ParagraphStyle(
     spaceAfter=4,
     keepWithNext=1,
 )
+_MISSION_STYLE = ParagraphStyle(
+    "CvMission",
+    parent=_STYLES["Normal"],
+    fontName="Helvetica",
+    fontSize=9.5,
+    textColor=_GRAY,
+    leading=13,
+    spaceAfter=3,
+)
 _TOOLS_STYLE = ParagraphStyle(
     "CvTools",
     parent=_STYLES["Normal"],
@@ -263,7 +272,11 @@ def _section_title(label: str, template: str) -> list:
 
 # A French / international phone number, as written on a CV header: 06 16 53 82 61,
 # 06.16.53.82.61, 0616538261, +33 6 16 53 82 61.
-_PHONE = re.compile(r"(?<![\d+])(?:\+33|0033|0)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}(?!\d)")
+# A PDF text extraction often doubles the spaces ("06  16  53  82  61"), hence
+# up to three separator characters between digits.
+_PHONE = re.compile(
+    r"(?<![\d+])(?:\+33|0033|0)[\s.\-]{0,3}[1-9](?:[\s.\-]{0,3}\d{2}){4}(?!\d)"
+)
 # The header of a CV is its first lines: further down, a number is a reference.
 _PHONE_SEARCH_CHARS = 800
 
@@ -278,6 +291,17 @@ def candidate_phone(profile: CandidateProfile) -> str | None:
 def _contact_parts(profile: CandidateProfile) -> list[str]:
     parts = [profile.email, candidate_phone(profile), profile.location]
     return [p for p in parts if p]
+
+
+def _mission_description(sentences: list[str]) -> str:
+    """The sentences of a mission's description as one paragraph, each ended
+    by a full stop."""
+    done = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence:
+            done.append(sentence if sentence[-1] in ".!?" else sentence + ".")
+    return " ".join(done)
 
 
 def _level_text(level: str) -> str:
@@ -420,7 +444,16 @@ def build_cv_pdf(
             meta_parts = [p for p in (exp.get("company"), exp.get("period")) if p]
             if meta_parts:
                 story.append(Paragraph(_text(" · ".join(meta_parts)), _EXP_META_STYLE))
-            bullets = [b.get("text") for b in exp.get("bullets") or [] if b.get("text")]
+            # The mission's description (flagged `context`, always first) is a
+            # short paragraph under the job title, like on the candidate's own
+            # CV; the other bullets follow as a list.
+            items = [b for b in exp.get("bullets") or [] if b.get("text")]
+            description = _mission_description(
+                [b["text"] for b in items if b.get("context")]
+            )
+            if description:
+                story.append(Paragraph(_text(description), _MISSION_STYLE))
+            bullets = [b["text"] for b in items if not b.get("context")]
             if bullets:
                 story.append(
                     ListFlowable(
