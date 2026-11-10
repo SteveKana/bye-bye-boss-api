@@ -10,6 +10,7 @@ from app.modules.matching import cv_optimization_gateway
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_prompt import NO_ANALYSIS_TEXT, build_prompt
 from app.modules.matching.cv_optimization_schema import CVOptimizationResult
+from app.modules.matching.routes.v1 import admin_cv_routes
 
 URL = "/api/v1/matching/admin/cv-from-offer-text"
 OFFER = "Product Owner Data. " * 15  # long enough (>= 100 characters)
@@ -43,6 +44,8 @@ async def _profile(user_id, status: str = ProfileStatus.complete.value) -> None:
                 last_name="Kana",
                 headline="Product Owner",
                 skills=["Jira"],
+                certifications=[{"title": "SAFe 5", "issuer_period": "Scaled Agile"}],
+                languages=[{"name": "Français", "level": "Natif"}],
                 experiences=[
                     {
                         "title": "Product Owner",
@@ -146,3 +149,69 @@ async def test_pdf_is_rendered_from_the_result_without_calling_the_model(
         )
     forbidden = await client.post(f"{URL}/pdf", json=result)
     assert forbidden.status_code == 401
+
+
+async def test_generate_returns_the_profile_lists_so_they_can_be_edited(
+    client: AsyncClient, monkeypatch
+) -> None:
+    _mock(monkeypatch)
+    user_id, headers = await _login(client, "admin@example.com", admin=True)
+    await _profile(user_id)
+
+    body = (await client.post(URL, json={"offer_text": OFFER}, headers=headers)).json()
+
+    assert body["certifications"] == [
+        {"title": "SAFe 5", "issuer_period": "Scaled Agile"}
+    ]
+    assert body["languages"] == [{"name": "Français", "level": "Natif"}]
+
+
+async def test_pdf_uses_the_edited_lists_and_never_touches_the_profile(
+    client: AsyncClient, monkeypatch
+) -> None:
+    _mock(monkeypatch)
+    user_id, headers = await _login(client, "admin@example.com", admin=True)
+    await _profile(user_id)
+    result = (
+        await client.post(URL, json={"offer_text": OFFER}, headers=headers)
+    ).json()
+
+    printed: list = []
+
+    def fake_pdf(profile, optimization, template="sobre"):
+        printed.append(profile)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(admin_cv_routes, "build_cv_pdf", fake_pdf)
+
+    # Edited: a certification added, one blank row ignored, a language added.
+    result["certifications"] += [
+        {"title": "Prince2 Foundation", "issuer_period": "AXELOS 2024"},
+        {"title": "   ", "issuer_period": ""},
+    ]
+    result["languages"].append({"name": "Anglais", "level": "B2"})
+    resp = await client.post(f"{URL}/pdf", json=result, headers=headers)
+    assert resp.status_code == 200
+    assert [c["title"] for c in printed[0].certifications] == [
+        "SAFe 5",
+        "Prince2 Foundation",
+    ]
+    assert [lang["name"] for lang in printed[0].languages] == ["Français", "Anglais"]
+
+    # A list removed on purpose stays empty; absent lists fall back to the profile.
+    result["certifications"] = []
+    await client.post(f"{URL}/pdf", json=result, headers=headers)
+    assert printed[1].certifications == []
+    del result["certifications"], result["languages"]
+    await client.post(f"{URL}/pdf", json=result, headers=headers)
+    assert [c["title"] for c in printed[2].certifications] == ["SAFe 5"]
+
+    # The profile itself was never modified.
+    async with AsyncSessionLocal() as session:
+        profile = (
+            await session.exec(
+                select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+            )
+        ).one()
+        assert [c["title"] for c in profile.certifications] == ["SAFe 5"]
+        assert [lang["name"] for lang in profile.languages] == ["Français"]
