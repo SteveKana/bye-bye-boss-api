@@ -20,6 +20,7 @@ from app.core.exceptions import BadRequestError
 from app.core.models import utcnow
 from app.modules.auth import AdminUser
 from app.modules.cv import CvService, ProfileStatus
+from app.modules.matching import cv_optimization_gateway
 from app.modules.matching.cv_optimization_models import CVOptimization
 from app.modules.matching.cv_optimization_service import CVOptimizationService
 from app.modules.matching.cv_pdf import (
@@ -79,6 +80,15 @@ class CvFromTextResult(BaseModel):
     # Name to give the downloaded PDF (candidate + adapted title). Filled by
     # `generate`; the PDF route rebuilds it itself rather than trusting this.
     filename: str = ""
+
+
+class AdviceRequest(BaseModel):
+    offer_text: str = Field(max_length=MAX_OFFER_CHARS)
+    cv: CvFromTextResult
+
+
+class AdviceResult(BaseModel):
+    advice: str
 
 
 async def _own_complete_profile(session: DBSession, user_id):
@@ -163,6 +173,53 @@ async def generate_cv_from_offer_text(
         ],
         filename=cv_pdf_filename(profile, optimization.headline),
     )
+
+
+def _cv_for_advice(cv: CvFromTextResult) -> dict:
+    """The CV as the admin edited it, in the compact shape the advice prompt
+    reads: only what a recruiter would read."""
+    return {
+        "headline": cv.headline,
+        "summary": cv.summary,
+        "experiences": [
+            {
+                "title": exp.get("title"),
+                "company": exp.get("company"),
+                "bullets": [
+                    text
+                    for b in exp.get("bullets", [])
+                    if (text := str(b.get("text") or "").strip())
+                ],
+            }
+            for exp in cv.experiences
+        ],
+        "skills": [
+            skill for s in cv.skills if (skill := str(s.get("skill") or "").strip())
+        ],
+        "certifications": [
+            {"title": c.title, "issuer_period": c.issuer_period}
+            for c in (cv.certifications or [])
+            if c.title.strip()
+        ],
+        "languages": [
+            {"name": lang.name, "level": lang.level}
+            for lang in (cv.languages or [])
+            if lang.name.strip()
+        ],
+    }
+
+
+@router.post("/cv-advice", response_model=AdviceResult)
+async def refresh_cv_advice(body: AdviceRequest, admin: AdminUser) -> AdviceResult:
+    """New "Conseil" for a CV the admin edited. One short model call, nothing
+    stored: called when the admin finishes editing."""
+    text = body.offer_text.strip()
+    if len(text) < MIN_OFFER_CHARS:
+        raise BadRequestError(
+            "Le texte de l'offre est trop court : colle l'annonce complète."
+        )
+    advice = await cv_optimization_gateway.refresh_advice(_cv_for_advice(body.cv), text)
+    return AdviceResult(advice=advice)
 
 
 @router.post("/cv-from-offer-text/pdf")

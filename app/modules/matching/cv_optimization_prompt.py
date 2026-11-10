@@ -152,3 +152,44 @@ def build_prompt(cv: dict, offer: str, analysis: dict | None) -> str:
             else json.dumps(analysis, ensure_ascii=False, indent=2)
         ),
     )
+
+
+ADVICE_PROMPT_TEMPLATE = """
+Tu es un expert en rédaction de CV et en recrutement.
+
+Un candidat adapte son CV à une offre précise, et vient de MODIFIER lui-même son CV
+(ajout ou retrait de puces, de compétences, de certifications, de langues...). Tu dois
+rédiger de nouveau le "Conseil" affiché sous le CV, à partir du CV TEL QU'IL EST
+MAINTENANT -- il remplace l'ancien conseil, qui ne tenait pas compte de ces
+modifications.
+
+RÈGLES
+
+- Ce qui figure DÉJÀ dans le CV modifié (y compris ce que le candidat vient d'ajouter)
+  ne doit plus être signalé comme manquant.
+- Signale ce que l'offre exige encore et que le CV ne documente toujours pas, et mets en
+  garde contre le fait de revendiquer ces éléments s'ils ne correspondent à aucune
+  expérience ou qualification réelle. Ne jamais inviter à inventer.
+- Si le CV couvre bien l'essentiel de l'offre, dis-le simplement et indique ce qui
+  pourrait encore être précisé.
+- 2 à 4 phrases, concrètes, propres à CETTE offre. Vouvoie le candidat, comme dans les
+  conseils précédents. Texte brut : pas de liste, pas de Markdown.
+
+Retourner UNIQUEMENT du JSON valide, sans texte avant ou après, sans balises Markdown :
+
+{{"advice": ""}}
+
+OFFRE
+
+{offer}
+
+CV DU CANDIDAT (version actuelle, modifiée)
+
+{cv}
+"""
+
+
+def build_advice_prompt(cv: dict, offer: str) -> str:
+    return ADVICE_PROMPT_TEMPLATE.format(
+        cv=json.dumps(cv, ensure_ascii=False, indent=2), offer=offer
+    )

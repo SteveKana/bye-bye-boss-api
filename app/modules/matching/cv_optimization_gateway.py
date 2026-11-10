@@ -21,7 +21,10 @@ from pydantic import ValidationError
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
-from app.modules.matching.cv_optimization_prompt import build_prompt
+from app.modules.matching.cv_optimization_prompt import (
+    build_advice_prompt,
+    build_prompt,
+)
 from app.modules.matching.cv_optimization_schema import CVOptimizationResult
 
 logger = get_logger("matching.cv_optimization_gateway")
@@ -114,3 +117,29 @@ async def optimize_cv(
     except ValidationError as exc:
         logger.error("cv_optimization_bad_schema", error=str(exc), raw=raw)
         raise CVOptimizationFailedError() from exc
+
+
+async def refresh_advice(cv: dict, offer_text: str, *, model: str | None = None) -> str:
+    """Admin tool: a new "Conseil" for a CV the admin edited by hand. One short
+    model call; nothing is stored."""
+    settings = get_settings()
+    if not settings.OPENAI_API_KEY:
+        logger.warning("cv_optimization_no_api_key")
+        raise CVOptimizationUnavailableError()
+
+    raw = await asyncio.to_thread(
+        _call_openai_sync,
+        api_key=settings.OPENAI_API_KEY,
+        model=model or settings.CV_OPTIMIZATION_OPENAI_MODEL,
+        timeout=settings.CV_OPTIMIZATION_OPENAI_TIMEOUT_SECONDS,
+        prompt=build_advice_prompt(cv, offer_text),
+    )
+    try:
+        data = json.loads(_extract_json(raw))
+        advice = str(data["advice"]).strip()
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        logger.error("cv_advice_bad_json", raw=raw)
+        raise CVOptimizationFailedError() from exc
+    if not advice:
+        raise CVOptimizationFailedError()
+    return advice
