@@ -52,7 +52,18 @@ déductible d'une phrase déjà présente dans le CV. Exemples de déductions va
   "requêtes SQL pour analyser les indicateurs produit" -> "SQL" est déductible.
 Exemple de déduction INVALIDE : l'offre demande "Power BI", rien dans le CV ne
 mentionne d'outil de reporting -> ne pas ajouter "Power BI".
-En cas de doute sur une déduction, ne pas l'ajouter.
+
+Déductions ÉVIDENTES : à accepter. Un élément qui accompagne presque toujours, dans la
+pratique, ce que le CV décrit déjà (quelqu'un qui a fait cela l'a forcément ou presque
+toujours manipulé) peut être ajouté ("added"). Exemples valides :
+  "API REST" -> "JSON" ; "flux d'ingestion multi-sources" -> "mapping de données" ;
+  "rédaction de user stories" -> "critères d'acceptation" ;
+  "tableaux de bord Power BI" -> "visualisation de données".
+Ce qui n'est PAS une déduction évidente : un outil ou une technologie distincte, même
+voisine ou demandée par l'offre (Kafka, API Management...) -- un lien thématique ne
+suffit pas. Le test à appliquer : « une personne qui a réellement fait ce que décrit le
+CV a-t-elle presque forcément utilisé cet élément ? » Si oui, l'ajouter ; sinon, non. Le
+doute ne porte que sur ce test, pas sur l'idée d'oser déduire.
 
 Libellés des compétences (champ "skills") : chaque compétence ajoutée ("added") est
 écrite en français naturel, comme sur un vrai CV, avec des espaces et une majuscule
@@ -119,13 +130,24 @@ brièvement et concrètement en quoi le changement aide pour CETTE offre précis
 jamais une justification générique interchangeable d'une offre à l'autre.
 
 ==================================================
-CONTEXTE DÉJÀ CALCULÉ (base à utiliser, ne pas contredire)
+CONTEXTE DÉJÀ CALCULÉ (guide prioritaire)
 ==================================================
 
 Une analyse de compatibilité a déjà été calculée pour ce candidat et cette offre
 (écarts ATS, compétences demandées, actions suggérées). Elle a déjà appliqué la
 même discipline de non-invention -- utilise-la comme guide prioritaire pour savoir
 quoi mettre en valeur, sans la recopier telle quelle.
+
+Cette analyse est plus prudente que la règle des déductions évidentes ci-dessus : un
+élément qu'elle classe comme manquant ou non étayé doit quand même être ajouté s'il est
+une déduction évidente de ce que le CV décrit. Les autres écarts restent des écarts.
+
+Le champ "advice" (2 à 4 phrases, texte brut, au vouvoiement, propre à CETTE offre) se
+rédige EN DERNIER, une fois les puces et les compétences décidées : il ne signale comme
+manquant, et ne déconseille d'ajouter, que ce que le CV de sortie ne contient pas et
+qui n'est pas une déduction évidente. Un élément que tu viens d'ajouter, ou qui est
+une déduction évidente, n'y est jamais présenté comme absent. Il ne pousse jamais à
+inventer.
 
 ==================================================
 FORMAT DE SORTIE
@@ -199,9 +221,14 @@ RÈGLES
 
 - Ce qui figure DÉJÀ dans le CV modifié (y compris ce que le candidat vient d'ajouter)
   ne doit plus être signalé comme manquant.
-- Signale ce que l'offre exige encore et que le CV ne documente toujours pas, et mets en
-  garde contre le fait de revendiquer ces éléments s'ils ne correspondent à aucune
-  expérience ou qualification réelle. Ne jamais inviter à inventer.
+- Ne signale pas non plus comme manquant ce qui est une déduction évidente de ce que le
+  CV décrit déjà (un élément que la personne a presque forcément utilisé pour faire ce
+  qui est écrit : "JSON" avec "API REST", "mapping de données" avec "flux d'ingestion
+  multi-sources"...).
+- Signale ce que l'offre exige encore et que le CV ne documente toujours pas (hors
+  déductions évidentes), et mets en garde contre le fait de revendiquer ces éléments
+  s'ils ne correspondent à aucune expérience ou qualification réelle. Ne jamais inviter
+  à inventer.
 - Si le CV couvre bien l'essentiel de l'offre, dis-le simplement et indique ce qui
   pourrait encore être précisé.
 - 2 à 4 phrases, concrètes, propres à CETTE offre. Vouvoie le candidat, comme dans les
