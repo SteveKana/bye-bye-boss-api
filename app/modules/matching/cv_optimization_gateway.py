@@ -85,14 +85,19 @@ def _call_openai_sync(*, api_key: str, model: str, timeout: int, prompt: str) ->
 
 
 async def optimize_cv(
-    cv: dict, offer_text: str, analysis: dict | None, *, model: str | None = None
+    cv: dict,
+    offer_text: str,
+    analysis: dict | None,
+    *,
+    model: str | None = None,
+    offer_language: bool = False,
 ) -> CVOptimizationResult:
     settings = get_settings()
     if not settings.OPENAI_API_KEY:
         logger.warning("cv_optimization_no_api_key")
         raise CVOptimizationUnavailableError()
 
-    prompt = build_prompt(cv, offer_text, analysis)
+    prompt = build_prompt(cv, offer_text, analysis, offer_language=offer_language)
 
     try:
         raw = await asyncio.to_thread(

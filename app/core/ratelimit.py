@@ -25,6 +25,7 @@ toggled by `RATE_LIMIT_ENABLED`; callers falling back to the configured
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from fastapi import Request, Response
 
@@ -48,6 +49,18 @@ class _MemoryBackend:
         self._store[key] = (count, end)
         return count, max(int(end - now), 1)
 
+    async def peek(self, key: str) -> int:
+        """Hits counted so far in the current window, without adding one."""
+        count, end = self._store.get(key, (0, 0.0))
+        return count if time.monotonic() < end else 0
+
+    async def refund(self, key: str) -> None:
+        """Gives back one hit (a call that failed on our side must not use up
+        the visitor's allowance)."""
+        count, end = self._store.get(key, (0, 0.0))
+        if count > 0:
+            self._store[key] = (count - 1, end)
+
     async def reset(self) -> None:
         self._store.clear()
 
@@ -67,6 +80,15 @@ class _RedisBackend:
             await self._redis.expire(key, window)
             ttl = window
         return int(count), max(int(ttl), 1)
+
+    async def peek(self, key: str) -> int:
+        count = await self._redis.get(key)
+        return int(count) if count is not None else 0
+
+    async def refund(self, key: str) -> None:
+        count = await self._redis.get(key)
+        if count is not None and int(count) > 0:
+            await self._redis.decr(key)
 
     async def reset(self) -> None:
         await self._redis.flushdb()
@@ -93,6 +115,25 @@ def _client_id(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def client_ip(request: Request) -> str:
+    """The visitor's address, for limits that must not be bypassed.
+
+    `X-Forwarded-For` is a list each proxy appends to: its FIRST entries are
+    whatever the visitor chose to send, so reading the first one (as
+    `_client_id` does) lets anyone pick a new "identity" per request. The
+    entries written by our own proxies are at the END: with
+    `TRUSTED_PROXY_HOPS` proxies in front, the visitor's address is that many
+    entries from the end. Without the header (no proxy, tests) the socket
+    address is used."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        hops = max(get_settings().TRUSTED_PROXY_HOPS, 1)
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[max(len(parts) - hops, 0)]
+    return request.client.host if request.client else "unknown"
+
+
 class RateLimiter:
     def __init__(
         self,
@@ -100,11 +141,15 @@ class RateLimiter:
         seconds: int | None = None,
         *,
         scope: str | None = None,
+        identify: Callable[[Request], str] | None = None,
     ) -> None:
         settings = get_settings()
         self.times = times or settings.RATE_LIMIT_DEFAULT_TIMES
         self.seconds = seconds or settings.RATE_LIMIT_DEFAULT_SECONDS
         self.scope = scope
+        # Who the budget belongs to. Defaults to `_client_id`; routes open to
+        # anyone pass `client_ip`, which cannot be spoofed through the header.
+        self.identify = identify or _client_id
 
     async def __call__(self, request: Request, response: Response) -> None:
         if not get_settings().RATE_LIMIT_ENABLED:
@@ -112,7 +157,7 @@ class RateLimiter:
 
         route = request.scope.get("route")
         scope = self.scope or getattr(route, "path", None) or request.url.path
-        key = f"rl:{scope}:{_client_id(request)}"
+        key = f"rl:{scope}:{self.identify(request)}"
 
         count, reset = await backend.hit(key, self.seconds)
         remaining = max(self.times - count, 0)

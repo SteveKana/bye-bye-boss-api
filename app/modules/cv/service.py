@@ -49,6 +49,28 @@ class CvService:
         self.session = session
         self.profiles = CandidateProfileRepository(session)
 
+    @staticmethod
+    async def parse_cv_file(
+        *, filename: str, content_type: str | None, data: bytes
+    ) -> tuple[dict, str]:
+        """Reads a CV file into the profile fields (the same extraction an
+        import does) WITHOUT touching the database or the disk: the free,
+        no-account CV adaptation uses it, so nothing about a visitor is stored.
+        Returns (values, kind): the values are what `CandidateProfile(...)`
+        takes (plus `raw_text`), kind is 'pdf' or 'docx'."""
+        raw_text, kind = extraction.extract_text(
+            filename=filename, content_type=content_type, data=data
+        )
+        raw_text = strip_nul(raw_text)
+        extracted = strip_nul(await gateway.structure_cv_text(raw_text))
+
+        values = {field: extracted.get(field) or None for field in _FLAT_FIELDS}
+        values["headline"] = _derive_headline(extracted)
+        for field in _LIST_FIELDS:
+            values[field] = extracted.get(field) or []
+        values["raw_text"] = raw_text
+        return values, kind
+
     async def import_cv(
         self,
         *,
@@ -59,18 +81,11 @@ class CvService:
     ) -> CandidateProfile:
         """Extract text from the file, structure it via the LLM, and persist
         it as a draft profile (creating or replacing the previous draft)."""
-        raw_text, kind = extraction.extract_text(
+        values, kind = await self.parse_cv_file(
             filename=filename, content_type=content_type, data=data
         )
-        raw_text = strip_nul(raw_text)
-        extracted = strip_nul(await gateway.structure_cv_text(raw_text))
 
         profile = await self.profiles.get_by_user(user_id)
-        values = {field: extracted.get(field) or None for field in _FLAT_FIELDS}
-        values["headline"] = _derive_headline(extracted)
-        for field in _LIST_FIELDS:
-            values[field] = extracted.get(field) or []
-        values["raw_text"] = raw_text
         # A new/re-imported CV invalidates the cached matching embedding
         # (see core/embeddings.py) -- it's recomputed lazily, from the
         # new raw_text, the next time matching runs for this profile (see

@@ -218,6 +218,92 @@ _PDF_REPLACEMENTS = {
 }
 
 
+# Fixed wording printed on the CV, per language (ISO 639-1 code of the offer
+# the CV was written for -- see CVOptimizationService.generate_in_offer_language).
+# An unknown language falls back to English.
+DEFAULT_PDF_LANGUAGE = "fr"
+_FALLBACK_PDF_LANGUAGE = "en"
+PDF_LABELS: dict[str, dict[str, str]] = {
+    "fr": {
+        "profile": "Profil",
+        "experience": "Expérience",
+        "skills": "Compétences",
+        "education": "Formations",
+        "languages": "Langues",
+        "certifications": "Certifications",
+        "tools": "Environnement technique",
+        "candidate": "Candidat",
+    },
+    "en": {
+        "profile": "Profile",
+        "experience": "Experience",
+        "skills": "Skills",
+        "education": "Education",
+        "languages": "Languages",
+        "certifications": "Certifications",
+        "tools": "Technical environment",
+        "candidate": "Candidate",
+    },
+    "es": {
+        "profile": "Perfil",
+        "experience": "Experiencia",
+        "skills": "Competencias",
+        "education": "Formación",
+        "languages": "Idiomas",
+        "certifications": "Certificaciones",
+        "tools": "Entorno técnico",
+        "candidate": "Candidato",
+    },
+    "de": {
+        "profile": "Profil",
+        "experience": "Berufserfahrung",
+        "skills": "Kompetenzen",
+        "education": "Ausbildung",
+        "languages": "Sprachen",
+        "certifications": "Zertifikate",
+        "tools": "Technisches Umfeld",
+        "candidate": "Kandidat",
+    },
+    "it": {
+        "profile": "Profilo",
+        "experience": "Esperienza",
+        "skills": "Competenze",
+        "education": "Formazione",
+        "languages": "Lingue",
+        "certifications": "Certificazioni",
+        "tools": "Ambiente tecnico",
+        "candidate": "Candidato",
+    },
+    "pt": {
+        "profile": "Perfil",
+        "experience": "Experiência",
+        "skills": "Competências",
+        "education": "Formação",
+        "languages": "Idiomas",
+        "certifications": "Certificações",
+        "tools": "Ambiente técnico",
+        "candidate": "Candidato",
+    },
+    "nl": {
+        "profile": "Profiel",
+        "experience": "Ervaring",
+        "skills": "Vaardigheden",
+        "education": "Opleiding",
+        "languages": "Talen",
+        "certifications": "Certificeringen",
+        "tools": "Technische omgeving",
+        "candidate": "Kandidaat",
+    },
+}
+
+
+def pdf_labels(lang: str | None) -> dict[str, str]:
+    """The fixed wording of the CV for `lang` ("fr" when none is given; English
+    for a language without a table)."""
+    code = (lang or DEFAULT_PDF_LANGUAGE).strip().lower()[:2]
+    return PDF_LABELS.get(code) or PDF_LABELS[_FALLBACK_PDF_LANGUAGE]
+
+
 def pdf_safe(value: str | None) -> str:
     """`value` with every character Helvetica cannot draw replaced by a plain
     equivalent (see _PDF_REPLACEMENTS); anything else unsupported falls back
@@ -332,13 +418,18 @@ def _experience_tools(profile: CandidateProfile, index: int, exp: dict) -> list[
     return [str(t).strip() for t in original.get("tools") or [] if str(t).strip()]
 
 
-def _candidate_name(profile: CandidateProfile) -> str:
+def _candidate_name(profile: CandidateProfile, fallback: str = "Candidat") -> str:
     parts = [p for p in (profile.first_name, profile.last_name) if p]
-    return " ".join(parts).strip() or "Candidat"
+    return " ".join(parts).strip() or fallback
 
 
 def _draw_visuelle_first_page(
-    canvas, doc, *, profile: CandidateProfile, optimization: CVOptimization
+    canvas,
+    doc,
+    *,
+    profile: CandidateProfile,
+    optimization: CVOptimization,
+    name: str | None = None,
 ) -> None:
     """Draws the 'visuelle' template's header directly on the canvas rather
     than as flowables, so it can be a true full-width colored band (a
@@ -361,7 +452,7 @@ def _draw_visuelle_first_page(
     name_y = page_h - 16 * mm
     canvas.setFillColor(colors.white)
     canvas.setFont("Helvetica-Bold", 20)
-    canvas.drawString(left_x, name_y, pdf_safe(_candidate_name(profile)))
+    canvas.drawString(left_x, name_y, pdf_safe(name or _candidate_name(profile)))
 
     headline = optimization.headline or profile.headline or ""
     if headline:
@@ -400,10 +491,13 @@ def build_cv_pdf(
     profile: CandidateProfile,
     optimization: CVOptimization,
     template: CvTemplate = DEFAULT_CV_TEMPLATE,
+    lang: str | None = None,
 ) -> bytes:
     if template not in CV_TEMPLATES:
         raise ValueError(f"Modèle de CV inconnu : {template!r}")
 
+    labels = pdf_labels(lang)
+    name = _candidate_name(profile, labels["candidate"])
     buffer = io.BytesIO()
     top_margin = (
         (_VISUELLE_BAND_HEIGHT + 10 * mm) if template == "visuelle" else 18 * mm
@@ -415,13 +509,13 @@ def build_cv_pdf(
         rightMargin=20 * mm,
         topMargin=top_margin,
         bottomMargin=18 * mm,
-        title=f"CV -- {_candidate_name(profile)}",
+        title=f"CV -- {name}",
     )
 
     story: list = []
 
     if template == "sobre":
-        story.append(Paragraph(_text(_candidate_name(profile)), _NAME_STYLE))
+        story.append(Paragraph(_text(name), _NAME_STYLE))
         headline = optimization.headline or profile.headline or ""
         if headline:
             story.append(Paragraph(_text(headline), _HEADLINE_STYLE))
@@ -432,11 +526,11 @@ def build_cv_pdf(
 
     summary = optimization.summary or profile.professional_summary or ""
     if summary:
-        story.extend(_section_title("Profil", template))
+        story.extend(_section_title(labels["profile"], template))
         story.append(Paragraph(_text(summary), _BODY_STYLE))
 
     if optimization.experiences:
-        story.extend(_section_title("Expérience", template))
+        story.extend(_section_title(labels["experience"], template))
         for index, exp in enumerate(optimization.experiences):
             title = exp.get("title") or ""
             if title:
@@ -475,14 +569,14 @@ def build_cv_pdf(
             if tools:
                 story.append(
                     Paragraph(
-                        f"<b>Environnement technique :</b> {_text(', '.join(tools))}",
+                        f"<b>{_text(labels['tools'])} :</b> {_text(', '.join(tools))}",
                         _TOOLS_STYLE,
                     )
                 )
 
     skill_groups = group_skills(optimization.skills or [])
     if skill_groups:
-        story.extend(_section_title("Compétences", template))
+        story.extend(_section_title(labels["skills"], template))
         for heading, names in skill_groups:
             line = _text(" · ".join(names))
             if heading:
@@ -498,7 +592,7 @@ def build_cv_pdf(
         if _normalized(item.get("title")) not in certification_keys
     ]
     if formations:
-        story.extend(_section_title("Formations", template))
+        story.extend(_section_title(labels["education"], template))
         for item in formations:
             title = _text(item.get("title"))
             period = _text(item.get("school_period"))
@@ -506,7 +600,7 @@ def build_cv_pdf(
             story.append(Paragraph(line, _BODY_STYLE))
 
     if profile.languages:
-        story.extend(_section_title("Langues", template))
+        story.extend(_section_title(labels["languages"], template))
         parts = [
             f"{item.get('name')} : {_level_text(str(item.get('level')))}"
             if item.get("level")
@@ -517,7 +611,7 @@ def build_cv_pdf(
         story.append(Paragraph(_text(" · ".join(p for p in parts if p)), _BODY_STYLE))
 
     if profile.certifications:
-        story.extend(_section_title("Certifications", template))
+        story.extend(_section_title(labels["certifications"], template))
         for item in profile.certifications:
             title = _text(item.get("title"))
             period = _text(item.get("issuer_period"))
@@ -530,7 +624,10 @@ def build_cv_pdf(
         doc.build(
             story,
             onFirstPage=functools.partial(
-                _draw_visuelle_first_page, profile=profile, optimization=optimization
+                _draw_visuelle_first_page,
+                profile=profile,
+                optimization=optimization,
+                name=name,
             ),
             onLaterPages=_draw_visuelle_later_page,
         )

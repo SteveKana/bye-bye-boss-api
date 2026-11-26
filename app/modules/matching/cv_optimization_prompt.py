@@ -193,11 +193,65 @@ NO_ANALYSIS_TEXT = (
 )
 
 
-def build_prompt(cv: dict, offer: str, analysis: dict | None) -> str:
+# Added to the prompt (before the data) when the CV must come out in the
+# language of the offer -- the free CV adaptation for visitors, whose CV may
+# be in one language and the offer in another. Written without curly braces:
+# it is spliced into PROMPT_TEMPLATE before .format().
+LANGUAGE_RULES = """\
+==================================================
+LANGUE DU CV : CELLE DE L'OFFRE
+==================================================
+
+Repère la langue dans laquelle l'OFFRE est rédigée. Le CV de sortie est rédigé dans
+CETTE langue, même si le CV d'origine est dans une autre.
+
+- Titre (headline), résumé, intitulés de poste, texte des puces, libellés et rubriques
+  des compétences : dans la langue de l'offre. Traduction fidèle : mêmes faits, mêmes
+  chiffres, même niveau de responsabilité ; rien n'est ajouté ni retiré à cause de la
+  traduction. Les règles de non-invention ci-dessus s'appliquent à l'identique.
+- Les noms propres (entreprises, outils, technologies, méthodes comme Scrum, SQL,
+  Power BI) restent inchangés.
+- Une puce simplement traduite, sans autre reformulation, garde le statut "unchanged",
+  mais son "original_text" contient la puce d'origine recopiée à l'identique : c'est ce
+  qui permet de la rapprocher de l'original. Une puce reformulée en plus de la
+  traduction est "modified" (avec son "original_text"), comme d'habitude.
+- Chaque compétence reçoit un champ "original" : son libellé EXACT dans le CV d'origine
+  (chaîne vide pour une compétence "added"). Son champ "skill" est le libellé dans la
+  langue de l'offre.
+- "formations" : les formations du CV d'origine, dans le même nombre et le même ordre,
+  avec les intitulés de diplôme dans la langue de l'offre ; noms d'écoles et dates
+  inchangés. "languages" : les langues parlées du CV d'origine, dans le même nombre et
+  le même ordre, nom de la langue et niveau écrits dans la langue de l'offre.
+- Si le CV d'origine est déjà dans la langue de l'offre, rien ne change : recopie.
+- "summary_why", les "why" et "advice" restent en FRANÇAIS : ils s'adressent au
+  candidat, qui lit le site en français.
+- Ajoute la clé "language" : le code ISO 639-1 de la langue de l'offre ("fr", "en",
+  "es", "de", "it", "pt", "nl"...).
+
+Dans le JSON de sortie, ajoute aux clés ci-dessous : "language" (texte), "formations"
+(liste de titre et school_period), "languages" (liste de name et level), et "original"
+dans chaque compétence.
+
+"""
+
+_DATA_MARKER = "CV DU CANDIDAT (structuré)"
+
+
+def build_prompt(
+    cv: dict,
+    offer: str,
+    analysis: dict | None,
+    *,
+    offer_language: bool = False,
+) -> str:
     """`analysis` is None when the offer is a pasted text with no match
     computed for it (admin tool): the prompt then says so instead of showing
-    an empty analysis."""
-    return PROMPT_TEMPLATE.format(
+    an empty analysis. `offer_language` adds the rules that make the CV come
+    out in the language of the offer."""
+    template = PROMPT_TEMPLATE
+    if offer_language:
+        template = template.replace(_DATA_MARKER, LANGUAGE_RULES + _DATA_MARKER, 1)
+    return template.format(
         cv=json.dumps(cv, ensure_ascii=False, indent=2),
         offer=offer,
         analysis=(
