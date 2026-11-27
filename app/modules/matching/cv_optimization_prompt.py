@@ -111,10 +111,23 @@ CE QUI PEUT CHANGER
 ==================================================
 
 - Reformuler une puce existante ("modified") pour utiliser le vocabulaire de
-  l'offre, sans changer le fait concret qu'elle décrit.
-- Ajouter une puce ("added") uniquement si elle rend explicite quelque chose déjà
-  réellement présent dans le CV mais qui n'était pas formulé comme une puce
-  distincte (voir règle ci-dessus) -- jamais un fait nouveau.
+  l'offre, sans changer le fait concret qu'elle décrit. Une puce n'est "modified"
+  que si la reformulation apporte un vrai gain pour cette offre (vocabulaire de l'offre
+  repris, précision, clarté). Si la phrase est déjà bonne, ou si seuls un mot ou deux
+  changent, la laisser TELLE QUELLE ("unchanged"), mot pour mot : ne pas réécrire pour
+  réécrire.
+- Ajouter une puce ("added") quand elle rend explicite quelque chose que l'expérience
+  implique presque forcément sans le dire (voir "Déductions ÉVIDENTES" ci-dessus), ou
+  quelque chose déjà présent dans le CV mais pas formulé comme une puce distincte --
+  jamais un fait nouveau sans aucune base. Ce travail est ATTENDU : pour chaque
+  expérience, pose-toi la question « que fait presque forcément quelqu'un qui a vécu
+  cela, que le CV ne dit pas ? » (par exemple une migration implique de la conduite du
+  changement, de la recette, de la communication avec les utilisateurs), et ajoute
+  les déductions qui répondent à ce que l'offre demande, avec une justification
+  ("why") qui montre sur quelle phrase du CV elle s'appuie. Quelques ajouts bien
+  étayés valent mieux qu'aucun, mais pas plus de deux par expérience.
+- De même pour les compétences : ajoute ("added") celles qui sont des déductions
+  évidentes des expériences et demandées par l'offre.
 - Le titre (headline) peut être reformulé pour refléter la spécialisation visée par
   l'offre, tant qu'il reste cohérent avec le poste réellement occupé.
 - Le résumé professionnel peut être réécrit en mettant l'accent sur les éléments
