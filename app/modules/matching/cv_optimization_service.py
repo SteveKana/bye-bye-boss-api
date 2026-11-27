@@ -105,6 +105,25 @@ def _is_covered(line: str, bullets: list) -> bool:
     return False
 
 
+# A "modified" bullet that is almost identical to the original (a word or two
+# moved) is not worth a "Reformulé" pill: it is shown as unchanged.
+NEAR_IDENTICAL_RATIO = 0.93
+
+
+def _effective_status(bullet) -> str:
+    status = bullet.status.value
+    if (
+        status == "modified"
+        and bullet.original_text
+        and SequenceMatcher(
+            None, _norm(bullet.text), _norm(bullet.original_text)
+        ).ratio()
+        >= NEAR_IDENTICAL_RATIO
+    ):
+        return "unchanged"
+    return status
+
+
 def _reconcile_experiences(
     original_experiences: list[dict], model_experiences: list[CVOptimizationExperience]
 ) -> list[dict]:
@@ -128,7 +147,7 @@ def _reconcile_experiences(
             bullets = [
                 {
                     "text": bullet.text,
-                    "status": bullet.status.value,
+                    "status": _effective_status(bullet),
                     "original_text": bullet.original_text,
                     "why": bullet.why,
                     "kind": bullet.kind,

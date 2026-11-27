@@ -545,3 +545,44 @@ def test_a_model_that_labels_nothing_gives_plain_bullets() -> None:
     bullets = _reconcile_experiences(original, model)[0]["bullets"]
 
     assert not any(b.get("context") for b in bullets)
+
+
+def test_near_identical_rewrite_is_not_flagged_as_modified() -> None:
+    original = [
+        {
+            "title": "Product Owner",
+            "company": "ACME",
+            "period": "2022-2026",
+            "description": (
+                "Pilotage du backlog data avec les métiers\nRecette fonctionnelle"
+            ),
+            "tools": [],
+        }
+    ]
+    model_experiences = [
+        CVOptimizationExperience(
+            title="Product Owner",
+            bullets=[
+                CVOptimizationBullet(
+                    text="Pilotage du backlog data avec les métiers.",
+                    status="modified",
+                    original_text="Pilotage du backlog data avec les métiers",
+                    why="Presque pareil.",
+                ),
+                CVOptimizationBullet(
+                    text="Validation fonctionnelle et coordination avec les devs",
+                    status="modified",
+                    original_text="Recette fonctionnelle",
+                    why="Vocabulaire de l'offre.",
+                ),
+            ],
+        )
+    ]
+
+    bullets = _reconcile_experiences(original, model_experiences)[0]["bullets"]
+    by_text = {b["text"]: b["status"] for b in bullets}
+
+    assert by_text["Pilotage du backlog data avec les métiers."] == "unchanged"
+    assert (
+        by_text["Validation fonctionnelle et coordination avec les devs"] == "modified"
+    )
