@@ -19,6 +19,7 @@ cv_optimization_models.CVOptimization's docstring.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,13 +44,15 @@ from app.modules.matching.skill_labels import clean_skill_label
 from app.modules.offers import JobOffer
 
 
-def _build_cv_payload(profile: CandidateProfile) -> dict:
+def _build_cv_payload(
+    profile: CandidateProfile, *, offer_language: bool = False
+) -> dict:
     """The candidate's CV, as structured input for the optimization prompt
     -- deliberately the STRUCTURED fields (not profile.raw_text, which the
     matching prompt uses), so the model works from a fixed, unambiguous list
     of experiences the service can pair 1:1 with its output. See
     cv_optimization_prompt.py's docstring."""
-    return {
+    payload = {
         "headline": profile.headline or "",
         "professional_summary": profile.professional_summary or "",
         "total_experience": profile.total_experience or "",
@@ -67,6 +70,11 @@ def _build_cv_payload(profile: CandidateProfile) -> dict:
             for exp in (profile.experiences or [])
         ],
     }
+    if offer_language:
+        # Translated along with the rest (see cv_optimization_prompt.LANGUAGE_RULES).
+        payload["formations"] = profile.formations or []
+        payload["languages"] = profile.languages or []
+    return payload
 
 
 def _split_bullets(description: str) -> list[str]:
@@ -196,7 +204,21 @@ def _reconcile_skills(
     skill and, when it echoed (most of) the list, the order -- most relevant
     to the offer first -- neither of which can add or drop a skill."""
     existing_lower = {skill.strip().lower() for skill in original_skills if skill}
-    result = [{"skill": skill, "added": False} for skill in original_skills]
+    # When the CV is translated, the model gives each skill's translated label
+    # and the exact original it stands for: the label is shown, but the list
+    # itself is still the candidate's own (a translation never adds or drops a
+    # skill).
+    translated: dict[str, str] = {}
+    for item in model_skills:
+        original = item.original.strip().lower()
+        label = clean_skill_label(item.skill)
+        if original in existing_lower and label and original not in translated:
+            translated[original] = label
+    existing_lower |= {label.lower() for label in translated.values()}
+    result = [
+        {"skill": translated.get(skill.strip().lower(), skill), "added": False}
+        for skill in original_skills
+    ]
     seen_added: set[str] = set()
     for item in model_skills:
         if not item.added:
@@ -218,7 +240,11 @@ def _reconcile_skills(
     for entry in result:
         entry["category"] = heading.get(entry["skill"].strip().lower(), "")
 
-    echoed = sum(1 for skill in original_skills if skill.strip().lower() in position)
+    echoed = sum(
+        1
+        for entry in result
+        if not entry["added"] and entry["skill"].strip().lower() in position
+    )
     if original_skills and echoed >= len(original_skills) / 2:
         late = len(model_skills)
         result = [
@@ -232,6 +258,38 @@ def _reconcile_skills(
             )
         ]
     return result
+
+
+@dataclass
+class AdaptedCv:
+    """A CV adapted to an offer in the offer's own language, held in memory
+    only (the free, no-account adaptation: nothing is stored)."""
+
+    optimization: CVOptimization
+    # ISO 639-1 code of the offer's language ("fr", "en"...); "" when unknown.
+    language: str
+    formations: list[dict]
+    languages: list[dict]
+
+
+def _translated_list(
+    model_items: list, original: list[dict], keys: tuple[str, ...]
+) -> list[dict]:
+    """The model's translation of a list of the candidate's own (formations,
+    spoken languages), used only when it kept the same number of items: it
+    cannot add or drop one. Any key it left blank keeps the original value;
+    otherwise the original list is returned as it is."""
+    if len(model_items) != len(original):
+        return [dict(item) for item in original]
+    merged = []
+    for translated, source in zip(model_items, original, strict=True):
+        item = dict(source)
+        for key in keys:
+            value = str(getattr(translated, key, "") or "").strip()
+            if value:
+                item[key] = value
+        merged.append(item)
+    return merged
 
 
 class CVOptimizationService:
@@ -295,6 +353,41 @@ class CVOptimizationService:
             skills=_reconcile_skills(profile.skills or [], result.skills),
             advice=result.advice,
             computed_at=utcnow(),
+        )
+
+    async def generate_in_offer_language(
+        self, profile: CandidateProfile, offer_text: str
+    ) -> AdaptedCv:
+        """Free, no-account adaptation: same model call and safeguards as
+        generate_from_text, but the CV comes out in the language of the offer
+        (title, summary, bullets, skills, formations, spoken languages).
+        Nothing is stored."""
+        result = await cv_optimization_gateway.optimize_cv(
+            _build_cv_payload(profile, offer_language=True),
+            offer_text.strip(),
+            None,
+            offer_language=True,
+        )
+        optimization = CVOptimization(  # type: ignore[call-arg]  # in-memory
+            headline=result.headline.strip() or profile.headline or "",
+            summary=result.summary.strip() or profile.professional_summary or "",
+            summary_why=result.summary_why,
+            experiences=_reconcile_experiences(
+                profile.experiences or [], result.experiences
+            ),
+            skills=_reconcile_skills(profile.skills or [], result.skills),
+            advice=result.advice,
+            computed_at=utcnow(),
+        )
+        return AdaptedCv(
+            optimization=optimization,
+            language=result.language.strip().lower()[:5],
+            formations=_translated_list(
+                result.formations, profile.formations or [], ("title", "school_period")
+            ),
+            languages=_translated_list(
+                result.languages, profile.languages or [], ("name", "level")
+            ),
         )
 
     async def confirm(self, optimization: CVOptimization) -> CVOptimization:

@@ -81,6 +81,27 @@ class Settings(BaseSettings):
     RATE_LIMIT_DEFAULT_TIMES: int = 100
     RATE_LIMIT_DEFAULT_SECONDS: int = 60
 
+    # ---- Free CV adaptation, no account (public funnel) ---------------------
+    # Anyone can adapt a CV to an offer without signing up (see
+    # matching/routes/v1/public_cv_routes.py). Nothing is stored server-side.
+    # Every use costs two model calls, so it is capped three ways: per visitor
+    # (IP address), for the whole site, and optionally behind a Cloudflare
+    # Turnstile challenge. Windows are 24 h from the first use.
+    PUBLIC_CV_ADAPTER_ENABLED: bool = True
+    PUBLIC_CV_DAILY_PER_VISITOR: int = 3
+    PUBLIC_CV_DAILY_GLOBAL_CAP: int = 300
+    # An "alert" incident is raised once, when the site-wide count reaches this
+    # share of the cap.
+    PUBLIC_CV_CAP_ALERT_RATIO: float = 0.8
+    # Cloudflare Turnstile secret key. Unset = no challenge (dev, tests). When
+    # set, the public generation route refuses a call without a valid token.
+    TURNSTILE_SECRET_KEY: str | None = None
+    # How many reverse proxies sit in front of the API and append to
+    # X-Forwarded-For (nginx alone = 1, Cloudflare + nginx = 2). The visitor's
+    # address is read that many entries from the END of the header: the start
+    # of the header is written by the visitor and cannot be trusted.
+    TRUSTED_PROXY_HOPS: int = 1
+
     # ---- Scheduler -------------------------------------------------------
     SCHEDULER_ENABLED: bool = True
 

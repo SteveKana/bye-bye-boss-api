@@ -70,6 +70,11 @@ class CVOptimizationSkill(BaseModel):
     # "Méthodes Agile"...). Optional: a skill without one is grouped by the
     # keyword fallback in cv_skill_groups.py.
     category: str = ""
+    # Only filled when the CV is translated into the offer's language (see
+    # cv_optimization_prompt.LANGUAGE_RULES): the skill's exact wording in the
+    # candidate's own CV, which is how the service pairs the translated label
+    # with the skill it stands for.
+    original: str = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -77,6 +82,16 @@ class CVOptimizationSkill(BaseModel):
         if isinstance(data, str):
             return {"skill": data}
         return data
+
+
+class CVOptimizationFormation(BaseModel):
+    title: str = ""
+    school_period: str = ""
+
+
+class CVOptimizationLanguage(BaseModel):
+    name: str = ""
+    level: str = ""
 
 
 class CVOptimizationResult(BaseModel):
@@ -88,3 +103,9 @@ class CVOptimizationResult(BaseModel):
     # Backs the mockup's "Conseil" card -- one short, concrete piece of
     # advice about the changes as a whole, not a repeat of summary_why.
     advice: str = ""
+    # Only filled when the CV is translated into the offer's language: its ISO
+    # 639-1 code ("fr", "en"...), and the formations and spoken languages of
+    # the CV in that language (same count and order as the candidate's own).
+    language: str = ""
+    formations: list[CVOptimizationFormation] = Field(default_factory=list)
+    languages: list[CVOptimizationLanguage] = Field(default_factory=list)

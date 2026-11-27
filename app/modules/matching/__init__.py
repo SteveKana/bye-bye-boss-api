@@ -59,6 +59,7 @@ from app.modules.matching.routes.v1 import (
     admin_cv_routes,
     cv_optimization_routes,
     matching_routes,
+    public_cv_routes,
 )
 from app.modules.matching.schemas import CandidateMatchRead, CVOptimizationRead
 from app.modules.matching.service import MatchingService
@@ -67,6 +68,7 @@ _router = APIRouter()
 _router.include_router(matching_routes.router)
 _router.include_router(cv_optimization_routes.router)
 _router.include_router(admin_cv_routes.router)
+_router.include_router(public_cv_routes.router)
 
 module = Module(
     name="matching",
